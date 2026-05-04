@@ -356,6 +356,36 @@ async function processarEntrada() {
 }
 
 // --- LOGICA DE SAÍDA (SELB) ---
+window.buscarPecaPorDesc = async (val) => {
+    const list = document.getElementById('pecas-sugestoes');
+    if (!val || val.length < 2) { list.innerHTML = ''; return; }
+
+    // Lógica do Coringa %
+    let queryVal = val.trim().toUpperCase();
+    
+    // Se o usuário selecionou uma opção completa da lista (ex: "DESC [CODE]")
+    if (queryVal.includes(' [') && queryVal.endsWith(']')) {
+        const code = queryVal.split(' [').pop().replace(']', '');
+        document.getElementById('saida-peca').value = code;
+        return;
+    }
+
+    let q = supabase.from('parts').select('code, descricao').limit(20);
+    
+    if (queryVal.includes('%')) {
+        // Busca com coringa: ilike.%word%word%
+        const parts = queryVal.split('%').filter(p => p.length > 0);
+        q = q.ilike('descricao', `%${parts.join('%')}%`);
+    } else {
+        q = q.ilike('descricao', `%${queryVal}%`);
+    }
+
+    const { data } = await q;
+    if (data) {
+        list.innerHTML = data.map(p => `<option value="${p.descricao} [${p.code}]">`).join('');
+    }
+};
+
 async function confirmarSaida() {
     const selb = document.getElementById('saida-selb').value.trim().toUpperCase();
     if (selb.length !== 4 || !saidaItems.length) { alert('Verifique o SELB e as peças.'); return; }
@@ -380,19 +410,43 @@ function openSaidaModal(code) {
     saidaItems = [];
     document.getElementById('saida-selb').value = '';
     document.getElementById('saida-peca').value = code || '';
+    document.getElementById('saida-busca-desc').value = '';
     renderSaidaItems();
     document.getElementById('modal-saida-overlay').classList.add('open');
 }
 
-function addSaidaItem() {
+async function addSaidaItem() {
     const code = document.getElementById('saida-peca').value.trim().toUpperCase();
     const qty = parseInt(document.getElementById('saida-qtd').value) || 1;
-    if (!code) return;
+    if (!code) { alert('Selecione uma peça primeiro pesquisando pela descrição.'); return; }
+
+    // TRAVA DE ESTOQUE: Verifica saldo antes de adicionar
+    const { data: st } = await supabase.from('estoque').select('qty').eq('code', code).single();
+    const currentStock = st?.qty || 0;
+
+    // Verifica se já tem esse item no lote atual
+    const inBatch = saidaItems.find(i => i.code === code)?.qty || 0;
+
+    if (currentStock < (qty + inBatch)) {
+        alert(`❌ SALDO INSUFICIENTE!\nEstoque atual: ${currentStock}\nVocê já adicionou ${inBatch} e está tentando adicionar mais ${qty}.`);
+        return;
+    }
+
     supabase.from('parts').select('descricao, custos(last_cost)').eq('code', code).single().then(({ data }) => {
-        if (!data) { alert('Não encontrado'); return; }
+        if (!data) { alert('Peça não encontrada no cadastro.'); return; }
         const vlr = data.custos?.last_cost ?? data.custos?.[0]?.last_cost ?? 0;
-        saidaItems.push({ code, descricao: data.descricao, qty, vlrUnit: vlr, vlrTotal: qty * vlr });
-        document.getElementById('saida-peca').value = ''; renderSaidaItems();
+        
+        const existing = saidaItems.find(i => i.code === code);
+        if (existing) {
+            existing.qty += qty;
+            existing.vlrTotal = existing.qty * existing.vlrUnit;
+        } else {
+            saidaItems.push({ code, descricao: data.descricao, qty, vlrUnit: vlr, vlrTotal: qty * vlr });
+        }
+        
+        document.getElementById('saida-peca').value = ''; 
+        document.getElementById('saida-busca-desc').value = '';
+        renderSaidaItems();
     });
 }
 

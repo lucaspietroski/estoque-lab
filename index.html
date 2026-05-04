@@ -466,10 +466,16 @@
 <div class="modal-overlay" id="modal-saida-overlay">
   <div class="modal-box saida-batch">
     <h3>➖ Baixa de Estoque por SELB</h3>
-    <div class="saida-grid" style="display: grid; grid-template-columns: 2fr 1fr auto; gap: 10px; align-items: end; margin-bottom: 15px;">
+    <div class="saida-search-box" style="margin-bottom: 15px;">
+      <div class="modal-label">Busca por Descrição (use % como coringa)</div>
+      <input type="text" class="modal-input" id="saida-busca-desc" placeholder="Ex: ROLO%FUSOR" oninput="window.buscarPecaPorDesc(this.value)" list="pecas-sugestoes">
+      <datalist id="pecas-sugestoes"></datalist>
+    </div>
+
+    <div class="saida-grid" style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; margin-bottom: 15px;">
       <div>
         <div class="modal-label">Código da Peça</div>
-        <input type="text" class="modal-input" id="saida-peca" placeholder="Ex: CE123">
+        <input type="text" class="modal-input" id="saida-peca" placeholder="Ex: CE123" readonly style="background: var(--bg-hover); cursor: not-allowed;">
       </div>
       <div>
         <div class="modal-label">Quantidade</div>
