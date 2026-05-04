@@ -547,10 +547,12 @@
         <button class="btn-admin" style="width: 100%; justify-content: center;" onclick="window.switchTab('modelo-custo'); closeAdminMenu();">📊 Custo por Modelo (Financeiro)</button>
         <button class="btn-admin" style="width: 100%; justify-content: center;" onclick="window.switchTab('bi-equipamentos'); closeAdminMenu();">📁 Importar Base BI (WMS)</button>
         <button class="btn-admin" style="width: 100%; justify-content: center;" onclick="window.switchTab('revisados'); closeAdminMenu();">🛠️ Registrar SELBs Revisados</button>
+        <button class="btn-admin" style="width: 100%; justify-content: center; background: #0ea5e9; color: white;" onclick="openManualSELBModal()">🔗 Vincular SELB Manualmente</button>
         <button class="btn-admin" style="width: 100%; justify-content: center; background: #8b5cf6;" onclick="gerarBackupCompleto()">📦 Gerar Backup Completo (JSON)</button>
         <button class="btn-cancel" onclick="closeAdminMenu()" style="margin-top: 20px; width: 100%;">Fechar Menu</button>
       </div>
     </div>
+    
     <div id="import-submenu-box" style="display:none">
       <h3 style="margin-bottom: 10px;">📥 Importação XML</h3>
       <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.4;">Selecione o arquivo XML exportado pelo Protheus. O sistema irá ler as Tags &lt;cProd&gt;, &lt;qCom&gt; e &lt;vUnCom&gt; para atualizar saldos e custos automaticamente.</p>
@@ -566,6 +568,35 @@
         <button class="btn-cancel" onclick="backToAdminMenu()">Voltar</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- MODAL VINCULO MANUAL SELB -->
+<div class="modal-overlay" id="modal-selb-manual">
+  <div class="modal-box" style="max-width: 400px;">
+    <h3>🔗 Vincular SELB ao Modelo</h3>
+    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;">
+      Use esta tela para identificar SELBs que já saíram do estoque mas aparecem no relatório de custos.
+    </p>
+
+    <div style="margin-bottom: 15px;">
+      <div class="modal-label">Código SELB (Exato)</div>
+      <input type="text" class="modal-input" id="manual-selb" placeholder="Ex: 5TJ4">
+    </div>
+
+    <div style="margin-bottom: 20px;">
+      <div class="modal-label">Modelo do Equipamento</div>
+      <input type="text" class="modal-input" id="manual-modelo" placeholder="Ex: RICOH MPC 3003" list="modelos-existentes">
+      <datalist id="modelos-existentes"></datalist>
+    </div>
+
+    <div style="display: flex; gap: 10px;">
+      <button class="btn-cancel" onclick="closeManualSELBModal()" style="flex: 1;">Cancelar</button>
+      <button class="btn-confirm" onclick="saveManualSELB()" style="flex: 2;">Salvar Vínculo</button>
+    </div>
+    <div id="manual-selb-status" style="margin-top: 15px; font-size: 13px; text-align: center;"></div>
+  </div>
+</div>
 
 <script type="module" src="src/main.js"></script>
 </body>
