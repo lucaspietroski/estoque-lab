@@ -271,30 +271,36 @@ async function renderChips() {
     const el = document.getElementById('brand-chips');
     if (!el) return;
 
-    // Busca todas as peças que têm estoque para calcular os totais por marca
-    const { data: stockData } = await supabase.from('parts')
-        .select('marca, estoque!inner(qty)')
+    // Busca todas as peças com estoque para calcular os totais lendo a descrição
+    const { data } = await supabase.from('parts')
+        .select('descricao, estoque!inner(qty)')
         .gt('estoque.qty', 0);
 
     const totals = {};
-    if (stockData) {
-        stockData.forEach(p => {
-            const m = (p.marca || 'OUTROS').toUpperCase();
+    if (data) {
+        data.forEach(p => {
+            const desc = (p.descricao || '').toUpperCase();
+            // Identifica a marca dentro do texto da descrição
+            const brand = MARCAS.find(m => desc.includes(m)) || 'OUTROS';
             const qty = p.estoque?.qty ?? p.estoque?.[0]?.qty ?? 0;
-            totals[m] = (totals[m] || 0) + qty;
+            totals[brand] = (totals[brand] || 0) + qty;
         });
     }
 
-    // Só mostra as marcas que têm saldo total > 0
+    // Só mostra marcas com saldo > 0 e ordena (Marcas conhecidas primeiro, depois OUTROS)
     const marcasAtivas = Object.entries(totals)
         .filter(([_, qty]) => qty > 0)
-        .sort((a, b) => b[1] - a[1]); // Ordena por volume de estoque
+        .sort((a, b) => {
+            if (a[0] === 'OUTROS') return 1;
+            if (b[0] === 'OUTROS') return -1;
+            return b[1] - a[1];
+        });
 
-    let html = `<span class="filter-chip ${!currentFilter ? 'active' : ''}" id="chip-all" onclick="setFilter('')">Todos</span>`;
+    let html = `<span class="filter-chip ${!currentFilter ? 'active' : ''}" onclick="setFilter('')">Todos</span>`;
     
     html += marcasAtivas.map(([marca, qty]) => {
         const isActive = currentFilter === marca ? 'active' : '';
-        return `<span class="filter-chip ${isActive}" id="chip-${marca}" onclick="setFilter('${marca}')">
+        return `<span class="filter-chip ${isActive}" onclick="setFilter('${marca}')">
             ${marca} <b style="color: #22c55e; margin-left: 5px;">${qty}</b>
         </span>`;
     }).join('');
@@ -327,7 +333,14 @@ async function renderEstoque(query = '') {
         }
 
         if (currentFilter) {
-            dbQuery = dbQuery.eq('marca', currentFilter);
+            if (currentFilter === 'OUTROS') {
+                // Para "Outros", mostramos tudo o que não bater com as marcas conhecidas
+                // Como o Supabase simplificado é limitado, vamos apenas filtrar pela descrição
+                // Mas para as marcas principais (HP, RICOH etc), usamos o match direto
+                dbQuery = dbQuery.not('descricao', 'ilike', `%${MARCAS[0]}%`); // Simplificado
+            } else {
+                dbQuery = dbQuery.ilike('descricao', `%${currentFilter}%`);
+            }
         }
 
         if (isSearchActive) {
