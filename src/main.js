@@ -322,22 +322,23 @@ async function renderEstoque(query = '') {
     const countEl = document.getElementById('result-count');
     try {
         const isSearchActive = query.length > 0;
-        const relEstoque = (isSearchActive || currentFilter) ? 'estoque!left(qty)' : 'estoque!inner(qty)';
+        
+        // Se não estiver pesquisando um código específico, usamos inner join para trazer só o que tem saldo
+        const relEstoque = isSearchActive ? 'estoque!left(qty)' : 'estoque!inner(qty)';
 
         let dbQuery = supabase.from('parts').select(`code, descricao, marca, ${relEstoque}, custos!left(last_cost)`);
 
-        // Regra de Saldo: Por padrão só mostra o que tem saldo (> 0)
-        // Se estiver pesquisando ou filtrando por marca, mostra tudo o que bater
-        if (!isSearchActive && !currentFilter) {
+        // Regra: Se NÃO estiver pesquisando um código/termo específico, filtramos SÓ o que tem saldo
+        if (!isSearchActive) {
             dbQuery = dbQuery.gt('estoque.qty', 0);
         }
 
         if (currentFilter) {
             if (currentFilter === 'OUTROS') {
-                // Para "Outros", mostramos tudo o que não bater com as marcas conhecidas
-                // Como o Supabase simplificado é limitado, vamos apenas filtrar pela descrição
-                // Mas para as marcas principais (HP, RICOH etc), usamos o match direto
-                dbQuery = dbQuery.not('descricao', 'ilike', `%${MARCAS[0]}%`); // Simplificado
+                // Filtro para OUTROS: descrições que não contêm nenhuma das marcas conhecidas
+                MARCAS.forEach(m => {
+                    dbQuery = dbQuery.not('descricao', 'ilike', `%${m}%`);
+                });
             } else {
                 dbQuery = dbQuery.ilike('descricao', `%${currentFilter}%`);
             }
@@ -347,7 +348,18 @@ async function renderEstoque(query = '') {
             dbQuery = dbQuery.or(`code.ilike.%${query}%,descricao.ilike.%${query}%`);
         }
 
-        const { data } = await dbQuery.limit(isSearchActive ? 50 : 200);
+        const { data: rawData } = await dbQuery.limit(isSearchActive ? 100 : 500);
+
+        if (!rawData || rawData.length === 0) {
+            tbody.innerHTML = ''; countEl.textContent = '0'; document.getElementById('empty-state').style.display = 'block'; return;
+        }
+
+        // Ordenação por maior volume (físico) primeiro
+        const data = rawData.sort((a, b) => {
+            const qtyA = a.estoque?.qty ?? a.estoque?.[0]?.qty ?? 0;
+            const qtyB = b.estoque?.qty ?? b.estoque?.[0]?.qty ?? 0;
+            return qtyB - qtyA;
+        });
 
         if (!data || data.length === 0) {
             tbody.innerHTML = ''; countEl.textContent = '0'; document.getElementById('empty-state').style.display = 'block'; return;
