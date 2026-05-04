@@ -587,6 +587,53 @@ window.openEditModal = openEditModal;
 window.closeModal = () => document.getElementById('modal-overlay').classList.remove('open');
 window.savePriceModal = savePriceModal;
 
+// --- VINCULO MANUAL SELB ---
+window.openManualSELBModal = async () => {
+    document.getElementById('manual-selb').value = '';
+    document.getElementById('manual-modelo').value = '';
+    document.getElementById('manual-selb-status').innerHTML = '';
+    
+    // Carregar sugestões de modelos existentes para o datalist
+    const { data } = await supabase.from('equipamentos').select('modelo').limit(1000);
+    if (data) {
+        const uniqueModels = [...new Set(data.map(e => e.modelo))].sort();
+        document.getElementById('modelos-existentes').innerHTML = uniqueModels.map(m => `<option value="${m}">`).join('');
+    }
+    
+    document.getElementById('modal-selb-manual').classList.add('open');
+};
+
+window.closeManualSELBModal = () => document.getElementById('modal-selb-manual').classList.remove('open');
+
+window.saveManualSELB = async () => {
+    const selb = document.getElementById('manual-selb').value.trim().toUpperCase();
+    const modelo = document.getElementById('manual-modelo').value.trim().toUpperCase();
+    const status = document.getElementById('manual-selb-status');
+
+    if (!selb || !modelo) {
+        status.innerHTML = '<span style="color:var(--red)">⚠️ Preencha todos os campos.</span>';
+        return;
+    }
+
+    status.innerHTML = '⌛ Salvando...';
+    
+    const { error } = await supabase.from('equipamentos').upsert({
+        selb,
+        modelo,
+        descricao: 'VÍNCULO MANUAL'
+    });
+
+    if (error) {
+        status.innerHTML = `<span style="color:var(--red)">❌ Erro: ${error.message}</span>`;
+    } else {
+        status.innerHTML = `<span style="color:var(--green)">✅ SELB ${selb} vinculado com sucesso!</span>`;
+        setTimeout(() => {
+            closeManualSELBModal();
+            renderModeloCusto(); // Atualiza o relatório se estiver aberto
+        }, 1500);
+    }
+};
+
 // Facilitar navegação do menu admin
 window.openImportFromMenu = () => {
     document.getElementById('admin-menu-box').style.display = 'none';
@@ -890,7 +937,7 @@ window.processarBI = async (file) => {
             const validRows = [];
             
             rows.slice(1).forEach(r => {
-                const selb = String(r[0] || '').trim().toUpperCase().replace(/^0+/, ''); // Remove zeros à esquerda
+                const selb = String(r[0] || '').trim().toUpperCase();
                 const modelo = String(r[3] || r[2] || '').trim().toUpperCase(); // Prefere a Descrição (Col D) para bater com o print antigo
                 const desc = String(r[3] || '').trim().toUpperCase();
                 
@@ -1058,7 +1105,7 @@ window.renderModeloCusto = async () => {
 
         const eqMap = {};
         equipamentos.forEach(e => {
-            const cleanSelb = e.selb.toUpperCase().trim().replace(/^0+/, '');
+            const cleanSelb = e.selb.toUpperCase().trim();
             eqMap[cleanSelb] = e.modelo;
         });
 
@@ -1074,7 +1121,7 @@ window.renderModeloCusto = async () => {
 
         // Saídas (Com Peça)
         saídas.filter(s => filtrarData(s.ts)).forEach(s => {
-            const selb = (s.selb || '').toUpperCase().trim().replace(/^0+/, '');
+            const selb = (s.selb || '').toUpperCase().trim();
             if (!selb || selb === 'S/N' || selb === '0000') return;
 
             const modelo = eqMap[selb] || 'MODELO NÃO IDENTIFICADO (' + selb + ')';
@@ -1088,7 +1135,7 @@ window.renderModeloCusto = async () => {
 
         // Revisados (Sem Peça ou Complemento)
         revisados.filter(r => filtrarData(r.ts)).forEach(r => {
-            const selb = (r.selb || '').toUpperCase().trim().replace(/^0+/, '');
+            const selb = (r.selb || '').toUpperCase().trim();
             if (!selb || selb === 'S/N' || selb === '0000') return;
 
             const modelo = eqMap[selb] || 'MODELO NÃO IDENTIFICADO (' + selb + ')';
