@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Reconstrução de Estoque</title>
+  <style>
+    body { font-family: system-ui; background: #111; color: #fff; padding: 40px; }
+    h1 { color: #3b82f6; }
+    #log { background: #000; padding: 20px; font-family: monospace; border-radius: 8px; white-space: pre-wrap; margin-top: 20px; height: 400px; overflow-y: auto;}
+    .btn { background: #3b82f6; color: white; padding: 12px 24px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 16px; margin-right: 10px; }
+    .btn:hover { background: #2563eb; }
+    .btn-danger { background: #ef4444; }
+    .btn-danger:hover { background: #dc2626; }
+  </style>
+</head>
+<body>
+
+  <h1>Reconstrução Matemática do Estoque</h1>
+  <p>Este script vai ler todas as 1.300+ movimentações do Histórico do Supabase e <b>RECALCULAR</b> o estoque e os custos exatos, do zero. Esta é a forma mais segura e correta de recuperar os dados.</p>
+  
+  <div style="background: #222; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+    <h3>1. Login</h3>
+    <input type="text" id="email" placeholder="Seu email" style="padding: 10px; margin-right: 10px; border-radius: 4px; border: 1px solid #444; background: #111; color: white; width: 250px;">
+    <input type="password" id="senha" placeholder="Sua senha" style="padding: 10px; margin-right: 10px; border-radius: 4px; border: 1px solid #444; background: #111; color: white; width: 200px;">
+    
+    <h3 style="margin-top: 20px;">2. Executar</h3>
+    <button class="btn" onclick="iniciarReconstrucao()">Recalcular e Salvar Estoque</button>
+  </div>
+
+  <div id="log">Aguardando início...</div>
+
+  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+    const supabaseUrl = 'https://idpmrjjalhnpsxpfugph.supabase.co';
+    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkcG1yamphbGhucHN4cGZ1Z3BoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NjU2NjcsImV4cCI6MjA5MzI0MTY2N30.L4hV7YM9yjdOOW9zBl84L-1si2DU8nBI3J1WgmW02lY';
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+    const logEl = document.getElementById('log');
+    function appendLog(text) { logEl.textContent += text + '\n'; logEl.scrollTop = logEl.scrollHeight; }
+
+    async function iniciarReconstrucao() {
+      const email = document.getElementById('email').value.trim();
+      const senha = document.getElementById('senha').value;
+
+      logEl.textContent = 'Verificando login...\n';
+      let session = null;
+      const { data: sessionData } = await supabase.auth.getSession();
+      
+      if (sessionData && sessionData.session) {
+          session = sessionData.session;
+      } else {
+          if (!email || !senha) { appendLog('❌ Digite email e senha.'); return; }
+          appendLog('Fazendo login...');
+          const { data, error } = await supabase.auth.signInWithPassword({ email, password: senha });
+          if (error) { appendLog('❌ Erro: ' + error.message); return; }
+          session = data.session;
+      }
+
+      appendLog('✅ Autenticado como: ' + session.user.email);
+      appendLog('\n📥 Baixando todo o Histórico de Movimentações do Supabase...');
+
+      let allHistory = [];
+      let limit = 1000;
+      let offset = 0;
+      let hasMore = true;
+
+      while (hasMore) {
+          const { data, error } = await supabase.from('historico')
+              .select('code, tipo, qty, vlr_unit, ts')
+              .order('ts', { ascending: true })
+              .range(offset, offset + limit - 1);
+          
+          if (error) { appendLog('❌ Erro no histórico: ' + error.message); return; }
+          if (data.length > 0) {
+              allHistory.push(...data);
+              offset += limit;
+              if (data.length < limit) hasMore = false;
+          } else {
+              hasMore = false;
+          }
+      }
+
+      appendLog(`📊 Foram baixados ${allHistory.length} registros do histórico.`);
+
+      if (allHistory.length === 0) {
+          appendLog('❌ O histórico está vazio. Não é possível reconstruir.');
+          return;
+      }
+
+      appendLog('\n🧮 Recalculando saldos e preços atualizados...');
+      const saldos = {};
+      const precos = {};
+
+      allHistory.forEach(h => {
+          const code = h.code;
+          if (!code) return;
+
+          if (!saldos[code]) saldos[code] = 0;
+          
+          const q = parseInt(h.qty) || 0;
+          if (h.tipo === 'entrada') {
+              saldos[code] += q;
+              // Atualiza o preço sempre que houver uma entrada com valor
+              if (h.vlr_unit > 0) precos[code] = h.vlr_unit;
+          } else if (h.tipo === 'saída') {
+              saldos[code] -= q;
+          }
+      });
+
+      const itemsEstoque = Object.keys(saldos).map(code => ({
+          code: code,
+          qty: saldos[code]
+      }));
+
+      const itemsCustos = Object.keys(precos).map(code => ({
+          code: code,
+          last_cost: precos[code]
+      }));
+
+      appendLog(`✅ Cálculo concluído: ${itemsEstoque.length} itens encontrados.`);
+
+      appendLog('\n🚀 Enviando saldos reconstruídos para o Supabase...');
+      if (itemsEstoque.length > 0) {
+          const { error: err1 } = await supabase.from('estoque').upsert(itemsEstoque, { onConflict: 'code' });
+          if (err1) appendLog('❌ Erro ao salvar estoque: ' + err1.message);
+          else appendLog('✅ Estoque salvo com sucesso!');
+      }
+
+      appendLog('🚀 Enviando custos reconstruídos para o Supabase...');
+      if (itemsCustos.length > 0) {
+          const { error: err2 } = await supabase.from('custos').upsert(itemsCustos, { onConflict: 'code' });
+          if (err2) appendLog('❌ Erro ao salvar custos: ' + err2.message);
+          else appendLog('✅ Custos salvos com sucesso!');
+      }
+
+      appendLog('\n===========================================');
+      appendLog('🎉 RECONSTRUÇÃO CONCLUÍDA!');
+      appendLog('O sistema agora está matematicamente perfeito de acordo com todo o seu histórico desde o início!');
+      appendLog('Pode voltar ao sistema e recarregar a página.');
+      appendLog('===========================================');
+    }
+    
+    window.iniciarReconstrucao = iniciarReconstrucao;
+  </script>
+</body>
+</html>

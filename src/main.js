@@ -1,0 +1,1110 @@
+import { supabase } from './supabase.js'
+
+// --- ESTADO GLOBAL ---
+let currentUser = null;
+let currentTab = 'dashboard';
+let searchTimeout = null;
+let saidaItems = []; // Carrinho de saída SELB
+
+// --- ELEMENTOS DOM ---
+const authScreen = document.getElementById('auth-screen');
+const appShell = document.getElementById('app-shell');
+const loginErr = document.getElementById('login-err');
+const btnAuthSubmit = document.getElementById('auth-submit');
+const btnLogout = document.getElementById('btn-logout');
+const btnLoginArea = document.getElementById('btn-login');
+const adminBadge = document.getElementById('admin-badge');
+
+// --- INICIALIZAÇÃO ---
+async function init() {
+    console.log('🚀 Inicializando sistema...');
+    renderChips();
+
+    const { data: { session } } = await supabase.auth.getSession();
+    currentUser = session?.user || null;
+    updateUIForAuth();
+
+    if (currentUser) {
+        loadInitialData();
+    }
+
+    supabase.auth.onAuthStateChange((event, session) => {
+        currentUser = session?.user || null;
+        updateUIForAuth();
+        if (currentUser && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
+            loadInitialData();
+        }
+    });
+
+    // Eventos de Tab
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+    });
+
+    // Busca com Debounce
+    const searchInp = document.getElementById('search-main');
+    if (searchInp) {
+        searchInp.addEventListener('input', (e) => {
+            clearTimeout(searchTimeout);
+            searchTimeout = setTimeout(() => renderEstoque(e.target.value), 300);
+        });
+    }
+
+    document.getElementById('mov-prod')?.addEventListener('input', () => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(renderMovDashboard, 300);
+    });
+    document.getElementById('mov-tipo')?.addEventListener('change', renderMovDashboard);
+    document.getElementById('mov-d1')?.addEventListener('change', renderMovDashboard);
+    document.getElementById('mov-d2')?.addEventListener('change', renderMovDashboard);
+
+    document.getElementById('hist-search')?.addEventListener('input', () => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(renderHistorico, 300);
+    });
+    document.getElementById('hist-tipo')?.addEventListener('change', renderHistorico);
+    document.getElementById('hist-d1')?.addEventListener('change', renderHistorico);
+    document.getElementById('hist-d2')?.addEventListener('change', renderHistorico);
+    
+    document.getElementById('equip-search-input')?.addEventListener('input', (e) => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(() => renderBIList(e.target.value), 300);
+    });
+
+    document.getElementById('mod-busca')?.addEventListener('input', () => {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(renderModeloCusto, 300);
+    });
+
+    btnAuthSubmit?.addEventListener('click', doLogin);
+    btnLogout?.addEventListener('click', async () => {
+        await supabase.auth.signOut();
+        window.location.reload();
+    });
+
+    btnLoginArea?.addEventListener('click', () => {
+        if (!currentUser) document.getElementById('modal-login-overlay').classList.add('open');
+    });
+
+    document.getElementById('btn-cancel-login')?.addEventListener('click', () => {
+        document.getElementById('modal-login-overlay').classList.remove('open');
+    });
+
+    document.getElementById('btn-do-login')?.addEventListener('click', doModalLogin);
+}
+
+// --- AUTENTICAÇÃO ---
+async function doLogin() {
+    const email = document.getElementById('login-user').value.trim();
+    const pass = document.getElementById('login-pass').value;
+    if (!email || !pass) { loginErr.textContent = '❌ Preencha todos os campos'; return; }
+    loginErr.textContent = '⌛ Autenticando...';
+    const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
+    if (error) loginErr.textContent = '❌ ' + error.message;
+}
+
+async function doModalLogin() {
+    const email = document.getElementById('modal-login-user').value;
+    const pass = document.getElementById('modal-login-pass').value;
+    const err = document.getElementById('modal-login-err');
+    err.textContent = '⌛ Verificando...';
+    const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
+    if (error) err.textContent = '❌ ' + error.message;
+    else document.getElementById('modal-login-overlay').classList.remove('open');
+}
+
+function updateUIForAuth() {
+    if (currentUser) {
+        authScreen.style.display = 'none';
+        appShell.style.display = 'flex';
+        btnLogout.style.display = 'inline-flex';
+        btnLoginArea.style.display = 'none';
+        if (currentUser.email.endsWith('@selbetti.com.br')) adminBadge.style.display = 'inline-flex';
+    } else {
+        authScreen.style.display = 'flex';
+        appShell.style.display = 'none';
+        btnLogout.style.display = 'none';
+        btnLoginArea.style.display = 'inline-flex';
+        adminBadge.style.display = 'none';
+    }
+}
+
+// --- NAVEGAÇÃO ---
+function switchTab(tabId) {
+    currentTab = tabId;
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
+    document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === `view-${tabId}`));
+    if (tabId === 'dashboard') updateDashboard();
+    if (tabId === 'estoque') renderEstoque();
+    if (tabId === 'historico') renderHistorico();
+    if (tabId === 'movimentacoes') renderMovDashboard();
+    if (tabId === 'revisados') {
+        const rData = document.getElementById('revisados-data');
+        if (rData && !rData.value) rData.value = new Date().toISOString().split('T')[0];
+        renderRevisados();
+    }
+    if (tabId === 'bi-equipamentos') renderBIList();
+    if (tabId === 'modelo-custo') {
+        const d1 = document.getElementById('mod-d1');
+        const d2 = document.getElementById('mod-d2');
+        if (d1 && !d1.value) {
+            const today = new Date();
+            const d30 = new Date(); d30.setDate(today.getDate() - 30);
+            d1.value = d30.toISOString().split('T')[0];
+            d2.value = today.toISOString().split('T')[0];
+        }
+        renderModeloCusto();
+    }
+}
+
+async function loadInitialData() {
+    updateDashboard();
+}
+
+let dashFilterLow = false;
+
+// --- DASHBOARD ---
+async function updateDashboard() {
+    try {
+        console.log('📊 Atualizando Dashboard...');
+        const { count: totalParts } = await supabase.from('parts').select('*', { count: 'exact', head: true });
+        
+        const { data: stockData } = await supabase.from('estoque').select('qty').gt('qty', 0);
+        const inStockCount = stockData?.length || 0;
+        const volTotal = stockData?.reduce((acc, curr) => acc + curr.qty, 0) || 0;
+
+        const { count: lowCount } = await supabase.from('estoque').select('*', { count: 'exact', head: true }).lt('qty', 5).gt('qty', 0);
+
+        document.getElementById('dash-total').textContent = (totalParts || 0).toLocaleString('pt-BR');
+        document.getElementById('dash-instock').textContent = inStockCount.toLocaleString('pt-BR');
+        document.getElementById('dash-vol-total').textContent = volTotal.toLocaleString('pt-BR');
+        document.getElementById('dash-low-count').textContent = (lowCount || 0).toLocaleString('pt-BR');
+
+        if (document.getElementById('stat-in-stock')) document.getElementById('stat-in-stock').textContent = volTotal;
+        if (document.getElementById('stat-zero')) {
+             const { count: zeroCount } = await supabase.from('estoque').select('*', { count: 'exact', head: true }).eq('qty', 0);
+             document.getElementById('stat-zero').textContent = zeroCount || 0;
+        }
+
+        renderDashTable();
+    } catch (e) { console.error('❌ Erro dashboard:', e.message); }
+}
+
+window.toggleLowStockFilter = () => {
+    dashFilterLow = !dashFilterLow;
+    const card = document.getElementById('card-low-stock');
+    if (dashFilterLow) {
+        card.style.boxShadow = '0 0 0 3px var(--red)';
+        card.style.transform = 'scale(1.02)';
+        document.querySelector('.dash-section-title').textContent = '⚠️ Itens com Estoque Crítico (< 5)';
+    } else {
+        card.style.boxShadow = '';
+        card.style.transform = '';
+        document.querySelector('.dash-section-title').textContent = 'Itens com Saldo em Estoque';
+    }
+    renderDashTable();
+};
+
+async function renderDashTable() {
+    try {
+        const tbody = document.getElementById('dash-tbody');
+        if (!tbody) return;
+
+        let query = supabase.from('estoque')
+            .select('qty, parts!inner(code, descricao)')
+            .order('qty', { ascending: false });
+
+        if (dashFilterLow) {
+            query = query.lt('qty', 5).gt('qty', 0);
+        } else {
+            query = query.gt('qty', 0);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+
+        if (!data || data.length === 0) {
+            document.getElementById('dash-empty').style.display = 'block';
+            tbody.innerHTML = '';
+            return;
+        }
+
+        document.getElementById('dash-empty').style.display = 'none';
+        
+        let totalQty = 0;
+        let html = data.map(item => {
+            totalQty += item.qty;
+            return `
+                <tr>
+                    <td class="td-desc">${item.parts?.descricao}</td>
+                    <td class="td-code">${item.parts?.code}</td>
+                    <td class="td-stock">${item.qty}</td>
+                    <td><span class="status-ok">✔ OK</span></td>
+                </tr>
+            `;
+        }).join('');
+
+        // Adiciona rodapé de total
+        html += `
+            <tr style="background: rgba(59, 130, 246, 0.05); font-weight: bold;">
+                <td colspan="2" style="text-align: right; padding: 15px; color: #64748b;">TOTAL DE PEÇAS EM ESTOQUE:</td>
+                <td style="font-size: 1.1rem; color: #2563eb; padding: 15px;">${totalQty}</td>
+                <td></td>
+            </tr>
+        `;
+
+        tbody.innerHTML = html;
+    } catch (e) {
+        console.error('❌ Erro renderDashTable:', e.message);
+    }
+}
+
+// --- MARCAS / FILTROS ---
+const MARCAS = ['HP', 'RICOH', 'XEROX', 'ZEBRA', 'EPSON', 'BROTHER', 'LEXMARK', 'SAMSUNG', 'CANON', 'DATACARD', 'DATAMAX', 'CITIZEN', 'GODEX', 'ARGOX', 'TSC', 'AVISION', 'TOSHIBA', 'SHARP', 'OKI', 'KYOCERA', 'KONICA', 'MIMAKI'];
+let currentFilter = '';
+
+function renderChips() {
+    const el = document.getElementById('brand-chips');
+    if (!el) return;
+    el.innerHTML = MARCAS.map(m =>
+        `<span class="filter-chip" id="chip-${m}" onclick="setFilter('${m}')">${m}</span>`
+    ).join('');
+}
+
+window.setFilter = (marca) => {
+    currentFilter = marca;
+    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
+    if (marca) {
+        document.getElementById('chip-' + marca)?.classList.add('active');
+    } else {
+        document.getElementById('chip-all')?.classList.add('active');
+    }
+    const searchVal = document.getElementById('search-main')?.value.trim() || '';
+    renderEstoque(searchVal);
+};
+
+// --- BUSCA E ESTOQUE ---
+async function renderEstoque(query = '') {
+    const tbody = document.getElementById('result-body');
+    const countEl = document.getElementById('result-count');
+    try {
+        const isSearchActive = query.length > 0;
+        const relEstoque = isSearchActive ? 'estoque!left(qty)' : 'estoque!inner(qty)';
+
+        let dbQuery = supabase.from('parts').select(`code, descricao, marca, ${relEstoque}, custos!left(last_cost)`);
+
+        if (!isSearchActive) {
+            dbQuery = dbQuery.gt('estoque.qty', 0);
+        }
+
+        if (currentFilter) {
+            dbQuery = dbQuery.ilike('descricao', `%${currentFilter}%`);
+        }
+
+        if (isSearchActive) {
+            dbQuery = dbQuery.or(`code.ilike.%${query}%,descricao.ilike.%${query}%`);
+        }
+
+        const { data } = await dbQuery.limit(isSearchActive ? 50 : 200);
+
+        if (!data || data.length === 0) {
+            tbody.innerHTML = ''; countEl.textContent = '0'; document.getElementById('empty-state').style.display = 'block'; return;
+        }
+        document.getElementById('empty-state').style.display = 'none';
+        countEl.textContent = data.length;
+
+        tbody.innerHTML = data.map(p => {
+            const qty = p.estoque?.qty ?? p.estoque?.[0]?.qty ?? 0;
+            const cost = p.custos?.last_cost ?? p.custos?.[0]?.last_cost ?? 0;
+            return `
+                <tr>
+                    <td class="td-code">${p.code}</td>
+                    <td class="td-desc">${p.descricao} ${p.marca ? `<small>(${p.marca})</small>` : ''}</td>
+                    <td class="td-stock ${qty <= 5 ? 'stock-low' : 'stock-ok'}">${qty}</td>
+                    <td style="text-align:right">R$ ${Number(cost).toFixed(2)}</td>
+                    <td class="td-actions">
+                        <button class="btn-sm btn-set" onclick="openEditModal('${p.code}', '${p.descricao.replace(/'/g, "\\'")}')">✏</button>
+                        <button class="btn-sm btn-minus" onclick="openSaidaModal('${p.code}')">➖</button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    } catch (e) { console.error('❌ Erro busca:', e.message); }
+}
+
+// --- LOGICA DE ENTRADA (LOTE) ---
+async function processarEntrada() {
+    const textarea = document.getElementById('entrada-textarea');
+    const lines = textarea.value.split('\n').map(l => l.trim().toUpperCase()).filter(Boolean);
+    const resultDiv = document.getElementById('entrada-result');
+    if (!lines.length) return;
+
+    resultDiv.innerHTML = '⌛ Processando...';
+    const counts = {}; lines.forEach(c => counts[c] = (counts[c] || 0) + 1);
+
+    for (const [code, qty] of Object.entries(counts)) {
+        const { data: part } = await supabase.from('parts').select('descricao').eq('code', code).single();
+        if (!part) continue;
+        const { data: cur } = await supabase.from('estoque').select('qty').eq('code', code).single();
+        const newQty = (cur?.qty || 0) + qty;
+        await supabase.from('estoque').upsert({ code, qty: newQty });
+        await supabase.from('historico').insert({ tipo: 'entrada', code, descricao: part.descricao, qty, user_email: currentUser.email, dt: new Date().toLocaleString('pt-BR') });
+    }
+    textarea.value = '';
+    resultDiv.innerHTML = '✅ Entradas registradas!';
+    updateDashboard();
+}
+
+// --- LOGICA DE SAÍDA (SELB) ---
+async function confirmarSaida() {
+    const selb = document.getElementById('saida-selb').value.trim().toUpperCase();
+    if (selb.length !== 4 || !saidaItems.length) { alert('Verifique o SELB e as peças.'); return; }
+
+    const btn = document.getElementById('saida-confirm-btn');
+    btn.disabled = true; btn.textContent = 'Gravando...';
+
+    const { error } = await supabase.rpc('processar_saida', {
+        p_lote_id: `SELB-${selb}-${Date.now()}`,
+        p_selb: selb,
+        p_user: currentUser.email,
+        p_dt: new Date().toLocaleString('pt-BR'),
+        p_items: saidaItems
+    });
+
+    if (error) alert('❌ Erro: ' + error.message);
+    else { alert('✅ Baixa concluída!'); closeSaidaModal(); updateDashboard(); }
+    btn.disabled = false; btn.textContent = 'Finalizar Baixa';
+}
+
+function openSaidaModal(code) {
+    saidaItems = [];
+    document.getElementById('saida-selb').value = '';
+    document.getElementById('saida-peca').value = code || '';
+    renderSaidaItems();
+    document.getElementById('modal-saida-overlay').classList.add('open');
+}
+
+function addSaidaItem() {
+    const code = document.getElementById('saida-peca').value.trim().toUpperCase();
+    const qty = parseInt(document.getElementById('saida-qtd').value) || 1;
+    if (!code) return;
+    supabase.from('parts').select('descricao, custos(last_cost)').eq('code', code).single().then(({ data }) => {
+        if (!data) { alert('Não encontrado'); return; }
+        const vlr = data.custos?.last_cost ?? data.custos?.[0]?.last_cost ?? 0;
+        saidaItems.push({ code, descricao: data.descricao, qty, vlrUnit: vlr, vlrTotal: qty * vlr });
+        document.getElementById('saida-peca').value = ''; renderSaidaItems();
+    });
+}
+
+function renderSaidaItems() {
+    const tbody = document.getElementById('saida-tbody');
+    document.getElementById('saida-count').textContent = saidaItems.reduce((s, i) => s + i.qty, 0);
+    document.getElementById('saida-total').textContent = 'R$ ' + saidaItems.reduce((s, i) => s + i.vlrTotal, 0).toFixed(2);
+    tbody.innerHTML = saidaItems.map((item, idx) => `<tr><td>${item.code}</td><td>${item.descricao}</td><td class="text-center">${item.qty}</td><td class="text-right">R$ ${item.vlrTotal.toFixed(2)}</td><td><button onclick="window.removeSaidaItem(${idx})">❌</button></td></tr>`).join('');
+}
+
+// --- AJUSTE MANUAL ---
+let currentEditCode = '';
+function openEditModal(code, desc) {
+    currentEditCode = code;
+    document.getElementById('modal-code').textContent = code;
+    document.getElementById('modal-desc').textContent = desc;
+    supabase.from('estoque').select('qty').eq('code', code).single().then(({ data }) => document.getElementById('modal-qty').value = data?.qty || 0);
+    supabase.from('custos').select('last_cost').eq('code', code).single().then(({ data }) => document.getElementById('modal-price').value = data?.last_cost || 0);
+    document.getElementById('modal-overlay').classList.add('open');
+}
+
+async function savePriceModal() {
+    const qty = parseInt(document.getElementById('modal-qty').value) || 0;
+    const price = parseFloat(document.getElementById('modal-price').value) || 0;
+    await supabase.from('estoque').upsert({ code: currentEditCode, qty });
+    await supabase.from('custos').upsert({ code: currentEditCode, last_cost: price });
+    document.getElementById('modal-overlay').classList.remove('open');
+    renderEstoque(); updateDashboard();
+}
+
+// --- HISTÓRICO ---
+async function renderHistorico() {
+    const tbody = document.getElementById('hist-tbody');
+    const searchQ = document.getElementById('hist-search')?.value.trim().toUpperCase() || '';
+    const tipoF = document.getElementById('hist-tipo')?.value || '';
+    const d1Str = document.getElementById('hist-d1')?.value || '';
+    const d2Str = document.getElementById('hist-d2')?.value || '';
+
+    let q = supabase.from('historico').select('*').order('ts', { ascending: false }).limit(200);
+
+    if (tipoF) q = q.eq('tipo', tipoF);
+    if (searchQ) q = q.or(`code.ilike.%${searchQ}%,descricao.ilike.%${searchQ}%,selb.ilike.%${searchQ}%`);
+    if (d1Str) q = q.gte('ts', d1Str + 'T00:00:00Z');
+    if (d2Str) q = q.lte('ts', d2Str + 'T23:59:59.999Z');
+
+    const { data } = await q;
+    if (!data) return;
+
+    document.getElementById('hist-count').textContent = `${data.length} registros (limite de visualização)`;
+    tbody.innerHTML = data.map(h => `
+        <tr>
+            <td>${new Date(h.ts).toLocaleString()}</td>
+            <td class="td-code">${h.code}</td>
+            <td><span class="hist-badge ${h.tipo === 'entrada' ? 'badge-entrada' : 'badge-saida'}">${h.tipo}</span></td>
+            <td class="text-center">${h.qty}</td>
+            <td style="text-align:right; color: var(--text-muted)">${h.vlr_unit ? 'R$ ' + h.vlr_unit.toLocaleString('pt-BR', {minimumFractionDigits: 2}) : '-'}</td>
+            <td style="text-align:right; font-weight: bold;">${h.vlr_total ? 'R$ ' + h.vlr_total.toLocaleString('pt-BR', {minimumFractionDigits: 2}) : '-'}</td>
+            <td>${h.user_email?.split('@')[0] || ''}</td>
+            <td>${h.selb || h.descricao || ''}</td>
+        </tr>
+    `).join('');
+}
+
+// --- EXPOR PARA GLOBAL (BOTÕES HTML) ---
+window.switchTab = switchTab;
+window.processarEntrada = processarEntrada;
+
+// Função para abrir o menu de engrenagem
+window.openAdminMenu = () => {
+    const menu = document.getElementById('admin-menu-overlay');
+    if (menu) menu.classList.add('open');
+};
+window.closeAdminMenu = () => {
+    const menu = document.getElementById('admin-menu-overlay');
+    if (menu) menu.classList.remove('open');
+};
+
+window.openSaidaModal = openSaidaModal;
+window.closeSaidaModal = () => document.getElementById('modal-saida-overlay').classList.remove('open');
+window.addSaidaItem = addSaidaItem;
+window.confirmarSaida = confirmarSaida;
+window.removeSaidaItem = (idx) => { saidaItems.splice(idx, 1); renderSaidaItems(); };
+window.openEditModal = openEditModal;
+window.closeModal = () => document.getElementById('modal-overlay').classList.remove('open');
+window.savePriceModal = savePriceModal;
+
+// Facilitar navegação do menu admin
+window.openImportFromMenu = () => {
+    document.getElementById('admin-menu-box').style.display = 'none';
+    document.getElementById('import-submenu-box').style.display = 'block';
+};
+window.backToAdminMenu = () => {
+    document.getElementById('admin-menu-box').style.display = 'block';
+    document.getElementById('import-submenu-box').style.display = 'none';
+};
+window.doImportProtheus = () => {
+    window.closeAdminMenu();
+    window.switchTab('entrada-xml');
+};
+window.processarXML = async (file) => {
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        try {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(e.target.result, "application/xml");
+            const rows = Array.from(doc.querySelectorAll('Row'));
+
+            if (!rows.length) { alert('Nenhuma linha encontrada no XML.'); return; }
+
+            let colProduto = -1, colQtd = -1, colVlrUnit = -1;
+            let dataStartIdx = -1;
+
+            for (let ri = 0; ri < Math.min(rows.length, 100); ri++) {
+                const cells = rows[ri].querySelectorAll('Cell');
+                const texts = Array.from(cells).map(c => c.querySelector('Data')?.textContent.trim().toUpperCase() || '');
+                if (texts.some(t => t.includes('PRODUTO') || t === 'COD. PRODUTO')) {
+                    texts.forEach((t, i) => {
+                        if (t.includes('PRODUTO') && colProduto < 0) colProduto = i;
+                        if ((t.includes('QUANTIDADE') || t === 'QTD') && colQtd < 0) colQtd = i;
+                        if (t.includes('UNIT') && colVlrUnit < 0) colVlrUnit = i;
+                    });
+                    dataStartIdx = ri + 1;
+                    break;
+                }
+            }
+
+            if (dataStartIdx < 0 || colProduto < 0) {
+                colProduto = 2; colQtd = 5; colVlrUnit = 6;
+                dataStartIdx = 0;
+            }
+
+            const itemsMap = {};
+            for (let ri = dataStartIdx; ri < rows.length; ri++) {
+                const cells = rows[ri].querySelectorAll('Cell');
+                if (cells.length < 3) continue;
+
+                const getCell = (idx) => idx >= 0 && idx < cells.length ? (cells[idx].querySelector('Data')?.textContent.trim() || '') : '';
+
+                const rawCode = getCell(colProduto).toUpperCase().replace(/\s+/g, '');
+                if (!rawCode || rawCode.length < 2 || rawCode.includes('PRODUTO') || rawCode === 'TOTAL') continue;
+
+                const qtdRaw = getCell(colQtd).replace(',', '.').replace(/[^0-9.]/g, '');
+                const qty = parseFloat(qtdRaw) || 0;
+                if (qty <= 0) continue;
+
+                const vlrUnit = parseFloat(getCell(colVlrUnit).replace(',', '.').replace(/[^0-9.]/g, '')) || 0;
+
+                if (!itemsMap[rawCode]) itemsMap[rawCode] = { qty: 0, vlrUnit: vlrUnit };
+                itemsMap[rawCode].qty += qty;
+            }
+
+            const keys = Object.keys(itemsMap);
+            if (keys.length === 0) { alert('Nenhum item válido encontrado.'); return; }
+
+            document.getElementById('xml-drop-area').innerHTML = `<h3 style="color:#2e7d32;text-align:center">Processando ${keys.length} itens no banco de dados... Aguarde.</h3>`;
+
+            let processados = 0;
+            for (const code of keys) {
+                const { qty, vlrUnit } = itemsMap[code];
+
+                const { data: cur } = await supabase.from('estoque').select('qty').eq('code', code).single();
+                const newQty = (cur?.qty || 0) + qty;
+
+                await supabase.from('estoque').upsert({ code, qty: newQty });
+                if (vlrUnit > 0) {
+                    await supabase.from('custos').upsert({ code, last_cost: vlrUnit });
+                }
+
+                if (currentUser) {
+                    await supabase.from('historico').insert({
+                        tipo: 'entrada', code, descricao: 'Entrada Lote XML', qty,
+                        user_email: currentUser.email, dt: new Date().toLocaleString('pt-BR'),
+                        vlr_unit: vlrUnit, vlr_total: vlrUnit * qty
+                    });
+                }
+                processados++;
+            }
+
+            alert(`Importação concluída! ${processados} itens processados com sucesso.`);
+            window.location.reload();
+        } catch (err) {
+            alert('Erro na importação: ' + err.message);
+            window.location.reload();
+        }
+    };
+    reader.readAsText(file, 'utf-8');
+};
+
+// --- MOVIMENTAÇÕES DASHBOARD ---
+let chartDaily = null;
+let chartWeekly = null;
+
+window.renderMovDashboard = async () => {
+    const prodF = document.getElementById('mov-prod')?.value.trim().toUpperCase();
+    const tipoF = document.getElementById('mov-tipo')?.value;
+    const d1El = document.getElementById('mov-d1');
+    const d2El = document.getElementById('mov-d2');
+
+    if (d1El && d2El && (!d1El.value || !d2El.value)) {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        const lastDay = new Date(y, now.getMonth() + 1, 0).getDate();
+        if (!d1El.value) d1El.value = `${y}-${m}-01`;
+        if (!d2El.value) d2El.value = `${y}-${m}-${lastDay}`;
+    }
+
+    const d1 = d1El?.value || '';
+    const d2 = d2El?.value || '';
+
+    let q = supabase.from('historico').select('*').order('ts', { ascending: true });
+    if (tipoF) q = q.eq('tipo', tipoF);
+    if (prodF) q = q.or(`code.ilike.%${prodF}%,descricao.ilike.%${prodF}%`);
+    if (d1) q = q.gte('ts', d1 + 'T00:00:00Z');
+    if (d2) q = q.lte('ts', d2 + 'T23:59:59Z');
+
+    const { data } = await q;
+    if (!data) return;
+
+    let totIn = 0, totOut = 0, vlrIn = 0, vlrOut = 0;
+    const daily = {};
+    const weekly = {};
+
+    data.forEach(h => {
+        const qty = h.qty || 0;
+        const vlr = h.vlr_total || 0;
+        const dt = h.ts ? h.ts.split('T')[0] : 'Sem Data';
+
+        if (h.tipo === 'entrada') { totIn += qty; vlrIn += vlr; }
+        else { totOut += qty; vlrOut += vlr; }
+
+        if (dt !== 'Sem Data') {
+            if (!daily[dt]) daily[dt] = { in: 0, out: 0, vlrIn: 0, vlrOut: 0 };
+            if (h.tipo === 'entrada') { daily[dt].in += qty; daily[dt].vlrIn += vlr; }
+            else { daily[dt].out += qty; daily[dt].vlrOut += vlr; }
+
+            const dateObj = new Date(h.ts);
+            const startOfYear = new Date(dateObj.getFullYear(), 0, 1);
+            const week = Math.ceil((((dateObj - startOfYear) / 86400000) + startOfYear.getDay() + 1) / 7);
+            const weekKey = `Sem. ${week}`;
+            if (!weekly[weekKey]) weekly[weekKey] = 0;
+            weekly[weekKey] += qty;
+        }
+    });
+
+    // Atualizar KPIs
+    const fmt = v => 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 });
+    document.getElementById('mov-kpi-entrada').textContent = totIn.toLocaleString('pt-BR');
+    document.getElementById('mov-kpi-saida').textContent = totOut.toLocaleString('pt-BR');
+    document.getElementById('mov-kpi-entrada-val').textContent = fmt(vlrIn);
+    document.getElementById('mov-kpi-saida-val').textContent = fmt(vlrOut);
+    document.getElementById('mov-kpi-saldo').textContent = (totIn - totOut).toLocaleString('pt-BR');
+
+    // Patrimônio Real (Independente do filtro de data)
+    const { data: currentInv } = await supabase.from('estoque').select('qty, code');
+    const { data: currentCosts } = await supabase.from('custos').select('code, last_cost');
+    
+    let totalVol = 0;
+    let totalVal = 0;
+    const costMap = {};
+    currentCosts?.forEach(c => costMap[c.code] = c.last_cost);
+    currentInv?.forEach(i => {
+        totalVol += i.qty;
+        totalVal += (i.qty * (costMap[i.code] || 0));
+    });
+
+    document.getElementById('mov-kpi-total-vol').textContent = totalVol.toLocaleString('pt-BR');
+    document.getElementById('mov-kpi-total-val').textContent = fmt(totalVal);
+
+    // Gráfico Diário
+    const dailyLabels = Object.keys(daily).sort();
+    if (chartDaily) chartDaily.destroy();
+    chartDaily = new Chart(document.getElementById('chart-daily'), {
+        type: 'line',
+        data: {
+            labels: dailyLabels,
+            datasets: [
+                { label: 'Entrada', data: dailyLabels.map(l => daily[l].in), borderColor: '#22c55e', backgroundColor: 'rgba(34,197,94,0.1)', fill: true, tension: 0.4 },
+                { label: 'Saída', data: dailyLabels.map(l => daily[l].out), borderColor: '#ef4444', backgroundColor: 'rgba(239,68,68,0.1)', fill: true, tension: 0.4 }
+            ]
+        },
+        options: { responsive: true }
+    });
+
+    // Gráfico Semanal
+    const weeklyLabels = Object.keys(weekly);
+    if (chartWeekly) chartWeekly.destroy();
+    chartWeekly = new Chart(document.getElementById('chart-weekly'), {
+        type: 'bar',
+        data: {
+            labels: weeklyLabels,
+            datasets: [{ label: 'Volume Total', data: weeklyLabels.map(l => weekly[l]), backgroundColor: '#3b82f6', borderRadius: 6 }]
+        },
+        options: { responsive: true, plugins: { legend: { display: false } } }
+    });
+
+    // Tabela Detalhada
+    const tbody = document.getElementById('mov-tbody');
+    const empty = document.getElementById('mov-empty');
+    const sortedDates = Object.keys(daily).sort((a, b) => b.localeCompare(a));
+
+    if (sortedDates.length === 0) {
+        tbody.innerHTML = '';
+        empty.style.display = 'block';
+    } else {
+        empty.style.display = 'none';
+        tbody.innerHTML = sortedDates.map(dt => {
+            const d = daily[dt];
+            const saldo = d.in - d.out;
+            return `<tr>
+                <td style="font-family:var(--mono)">${dt.split('-').reverse().join('/')}</td>
+                <td style="text-align:center; color:#22c55e; font-weight:bold">${d.in}</td>
+                <td style="text-align:center; color:#ef4444; font-weight:bold">${d.out}</td>
+                <td style="text-align:center; font-weight:bold">${saldo > 0 ? '+' : ''}${saldo}</td>
+                <td style="text-align:right">${d.vlrIn > 0 ? fmt(d.vlrIn) : '—'}</td>
+                <td style="text-align:right">${d.vlrOut > 0 ? fmt(d.vlrOut) : '—'}</td>
+                <td style="text-align:right; font-weight:bold">${fmt(d.vlrIn + d.vlrOut)}</td>
+            </tr>`;
+        }).join('');
+    }
+};
+
+async function gerarBackupCompleto() {
+    try {
+        console.log('🔄 Iniciando coleta de dados para backup...');
+        const btn = event.target;
+        const originalText = btn.innerText;
+        btn.innerText = '⏳ Coletando dados...';
+        btn.disabled = true;
+
+        const [p, e, c, h] = await Promise.all([
+            supabase.from('parts').select('*'),
+            supabase.from('estoque').select('*'),
+            supabase.from('custos').select('*'),
+            supabase.from('historico').select('*').order('ts', { ascending: false })
+        ]);
+
+        const backup = {
+            data_geracao: new Date().toISOString(),
+            versao: '1.0',
+            tabelas: {
+                parts: p.data || [],
+                estoque: e.data || [],
+                custos: c.data || [],
+                historico: h.data || []
+            }
+        };
+
+        const blob = new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        const dataStr = new Date().toLocaleDateString('pt-BR').replace(/\//g, '-');
+        a.download = `BACKUP_ESTOQUE_LAB_${dataStr}.json`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        btn.innerText = originalText;
+        btn.disabled = false;
+        alert('✅ Backup concluído com sucesso! Guarde este arquivo em um local seguro (Google Drive, Pendrive, etc).');
+        closeAdminMenu();
+    } catch (err) {
+        alert('❌ Erro ao gerar backup: ' + err.message);
+    }
+}
+
+window.gerarBackupCompleto = gerarBackupCompleto;
+
+// --- LOGICA BI EQUIPAMENTOS ---
+window.processarBI = async (file) => {
+    if (!file) return;
+    const status = document.getElementById('bi-status');
+    status.innerHTML = '⌛ Lendo arquivo...';
+    
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+        try {
+            const data = new Uint8Array(e.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+
+            // Pula cabeçalho e filtra linhas válidas (Col A, C, D)
+            const seen = new Set();
+            const validRows = [];
+            
+            rows.slice(1).forEach(r => {
+                const selb = String(r[0] || '').trim().toUpperCase().replace(/^0+/, ''); // Remove zeros à esquerda
+                const modelo = String(r[3] || r[2] || '').trim().toUpperCase(); // Prefere a Descrição (Col D) para bater com o print antigo
+                const desc = String(r[3] || '').trim().toUpperCase();
+                
+                if (selb && modelo && !seen.has(selb)) {
+                    seen.add(selb);
+                    validRows.push({ selb, modelo, descricao: desc });
+                }
+            });
+
+            if (!validRows.length) { status.innerHTML = '❌ Nenhum dado válido encontrado.'; return; }
+            status.innerHTML = `⌛ Enviando ${validRows.length} registros...`;
+
+            // Envia em lotes de 500 para não estourar a API
+            let count = 0;
+            for (let i = 0; i < validRows.length; i += 500) {
+                const chunk = validRows.slice(i, i + 500);
+                const { error } = await supabase.from('equipamentos').upsert(chunk);
+                if (error) throw error;
+                count += chunk.length;
+                status.innerHTML = `⌛ Enviando... (${count}/${validRows.length})`;
+            }
+
+            status.innerHTML = '✅ Base BI atualizada com sucesso!';
+            renderEquipamentos();
+        } catch (err) {
+            console.error(err);
+            status.innerHTML = '❌ Erro: ' + err.message;
+            if (err.message.includes('not found')) {
+                alert('⚠️ Tabela "equipamentos" não encontrada no Supabase. Por favor, crie-a no SQL Editor primeiro.');
+            }
+        }
+    };
+    reader.readAsArrayBuffer(file);
+};
+
+async function renderEquipamentos(query = '') {
+    const tbody = document.getElementById('equip-tbody');
+    const totalEl = document.getElementById('equip-total');
+    if (!tbody) return;
+
+    // Busca o total real para o contador
+    const { count: totalReal } = await supabase.from('equipamentos').select('*', { count: 'exact', head: true });
+    if (totalEl) totalEl.textContent = `(${totalReal || 0})`;
+
+    let q = supabase.from('equipamentos').select('*').order('selb', { ascending: true }).limit(100);
+    if (query) {
+        q = q.or(`selb.ilike.%${query}%,modelo.ilike.%${query}%,descricao.ilike.%${query}%`);
+    }
+
+    const { data } = await q;
+    if (!data) return;
+
+    tbody.innerHTML = data.map(e => `
+        <tr>
+            <td style="font-weight:bold; color:var(--blue)">${e.selb}</td>
+            <td>${e.modelo}</td>
+            <td style="font-size:0.75rem; color:var(--text-muted)">${e.descricao}</td>
+        </tr>
+    `).join('');
+}
+
+// --- BI EQUIPAMENTOS ---
+window.renderBIList = async (query = '') => {
+    const tbody = document.getElementById('equip-tbody');
+    const totalEl = document.getElementById('equip-total-count');
+    if (!tbody) return;
+
+    const { count: totalReal } = await supabase.from('equipamentos').select('*', { count: 'exact', head: true });
+    if (totalEl) totalEl.textContent = `(${totalReal || 0})`;
+
+    let q = supabase.from('equipamentos').select('*').order('selb', { ascending: true }).limit(200);
+    if (query) {
+        q = q.or(`selb.ilike.%${query}%,modelo.ilike.%${query}%,descricao.ilike.%${query}%`);
+    }
+
+    const { data } = await q;
+    if (!data) return;
+
+    tbody.innerHTML = data.map(e => `
+        <tr>
+            <td style="font-weight:bold; color:var(--blue)">${e.selb}</td>
+            <td>${e.modelo}</td>
+            <td style="font-size:0.75rem; color:var(--text-muted)">${e.descricao || ''}</td>
+        </tr>
+    `).join('');
+};
+
+// --- LOGICA REVISADOS ---
+window.renderRevisados = async () => {
+    const tbody = document.getElementById('revisados-tbody');
+    if (!tbody) return;
+
+    const { data } = await supabase.from('revisados').select('*').order('ts', { ascending: false }).limit(50);
+    if (!data) return;
+
+    tbody.innerHTML = data.map(r => `
+        <tr>
+            <td style="font-size:0.8rem">${new Date(r.ts).toLocaleString('pt-BR')}</td>
+            <td style="font-weight:bold; color:var(--green)">${r.selb}</td>
+            <td style="color:var(--text-muted)">${r.user_email?.split('@')[0]}</td>
+        </tr>
+    `).join('');
+};
+
+window.processarRevisados = async () => {
+    const textarea = document.getElementById('revisados-textarea');
+    const status = document.getElementById('revisados-status');
+    const raw = textarea.value.trim();
+    if (!raw) return;
+
+    const dtInput = document.getElementById('revisados-data');
+    const selbData = dtInput?.value || new Date().toISOString().split('T')[0];
+
+    status.innerHTML = '⌛ Gravando...';
+    const selbs = raw.split(/[\n,;]+/).map(s => s.trim().toUpperCase()).filter(s => s.length >= 2);
+    
+    if (selbs.length === 0) {
+        status.innerHTML = '❌ Nenhum SELB válido detectado.';
+        return;
+    }
+
+    const records = selbs.map(s => ({
+        selb: s,
+        user_email: currentUser?.email || 'anonimo',
+        ts: selbData + 'T12:00:00Z' // Usa meio-dia para evitar problemas de fuso
+    }));
+
+    const { error } = await supabase.from('revisados').upsert(records);
+
+    if (error) {
+        status.innerHTML = `<span style="color:var(--red)">❌ Erro: ${error.message}</span>`;
+    } else {
+        status.innerHTML = `<span style="color:var(--green)">✅ ${selbs.length} SELBs registrados!</span>`;
+        textarea.value = '';
+        renderRevisados();
+    }
+};
+
+// --- RELATÓRIO CUSTO POR MODELO ---
+let chartModelo = null;
+
+window.clearModFilters = () => {
+    document.getElementById('mod-busca').value = '';
+    document.getElementById('mod-d1').value = '';
+    document.getElementById('mod-d2').value = '';
+    renderModeloCusto();
+};
+
+window.renderModeloCusto = async () => {
+    try {
+        const d1 = document.getElementById('mod-d1')?.value;
+        const d2 = document.getElementById('mod-d2')?.value;
+        const query = document.getElementById('mod-busca')?.value.trim().toUpperCase();
+
+        // Carregar Dados
+        const [hRes, rRes, eRes] = await Promise.all([
+            supabase.from('historico').select('*').eq('tipo', 'saída'),
+            supabase.from('revisados').select('*'),
+            supabase.from('equipamentos').select('selb, modelo')
+        ]);
+
+        const saídas = hRes.data || [];
+        const revisados = rRes.data || [];
+        const equipamentos = eRes.data || [];
+
+        const eqMap = {};
+        equipamentos.forEach(e => {
+            const cleanSelb = e.selb.toUpperCase().trim().replace(/^0+/, '');
+            eqMap[cleanSelb] = e.modelo;
+        });
+
+        const filtrarData = (ts) => {
+            if (!ts) return false; // Se não tem data, não entra no relatório
+            const dt = ts.split('T')[0];
+            if (d1 && dt < d1) return false;
+            if (d2 && dt > d2) return false;
+            return true;
+        };
+
+        const byModel = {};
+
+        // Saídas (Com Peça)
+        saídas.filter(s => filtrarData(s.ts)).forEach(s => {
+            const selb = (s.selb || '').toUpperCase().trim().replace(/^0+/, '');
+            if (!selb || selb === 'S/N' || selb === '0000') return;
+
+            const modelo = eqMap[selb] || 'MODELO NÃO IDENTIFICADO (' + selb + ')';
+            if (query && !modelo.includes(query)) return;
+
+            if (!byModel[modelo]) byModel[modelo] = { atendimentos: 0, comPeca: new Set(), semPeca: new Set(), pecas: 0, custo: 0 };
+            byModel[modelo].comPeca.add(selb);
+            byModel[modelo].pecas += (s.qty || 1);
+            byModel[modelo].custo += (s.vlr_total || 0);
+        });
+
+        // Revisados (Sem Peça ou Complemento)
+        revisados.filter(r => filtrarData(r.ts)).forEach(r => {
+            const selb = (r.selb || '').toUpperCase().trim().replace(/^0+/, '');
+            if (!selb || selb === 'S/N' || selb === '0000') return;
+
+            const modelo = eqMap[selb] || 'MODELO NÃO IDENTIFICADO (' + selb + ')';
+            if (query && !modelo.includes(query)) return;
+
+            if (!byModel[modelo]) byModel[modelo] = { atendimentos: 0, comPeca: new Set(), semPeca: new Set(), pecas: 0, custo: 0 };
+            if (!byModel[modelo].comPeca.has(selb)) {
+                byModel[modelo].semPeca.add(selb);
+            }
+        });
+
+        const rows = Object.entries(byModel).map(([modelo, d]) => {
+            const totalAtend = d.comPeca.size + d.semPeca.size;
+            return {
+                modelo,
+                atendimentos: totalAtend,
+                comPeca: d.comPeca.size,
+                semPeca: d.semPeca.size,
+                pecas: d.pecas,
+                custo: d.custo,
+                custoMedio: totalAtend > 0 ? d.custo / totalAtend : 0
+            };
+        }).sort((a, b) => b.custo - a.custo);
+
+        const fmt = v => 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const top = rows[0];
+        const bottom = rows.length > 1 ? rows.filter(r => r.custo > 0).pop() : null;
+        const totalCusto = rows.reduce((s, r) => s + r.custo, 0);
+        const totalAtend = rows.reduce((s, r) => s + r.atendimentos, 0);
+
+        // Atualizar Cards KPI Premium
+        document.getElementById('mod-kpi-modelos').textContent = rows.length;
+        document.getElementById('mod-kpi-modelos-label').textContent = `MODELOS ATENDIDOS (${totalAtend} MÁQUINAS)`;
+        
+        document.getElementById('mod-kpi-total').textContent = fmt(totalCusto);
+        
+        document.getElementById('mod-kpi-top').textContent = top ? top.modelo : '—';
+        document.getElementById('mod-kpi-top-val').textContent = top ? fmt(top.custo) : 'R$ 0,00';
+        
+        document.getElementById('mod-kpi-bottom').textContent = bottom ? bottom.modelo : '—';
+        document.getElementById('mod-kpi-bottom-val').textContent = bottom ? fmt(bottom.custo) : 'R$ 0,00';
+        
+        document.getElementById('mod-kpi-medio').textContent = totalAtend > 0 ? fmt(totalCusto / totalAtend) : 'R$ 0,00';
+
+        // Tabela Compacta
+        const tbody = document.getElementById('mod-tbody');
+        tbody.innerHTML = rows.slice(0, 50).map(r => `
+            <tr>
+                <td style="font-size: 13px; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${r.modelo}</td>
+                <td style="text-align:center; font-family: var(--mono);">${r.atendimentos}</td>
+                <td style="text-align:center; font-family: var(--mono);">${r.pecas}</td>
+                <td style="text-align:right; font-family: var(--mono); font-weight: bold;">${fmt(r.custo)}</td>
+            </tr>
+        `).join('');
+
+        // GRÁFICO TOP 10 (POR CUSTO MÉDIO)
+        if (chartModelo) chartModelo.destroy();
+        const ctx = document.getElementById('chart-modelo')?.getContext('2d');
+        if (ctx) {
+            const top10 = [...rows].sort((a,b) => b.custoMedio - a.custoMedio).slice(0, 10);
+            
+            // Gradiente do Vermelho ao Verde
+            const barColors = [
+                '#ef4444', '#f87171', '#fb923c', '#fbbf24', '#facc15',
+                '#eab308', '#d9f99d', '#a3e635', '#84cc16', '#22c55e'
+            ];
+
+            chartModelo = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: top10.map(r => r.modelo.length > 35 ? r.modelo.substring(0, 35) + '...' : r.modelo),
+                    datasets: [{
+                        label: 'Custo Médio (R$)',
+                        data: top10.map(r => r.custoMedio),
+                        backgroundColor: top10.map((_, i) => barColors[i] || '#64748b'),
+                        borderRadius: 8,
+                        maxBarThickness: 30
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: (ctx) => `Média: ${fmt(ctx.raw)}`
+                            }
+                        }
+                    },
+                    scales: {
+                        x: { 
+                            beginAtZero: true, 
+                            grid: { display: false },
+                            ticks: { font: { size: 10 } }
+                        },
+                        y: { 
+                            grid: { display: false },
+                            ticks: { font: { size: 11, weight: '600' }, color: '#1e293b' }
+                        }
+                    }
+                }
+            });
+        }
+    } catch (e) { console.error('❌ Erro Relatório Custo:', e); }
+};
+
+window.exportarRelatorioModelo = () => {
+    const tbody = document.getElementById('mod-tbody');
+    if (!tbody || !tbody.rows.length) { alert('Gere o relatório primeiro.'); return; }
+    const rows = Array.from(tbody.rows).map(tr => ({
+        'Modelo': tr.cells[0].innerText,
+        'Atendimentos': tr.cells[1].innerText,
+        'Sem Peça': tr.cells[2].innerText,
+        'Qtd Peças': tr.cells[3].innerText,
+        'Custo Médio': tr.cells[4].innerText,
+        'Custo Total': tr.cells[5].innerText
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Custo por Modelo");
+    XLSX.writeFile(wb, `RELATORIO_CUSTO_MODELO_${new Date().toISOString().split('T')[0]}.xlsx`);
+};
+
+// --- INICIALIZAÇÃO ---
+init();

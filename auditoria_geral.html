@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Auditoria Geral: Firebase vs Supabase</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --accent: #3b82f6;
+      --danger: #ef4444;
+      --success: #22c55e;
+      --warning: #f59e0b;
+      --text: #f8fafc;
+    }
+    body { font-family: 'Inter', system-ui, sans-serif; background: var(--bg); color: var(--text); padding: 40px; margin: 0; }
+    h1 { color: var(--accent); margin-bottom: 10px; }
+    .container { max-width: 1200px; margin: auto; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin: 30px 0; }
+    .card { background: var(--card); padding: 20px; border-radius: 12px; border: 1px solid #334155; text-align: center; }
+    .card h2 { margin: 0; font-size: 14px; text-transform: uppercase; color: #94a3b8; }
+    .card .value { font-size: 32px; font-weight: 800; margin: 10px 0; }
+    
+    #log { background: #000; padding: 20px; font-family: 'Fira Code', monospace; border-radius: 8px; white-space: pre-wrap; height: 200px; overflow-y: auto; margin-bottom: 20px; font-size: 12px; border: 1px solid #334155; }
+    
+    table { width: 100%; border-collapse: collapse; background: var(--card); border-radius: 12px; overflow: hidden; margin-top: 20px; }
+    th { background: #334155; padding: 15px; text-align: left; font-size: 13px; }
+    td { padding: 15px; border-bottom: 1px solid #334155; font-size: 14px; }
+    .diff-red { color: var(--danger); font-weight: bold; }
+    .diff-green { color: var(--success); }
+    
+    .btn { background: var(--accent); color: white; padding: 12px 24px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; transition: 0.2s; margin-right: 10px; }
+    .btn:hover { filter: brightness(1.2); }
+    .status-badge { padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+    .badge-missing { background: rgba(239, 68, 68, 0.2); color: var(--danger); }
+    .badge-diff { background: rgba(245, 158, 11, 0.2); color: var(--warning); }
+  </style>
+</head>
+<body>
+
+  <div class="container">
+    <h1>🔍 Auditoria de Migração (Lógica Corrigida)</h1>
+    <p>Priorizando a coleção de estoque real do Firebase.</p>
+
+    <div style="background: var(--card); padding: 20px; border-radius: 12px; margin-bottom: 20px; display: flex; gap: 10px; align-items: center;">
+      <input type="text" id="email" placeholder="Email Admin" style="padding: 10px; border-radius: 6px; border: 1px solid #444; background: #0f172a; color: white;">
+      <input type="password" id="senha" placeholder="Senha" style="padding: 10px; border-radius: 6px; border: 1px solid #444; background: #0f172a; color: white;">
+      <button class="btn" onclick="executarAuditoria()">Iniciar Comparação</button>
+      <button id="btn-fix" class="btn" style="background: var(--success); display:none;" onclick="corrigirDivergencias()">🔨 Corrigir Tudo (Forçar Firebase Real)</button>
+    </div>
+
+    <div id="log">Aguardando comando...</div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Divergências de Saldo</h2>
+        <div class="value" id="stat-saldos-diff">0</div>
+      </div>
+      <div class="card">
+        <h2>Itens Faltando no Supa</h2>
+        <div class="value" id="stat-missing">0</div>
+      </div>
+      <div class="card">
+        <h2>Histórico (FB vs Supa)</h2>
+        <div class="value" id="stat-history">0 / 0</div>
+      </div>
+    </div>
+
+    <div id="results-area" style="display:none;">
+      <h3>📋 Detalhes das Divergências</h3>
+      <table>
+        <thead>
+          <tr>
+            <th>Código</th>
+            <th>Firebase REAL (Qtd)</th>
+            <th>Supabase ATUAL (Qtd)</th>
+            <th>Diferença</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody id="audit-table-body">
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-app.js";
+    import { getFirestore, collection, getDocs, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-firestore.js";
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAjxhYEf5z_BG_ciqPQUuqW8ar1VKrjJfk",
+      authDomain: "estoque-laboratorio.firebaseapp.com",
+      projectId: "estoque-laboratorio",
+      storageBucket: "estoque-laboratorio.firebasestorage.app",
+      messagingSenderId: "358346799293",
+      appId: "1:358346799293:web:93a51ede8e17082a2e9fd4"
+    };
+
+    const supabaseUrl = 'https://idpmrjjalhnpsxpfugph.supabase.co';
+    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkcG1yamphbGhucHN4cGZ1Z3BoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NjU2NjcsImV4cCI6MjA5MzI0MTY2N30.L4hV7YM9yjdOOW9zBl84L-1si2DU8nBI3J1WgmW02lY';
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+    const logEl = document.getElementById('log');
+    function appendLog(text) { logEl.textContent += text + '\n'; logEl.scrollTop = logEl.scrollHeight; }
+
+    window.auditDiffs = [];
+
+    async function executarAuditoria() {
+      const email = document.getElementById('email').value;
+      const senha = document.getElementById('senha').value;
+      if (!email || !senha) { appendLog('❌ Digite login e senha.'); return; }
+
+      appendLog('Autenticando no Supabase...');
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password: senha });
+      if (authError) { appendLog('❌ Erro login: ' + authError.message); return; }
+
+      appendLog('📥 Coletando dados do Firebase (Priorizando Coleção Real)...');
+      const fbEstoqueCol = await getDocs(collection(db, "estoque"));
+      const fbStockDoc = await getDoc(doc(db, "estoque_lab", "stock"));
+      
+      let fbData = {};
+      // 1. Povoar com a coleção (A verdade atual)
+      fbEstoqueCol.forEach(d => {
+          fbData[d.id] = d.data().qty || 0;
+      });
+
+      // 2. Fallback apenas se não existir na coleção
+      if (fbStockDoc.exists()) {
+          const obj = fbStockDoc.data();
+          for (const [code, qty] of Object.entries(obj)) {
+              if (fbData[code] === undefined) {
+                  fbData[code] = qty;
+              }
+          }
+      }
+
+      const fbHist = await getDocs(collection(db, "historico"));
+      const fbHistCount = fbHist.size;
+
+      appendLog('📥 Coletando dados do Supabase...');
+      const { data: supaEstoque, error: errE } = await supabase.from('estoque').select('*');
+      if (errE) { appendLog('❌ Erro Supa Estoque: ' + errE.message); return; }
+      
+      let supaData = {};
+      supaEstoque.forEach(r => supaData[r.code] = r.qty);
+
+      const { count: supaHistCount } = await supabase.from('historico').select('*', { count: 'exact', head: true });
+
+      appendLog('⚖️ Comparando...');
+      
+      const tbody = document.getElementById('audit-table-body');
+      tbody.innerHTML = '';
+      let diffSaldos = 0;
+      let missingInSupa = 0;
+      window.auditDiffs = [];
+
+      const allCodes = new Set([...Object.keys(fbData), ...Object.keys(supaData)]);
+
+      allCodes.forEach(code => {
+          const fbQty = fbData[code] || 0;
+          const supaQty = supaData[code] === undefined ? null : supaData[code];
+
+          if (supaQty === null) {
+              if (fbQty !== 0) {
+                  missingInSupa++;
+                  addRow(code, fbQty, '-', 'FALTANDO', 'badge-missing');
+                  window.auditDiffs.push({ code, qty: fbQty });
+              }
+          } else if (fbQty !== supaQty) {
+              diffSaldos++;
+              addRow(code, fbQty, supaQty, (supaQty - fbQty), 'badge-diff');
+              window.auditDiffs.push({ code, qty: fbQty });
+          }
+      });
+
+      document.getElementById('stat-saldos-diff').textContent = diffSaldos;
+      document.getElementById('stat-missing').textContent = missingInSupa;
+      document.getElementById('stat-history').textContent = `${fbHistCount} / ${supaHistCount || 0}`;
+      
+      document.getElementById('results-area').style.display = 'block';
+      if (window.auditDiffs.length > 0) {
+          document.getElementById('btn-fix').style.display = 'inline-block';
+      } else {
+          document.getElementById('btn-fix').style.display = 'none';
+      }
+      appendLog('✅ Auditoria finalizada!');
+    }
+
+    async function corrigirDivergencias() {
+        if (!window.auditDiffs || window.auditDiffs.length === 0) return;
+        if (!confirm(`Deseja forçar o saldo do Firebase REAL em ${window.auditDiffs.length} peças?`)) return;
+
+        appendLog(`🚀 Corrigindo ${window.auditDiffs.length} itens no Supabase...`);
+        const { error } = await supabase.from('estoque').upsert(window.auditDiffs, { onConflict: 'code' });
+        
+        if (error) {
+            appendLog('❌ Erro ao corrigir: ' + error.message);
+        } else {
+            appendLog('✅ Divergências corrigidas com sucesso!');
+            document.getElementById('btn-fix').style.display = 'none';
+            executarAuditoria();
+        }
+    }
+
+    function addRow(code, fb, supa, diff, badgeClass) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${code}</td>
+          <td>${fb}</td>
+          <td>${supa}</td>
+          <td class="${diff < 0 ? 'diff-red' : 'diff-green'}">${diff > 0 ? '+' : ''}${diff}</td>
+          <td><span class="status-badge ${badgeClass}">${badgeClass === 'badge-missing' ? 'Faltando no Supa' : 'Saldo Divergente'}</span></td>
+        `;
+        document.getElementById('audit-table-body').appendChild(tr);
+    }
+
+    window.executarAuditoria = executarAuditoria;
+    window.corrigirDivergencias = corrigirDivergencias;
+  </script>
+</body>
+</html>

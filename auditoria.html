@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Auditoria Firebase vs Supabase</title>
+  <style>
+    body { font-family: system-ui; background: #111; color: #fff; padding: 40px; }
+    h1 { color: #60a5fa; }
+    #log { background: #000; padding: 20px; font-family: monospace; border-radius: 8px; white-space: pre-wrap; margin-top: 20px;}
+    .btn { background: #3b82f6; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+  <h1>Auditoria de Migração</h1>
+  <p>Este script acessa o Supabase para comparar os dados.</p>
+  
+  <div style="background: #222; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+    <h3>Fazer Login no Sistema</h3>
+    <input type="text" id="email" placeholder="Seu email de admin" style="padding: 8px; margin-right: 10px; border-radius: 4px; border: 1px solid #444; background: #111; color: white;">
+    <input type="password" id="senha" placeholder="Sua senha" style="padding: 8px; margin-right: 10px; border-radius: 4px; border: 1px solid #444; background: #111; color: white;">
+    <button class="btn" onclick="iniciarAuditoria()">Iniciar Auditoria</button>
+  </div>
+
+  <div id="log">Aguardando início...</div>
+
+  <!-- FIREBASE -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-app.js";
+    import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-firestore.js";
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAjxhYEf5z_BG_ciqPQUuqW8ar1VKrjJfk",
+      authDomain: "estoque-laboratorio.firebaseapp.com",
+      projectId: "estoque-laboratorio",
+      storageBucket: "estoque-laboratorio.firebasestorage.app",
+      messagingSenderId: "358346799293",
+      appId: "1:358346799293:web:93a51ede8e17082a2e9fd4",
+      measurementId: "G-THZPKPPT3S"
+    };
+
+    const supabaseUrl = 'https://idpmrjjalhnpsxpfugph.supabase.co';
+    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkcG1yamphbGhucHN4cGZ1Z3BoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NjU2NjcsImV4cCI6MjA5MzI0MTY2N30.L4hV7YM9yjdOOW9zBl84L-1si2DU8nBI3J1WgmW02lY';
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+    const logEl = document.getElementById('log');
+    function appendLog(text) { logEl.textContent += text + '\n'; }
+
+    async function iniciarAuditoria() {
+      const email = document.getElementById('email').value.trim();
+      const senha = document.getElementById('senha').value;
+
+      logEl.textContent = 'Verificando login...\n';
+      let session = null;
+      const { data: sessionData } = await supabase.auth.getSession();
+      
+      if (sessionData && sessionData.session) {
+          session = sessionData.session;
+      } else {
+          if (!email || !senha) {
+              appendLog('❌ ERRO: Por favor, digite seu email e senha de administrador para poder ler o banco.');
+              return;
+          }
+          appendLog('Tentando fazer login com: ' + email + '...');
+          const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password: senha });
+          if (authError) {
+              appendLog('❌ ERRO AO LOGAR: ' + authError.message);
+              return;
+          }
+          session = authData.session;
+      }
+
+      appendLog('✅ Autenticado como: ' + session.user.email);
+      appendLog('\n📦 Coletando dados do Firebase (pode demorar alguns segundos)...');
+      
+      try {
+          const fbCustosSnap = await getDocs(collection(db, "custos"));
+          const fbEstoqueSnap = await getDocs(collection(db, "estoque"));
+
+          const fbCustos = {};
+          fbCustosSnap.docs.forEach(d => fbCustos[d.id] = d.data().lastCost || 0);
+          const fbEstoque = {};
+          fbEstoqueSnap.docs.forEach(d => fbEstoque[d.id] = d.data().qty || 0);
+
+          appendLog(`   - Firebase: ${Object.keys(fbCustos).length} preços e ${Object.keys(fbEstoque).length} saldos.`);
+          appendLog('\n📦 Coletando dados do Supabase...');
+
+          const { data: sbCustosData } = await supabase.from('custos').select('*');
+          const { data: sbEstoqueData } = await supabase.from('estoque').select('*');
+
+          const sbCustos = {};
+          (sbCustosData || []).forEach(d => sbCustos[d.code] = d.last_cost || 0);
+          const sbEstoque = {};
+          (sbEstoqueData || []).forEach(d => sbEstoque[d.code] = d.qty || 0);
+
+          appendLog(`   - Supabase: ${Object.keys(sbCustos).length} preços e ${Object.keys(sbEstoque).length} saldos.`);
+
+          const faltaCustos = [];
+          const diferencaCustos = [];
+          const faltaEstoque = [];
+
+          for (const [code, fCost] of Object.entries(fbCustos)) {
+              if (sbCustos[code] === undefined) faltaCustos.push(code);
+              else if (Math.abs(sbCustos[code] - fCost) > 0.01) diferencaCustos.push(code);
+          }
+
+          for (const [code, fQty] of Object.entries(fbEstoque)) {
+              if (sbEstoque[code] === undefined) faltaEstoque.push(code);
+          }
+
+          appendLog('\n================ RELATÓRIO ================');
+          
+          if (faltaCustos.length === 0 && diferencaCustos.length === 0) {
+              appendLog('✅ SUCESSO: Todos os preços (custos) do Firebase migraram perfeitamente!');
+          } else {
+              appendLog(`❌ ALERTA: Faltam ${faltaCustos.length} preços no Supabase.`);
+              if (diferencaCustos.length > 0) appendLog(`❌ ALERTA: Existem ${diferencaCustos.length} preços diferentes.`);
+          }
+
+          if (faltaEstoque.length === 0) {
+              appendLog('✅ SUCESSO: Todos os códigos com saldo no Firebase estão no Supabase!');
+          } else {
+              appendLog(`❌ ALERTA: Faltam ${faltaEstoque.length} saldos no Supabase.`);
+          }
+          
+          appendLog('===========================================');
+          
+          if (faltaCustos.length > 0 || faltaEstoque.length > 0) {
+              appendLog('\n🚨 ITENS FALTANDO NO ESTOQUE (CÓDIGOS):');
+              appendLog(faltaEstoque.join(', '));
+              appendLog('\n🚨 ITENS FALTANDO NO CUSTO (CÓDIGOS):');
+              appendLog(faltaCustos.join(', '));
+          }
+
+      } catch (err) {
+          appendLog('❌ ERRO DURANTE AUDITORIA: ' + err.message);
+      }
+    }
+    window.iniciarAuditoria = iniciarAuditoria;
+  </script>
+</body>
+</html>

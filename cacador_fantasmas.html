@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Caçador de Fantasmas: Ajuste Fino de Saldo</title>
+  <style>
+    :root { --bg: #0f172a; --card: #1e293b; --accent: #3b82f6; --text: #f8fafc; --danger: #ef4444; }
+    body { font-family: 'Inter', sans-serif; background: var(--bg); color: var(--text); padding: 40px; }
+    .card { background: var(--card); padding: 20px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #334155; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th { text-align: left; padding: 12px; background: #334155; }
+    td { padding: 12px; border-bottom: 1px solid #334155; }
+    .btn { background: var(--accent); color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+    .btn-danger { background: var(--danger); }
+    #log { background: #000; padding: 15px; font-family: monospace; height: 150px; overflow-y: auto; margin-bottom: 20px; border-radius: 8px; font-size: 12px; }
+  </style>
+</head>
+<body>
+
+  <h1>👻 Caçador de Fantasmas (Ajuste 673)</h1>
+  <p>Este script identifica itens que estão no Supabase mas NÃO constam na coleção principal do Firebase.</p>
+
+  <div class="card">
+    <input type="text" id="email" placeholder="Email Admin" style="padding: 10px; background: #111; color: white; border: 1px solid #444;">
+    <input type="password" id="senha" placeholder="Senha" style="padding: 10px; background: #111; color: white; border: 1px solid #444;">
+    <button class="btn" onclick="analisarFantasmas()">Analisar Excedentes</button>
+    <button id="btn-delete" class="btn btn-danger" style="display:none;" onclick="removerFantasmas()">Remover Itens Fantasmas</button>
+  </div>
+
+  <div id="log">Aguardando...</div>
+
+  <div id="results" style="display:none;">
+    <h3>Peças que sobraram (Prováveis duplicatas ou itens antigos):</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Código</th>
+          <th>Saldo no Supabase</th>
+          <th>Motivo</th>
+        </tr>
+      </thead>
+      <tbody id="ghost-table"></tbody>
+    </table>
+  </div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-app.js";
+    import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-firestore.js";
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAjxhYEf5z_BG_ciqPQUuqW8ar1VKrjJfk",
+      authDomain: "estoque-laboratorio.firebaseapp.com",
+      projectId: "estoque-laboratorio"
+    };
+
+    const supabaseUrl = 'https://idpmrjjalhnpsxpfugph.supabase.co';
+    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkcG1yamphbGhucHN4cGZ1Z3BoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NjU2NjcsImV4cCI6MjA5MzI0MTY2N30.L4hV7YM9yjdOOW9zBl84L-1si2DU8nBI3J1WgmW02lY';
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+    const logEl = document.getElementById('log');
+    function appendLog(text) { logEl.textContent += text + '\n'; logEl.scrollTop = logEl.scrollHeight; }
+
+    window.ghostCodes = [];
+
+    async function analisarFantasmas() {
+      const email = document.getElementById('email').value;
+      const senha = document.getElementById('senha').value;
+      
+      appendLog('Conectando...');
+      const { data: auth } = await supabase.auth.signInWithPassword({ email, password: senha });
+      
+      appendLog('Buscando verdade atual no Firebase...');
+      const fbSnap = await getDocs(collection(db, "estoque"));
+      let fbRealCodes = new Set();
+      fbSnap.forEach(d => { if ((d.data().qty || 0) > 0) fbRealCodes.add(d.id); });
+
+      appendLog('Buscando estoque atual no Supabase...');
+      const { data: supaEstoque } = await supabase.from('estoque').select('*').gt('qty', 0);
+      
+      const tbody = document.getElementById('ghost-table');
+      tbody.innerHTML = '';
+      window.ghostCodes = [];
+      let totalSupa = 0;
+
+      supaEstoque.forEach(item => {
+          totalSupa += item.qty;
+          if (!fbRealCodes.has(item.code)) {
+              window.ghostCodes.push(item.code);
+              const tr = document.createElement('tr');
+              tr.innerHTML = `<td>${item.code}</td><td>${item.qty}</td><td>Não existe na coleção real do FB</td>`;
+              tbody.appendChild(tr);
+          }
+      });
+
+      appendLog(`Total no Supabase: ${totalSupa}`);
+      appendLog(`Itens fantasmas detectados: ${window.ghostCodes.length}`);
+      
+      document.getElementById('results').style.display = 'block';
+      if (window.ghostCodes.length > 0) document.getElementById('btn-delete').style.display = 'inline-block';
+    }
+
+    async function removerFantasmas() {
+        if (!confirm(`Deseja remover o saldo das ${window.ghostCodes.length} peças fantasmas para voltar aos 673?`)) return;
+        
+        appendLog('Limpando fantasmas...');
+        const updates = window.ghostCodes.map(c => ({ code: c, qty: 0 }));
+        const { error } = await supabase.from('estoque').upsert(updates, { onConflict: 'code' });
+        
+        if (error) appendLog('Erro: ' + error.message);
+        else {
+            appendLog('✅ Limpeza concluída! Agora o sistema deve bater com o antigo.');
+            analisarFantasmas();
+        }
+    }
+
+    window.analisarFantasmas = analisarFantasmas;
+    window.removerFantasmas = removerFantasmas;
+  </script>
+</body>
+</html>

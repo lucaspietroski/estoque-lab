@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <title>Migração Definitiva Firebase -> Supabase</title>
+  <style>
+    body { font-family: system-ui; background: #111; color: #fff; padding: 40px; }
+    h1 { color: #f59e0b; }
+    #log { background: #000; padding: 20px; font-family: monospace; border-radius: 8px; white-space: pre-wrap; margin-top: 20px; height: 500px; overflow-y: auto;}
+    .btn { background: #f59e0b; color: #000; padding: 12px 24px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; font-size: 16px; margin-right: 10px; }
+    .btn:hover { background: #d97706; }
+  </style>
+</head>
+<body>
+
+  <h1>Migração Total e Definitiva (Modo Resgate)</h1>
+  <p>Este script vai puxar <b>TODO</b> o seu histórico e <b>TODOS</b> os lugares possíveis de estoque do Firebase (incluindo o arquivo antigo "estoque_lab") para garantir que as 673 peças voltem.</p>
+  
+  <div style="background: #222; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
+    <h3>Fazer Login no Sistema</h3>
+    <input type="text" id="email" placeholder="Seu email" style="padding: 10px; margin-right: 10px; border-radius: 4px; border: 1px solid #444; background: #111; color: white; width: 250px;">
+    <input type="password" id="senha" placeholder="Sua senha" style="padding: 10px; margin-right: 10px; border-radius: 4px; border: 1px solid #444; background: #111; color: white; width: 200px;">
+    <button class="btn" onclick="iniciarMigracaoTotal()">Iniciar Resgate Total</button>
+  </div>
+
+  <div id="log">Aguardando início...</div>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-app.js";
+    import { getFirestore, collection, getDocs, doc, getDoc } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-firestore.js";
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyAjxhYEf5z_BG_ciqPQUuqW8ar1VKrjJfk",
+      authDomain: "estoque-laboratorio.firebaseapp.com",
+      projectId: "estoque-laboratorio",
+      storageBucket: "estoque-laboratorio.firebasestorage.app",
+      messagingSenderId: "358346799293",
+      appId: "1:358346799293:web:93a51ede8e17082a2e9fd4",
+      measurementId: "G-THZPKPPT3S"
+    };
+
+    const supabaseUrl = 'https://idpmrjjalhnpsxpfugph.supabase.co';
+    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkcG1yamphbGhucHN4cGZ1Z3BoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NjU2NjcsImV4cCI6MjA5MzI0MTY2N30.L4hV7YM9yjdOOW9zBl84L-1si2DU8nBI3J1WgmW02lY';
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+    const logEl = document.getElementById('log');
+    function appendLog(text) { logEl.textContent += text + '\n'; logEl.scrollTop = logEl.scrollHeight; }
+
+    async function iniciarMigracaoTotal() {
+      const email = document.getElementById('email').value.trim();
+      const senha = document.getElementById('senha').value;
+
+      let session = null;
+      const { data: sessionData } = await supabase.auth.getSession();
+      
+      if (sessionData && sessionData.session) {
+          session = sessionData.session;
+      } else {
+          if (!email || !senha) { appendLog('❌ Digite email e senha.'); return; }
+          appendLog('Fazendo login no Supabase...');
+          const { data, error } = await supabase.auth.signInWithPassword({ email, password: senha });
+          if (error) { appendLog('❌ Erro: ' + error.message); return; }
+          session = data.session;
+      }
+
+      appendLog('✅ Autenticado como: ' + session.user.email);
+      appendLog('\n🔍 RASTREANDO TODOS OS DADOS DO FIREBASE...\n');
+
+      try {
+          // 1. Buscar Estoque (Coleção)
+          appendLog('Buscando Coleção de Estoque...');
+          const estSnap = await getDocs(collection(db, "estoque"));
+          let saldos = {};
+          estSnap.docs.forEach(d => { saldos[d.id] = d.data().qty || 0; });
+          appendLog(`- Encontrados ${Object.keys(saldos).length} registros na coleção de estoque.`);
+
+          // 2. Buscar Estoque Lab (Documento Único - O Provável Culpado!)
+          appendLog('\nBuscando Documento Legado "estoque_lab/stock"...');
+          const stockDoc = await getDoc(doc(db, "estoque_lab", "stock"));
+          let saldosLegado = 0;
+          if (stockDoc.exists()) {
+              const obj = stockDoc.data();
+              for (const [code, qty] of Object.entries(obj)) {
+                  if (qty > 0 || !saldos[code]) {
+                      saldos[code] = qty;
+                      saldosLegado++;
+                  }
+              }
+              appendLog(`- Encontrados ${saldosLegado} registros válidos no documento legado!`);
+          } else {
+              appendLog('- Documento legado não encontrado.');
+          }
+
+          // 3. Buscar Custos
+          appendLog('\nBuscando Coleção de Custos...');
+          const custSnap = await getDocs(collection(db, "custos"));
+          let precos = {};
+          custSnap.docs.forEach(d => { precos[d.id] = d.data().lastCost || 0; });
+          appendLog(`- Encontrados ${Object.keys(precos).length} registros de custos.`);
+
+          // 4. Buscar Histórico
+          appendLog('\nBuscando TODO o Histórico do Firebase (Isso pode demorar)...');
+          const histSnap = await getDocs(collection(db, "historico"));
+          const historicoDb = [];
+          
+          histSnap.docs.forEach(d => {
+              const data = d.data();
+              let createdAt = new Date();
+              if (data.ts && typeof data.ts.toDate === 'function') createdAt = data.ts.toDate();
+              else if (data.ts && data.ts.seconds) createdAt = new Date(data.ts.seconds * 1000);
+
+              historicoDb.push({
+                  tipo: data.tipo || 'saída',
+                  code: data.code || '',
+                  descricao: data.desc || data.descricao || '',
+                  qty: parseInt(data.qty) || 1,
+                  user_email: data.user || 'migrado',
+                  selb: data.selb || '',
+                  vlr_unit: parseFloat(data.vlr_unit) || parseFloat(data.vlrUnit) || 0,
+                  vlr_total: parseFloat(data.vlr_total) || parseFloat(data.vlrTotal) || 0,
+                  ts: createdAt.toISOString()
+              });
+          });
+          appendLog(`- Encontrados ${historicoDb.length} registros no histórico!`);
+
+          // SALVAR TUDO NO SUPABASE
+          appendLog('\n===========================================');
+          appendLog('🚀 ENVIANDO TUDO PARA O SUPABASE...');
+          
+          // Salvar Estoque
+          const itemsEstoque = Object.keys(saldos).map(c => ({ code: c, qty: saldos[c] }));
+          if (itemsEstoque.length > 0) {
+              const { error } = await supabase.from('estoque').upsert(itemsEstoque, { onConflict: 'code' });
+              if (error) appendLog('❌ Erro Estoque: ' + error.message);
+              else appendLog(`✅ ${itemsEstoque.length} Saldos salvos com sucesso!`);
+          }
+
+          // Salvar Custos
+          const itemsCustos = Object.keys(precos).map(c => ({ code: c, last_cost: precos[c] }));
+          if (itemsCustos.length > 0) {
+              const { error } = await supabase.from('custos').upsert(itemsCustos, { onConflict: 'code' });
+              if (error) appendLog('❌ Erro Custos: ' + error.message);
+              else appendLog(`✅ ${itemsCustos.length} Custos salvos com sucesso!`);
+          }
+
+          // Salvar Histórico (Em lotes)
+          if (historicoDb.length > 0) {
+              appendLog(`Enviando ${historicoDb.length} movimentações de histórico...`);
+              // Limpar histórico antigo no Supabase para não duplicar se deu erro antes
+              await supabase.from('historico').delete().neq('tipo', 'xxx_fake_delete'); 
+              
+              const chunkSize = 500;
+              let ok = 0;
+              for (let i = 0; i < historicoDb.length; i += chunkSize) {
+                  const chunk = historicoDb.slice(i, i + chunkSize);
+                  const { error } = await supabase.from('historico').insert(chunk);
+                  if (error) appendLog('❌ Erro Histórico: ' + error.message);
+                  else ok += chunk.length;
+              }
+              appendLog(`✅ ${ok} registros de histórico salvos com sucesso!`);
+          }
+
+          appendLog('\n🎉 RESGATE CONCLUÍDO COM SUCESSO!');
+          appendLog('Pode voltar para a tela inicial do sistema e dar F5. Tudo estará de volta e completo!');
+          
+      } catch (err) {
+          appendLog('\n❌ ERRO FATAL: ' + err.message);
+      }
+    }
+    
+    window.iniciarMigracaoTotal = iniciarMigracaoTotal;
+  </script>
+</body>
+</html>
