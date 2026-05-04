@@ -135,7 +135,10 @@ function switchTab(tabId) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
     document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === `view-${tabId}`));
     if (tabId === 'dashboard') updateDashboard();
-    if (tabId === 'estoque') renderEstoque();
+    if (tabId === 'estoque') {
+        renderChips();
+        renderEstoque();
+    }
     if (tabId === 'historico') renderHistorico();
     if (tabId === 'movimentacoes') renderMovDashboard();
     if (tabId === 'revisados') {
@@ -186,6 +189,7 @@ async function updateDashboard() {
              document.getElementById('stat-zero').textContent = zeroCount || 0;
         }
 
+        renderChips();
         renderDashTable();
     } catch (e) { console.error('❌ Erro dashboard:', e.message); }
 }
@@ -263,22 +267,45 @@ async function renderDashTable() {
 const MARCAS = ['HP', 'RICOH', 'XEROX', 'ZEBRA', 'EPSON', 'BROTHER', 'LEXMARK', 'SAMSUNG', 'CANON', 'DATACARD', 'DATAMAX', 'CITIZEN', 'GODEX', 'ARGOX', 'TSC', 'AVISION', 'TOSHIBA', 'SHARP', 'OKI', 'KYOCERA', 'KONICA', 'MIMAKI'];
 let currentFilter = '';
 
-function renderChips() {
+async function renderChips() {
     const el = document.getElementById('brand-chips');
     if (!el) return;
-    el.innerHTML = MARCAS.map(m =>
-        `<span class="filter-chip" id="chip-${m}" onclick="setFilter('${m}')">${m}</span>`
-    ).join('');
+
+    // Busca todas as peças que têm estoque para calcular os totais por marca
+    const { data: stockData } = await supabase.from('parts')
+        .select('marca, estoque!inner(qty)')
+        .gt('estoque.qty', 0);
+
+    const totals = {};
+    if (stockData) {
+        stockData.forEach(p => {
+            const m = (p.marca || 'OUTROS').toUpperCase();
+            const qty = p.estoque?.qty ?? p.estoque?.[0]?.qty ?? 0;
+            totals[m] = (totals[m] || 0) + qty;
+        });
+    }
+
+    // Só mostra as marcas que têm saldo total > 0
+    const marcasAtivas = Object.entries(totals)
+        .filter(([_, qty]) => qty > 0)
+        .sort((a, b) => b[1] - a[1]); // Ordena por volume de estoque
+
+    let html = `<span class="filter-chip ${!currentFilter ? 'active' : ''}" id="chip-all" onclick="setFilter('')">Todos</span>`;
+    
+    html += marcasAtivas.map(([marca, qty]) => {
+        const isActive = currentFilter === marca ? 'active' : '';
+        return `<span class="filter-chip ${isActive}" id="chip-${marca}" onclick="setFilter('${marca}')">
+            ${marca} <b style="color: #22c55e; margin-left: 5px;">${qty}</b>
+        </span>`;
+    }).join('');
+
+    el.innerHTML = html;
 }
 
 window.setFilter = (marca) => {
     currentFilter = marca;
-    document.querySelectorAll('.filter-chip').forEach(c => c.classList.remove('active'));
-    if (marca) {
-        document.getElementById('chip-' + marca)?.classList.add('active');
-    } else {
-        document.getElementById('chip-all')?.classList.add('active');
-    }
+    // Re-renderiza os chips para atualizar a classe 'active' e depois o estoque
+    renderChips();
     const searchVal = document.getElementById('search-main')?.value.trim() || '';
     renderEstoque(searchVal);
 };
@@ -289,16 +316,18 @@ async function renderEstoque(query = '') {
     const countEl = document.getElementById('result-count');
     try {
         const isSearchActive = query.length > 0;
-        const relEstoque = isSearchActive ? 'estoque!left(qty)' : 'estoque!inner(qty)';
+        const relEstoque = (isSearchActive || currentFilter) ? 'estoque!left(qty)' : 'estoque!inner(qty)';
 
         let dbQuery = supabase.from('parts').select(`code, descricao, marca, ${relEstoque}, custos!left(last_cost)`);
 
-        if (!isSearchActive) {
+        // Regra de Saldo: Por padrão só mostra o que tem saldo (> 0)
+        // Se estiver pesquisando ou filtrando por marca, mostra tudo o que bater
+        if (!isSearchActive && !currentFilter) {
             dbQuery = dbQuery.gt('estoque.qty', 0);
         }
 
         if (currentFilter) {
-            dbQuery = dbQuery.ilike('descricao', `%${currentFilter}%`);
+            dbQuery = dbQuery.eq('marca', currentFilter);
         }
 
         if (isSearchActive) {
