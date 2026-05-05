@@ -554,15 +554,96 @@ async function renderHistorico() {
         <tr>
             <td>${new Date(h.ts).toLocaleString()}</td>
             <td class="td-code">${h.code}</td>
-            <td><span class="hist-badge ${h.tipo === 'entrada' ? 'badge-entrada' : 'badge-saida'}">${h.tipo}</span></td>
+            <td><span class="hist-badge ${h.tipo === 'entrada' ? 'badge-entrada' : 'badge-saida'}${h.tipo === 'ajuste' ? ' badge-ajuste' : ''}">${h.tipo}</span></td>
             <td class="text-center">${h.qty}</td>
             <td style="text-align:right; color: var(--text-muted)">${h.vlr_unit ? 'R$ ' + h.vlr_unit.toLocaleString('pt-BR', {minimumFractionDigits: 2}) : '-'}</td>
             <td style="text-align:right; font-weight: bold;">${h.vlr_total ? 'R$ ' + h.vlr_total.toLocaleString('pt-BR', {minimumFractionDigits: 2}) : '-'}</td>
             <td>${h.user_email?.split('@')[0] || ''}</td>
             <td>${h.selb || h.descricao || ''}</td>
+            <td>
+                ${currentUser.email === 'lucas.araujo@selbetti.com.br' ? `<button class="btn-edit-hist" onclick="openAjusteHistorico('${h.id}')" title="Ajustar Registro">✏️</button>` : ''}
+            </td>
         </tr>
     `).join('');
 }
+
+// --- AJUSTE DE HISTÓRICO (SOMENTE LUCAS) ---
+window.openAjusteHistorico = async (id) => {
+    const { data } = await supabase.from('historico').select('*').eq('id', id).single();
+    if (!data) return;
+
+    document.getElementById('ajuste-id').value = data.id;
+    document.getElementById('ajuste-selb').value = data.selb || '';
+    document.getElementById('ajuste-code').value = data.code || '';
+    document.getElementById('ajuste-obs').value = '';
+    document.getElementById('ajuste-status').innerHTML = '';
+    
+    document.getElementById('modal-ajuste-historico').classList.add('open');
+};
+
+window.closeAjusteHistorico = () => document.getElementById('modal-ajuste-historico').classList.remove('open');
+
+window.saveAjusteHistorico = async () => {
+    const id = document.getElementById('ajuste-id').value;
+    const newSelb = document.getElementById('ajuste-selb').value.trim().toUpperCase();
+    const newCode = document.getElementById('ajuste-code').value.trim().toUpperCase();
+    const obs = document.getElementById('ajuste-obs').value.trim();
+    const status = document.getElementById('ajuste-status');
+
+    if (!newCode || !obs) {
+        status.innerHTML = '<span style="color:var(--red)">⚠️ Informe o código e o motivo.</span>';
+        return;
+    }
+
+    status.innerHTML = '⌛ Processando ajuste...';
+
+    // 1. Pegar registro original
+    const { data: original } = await supabase.from('historico').select('*').eq('id', id).single();
+    if (!original) return;
+
+    // 2. Se mudou o código, ajusta o estoque
+    if (original.code !== newCode) {
+        // Devolve o antigo
+        const factor = (original.tipo === 'saída' || original.tipo === 'saida') ? 1 : -1;
+        
+        // Atualiza estoque da peça antiga (devolvendo/revertendo)
+        const { data: stOld } = await supabase.from('estoque').select('qty').eq('code', original.code).single();
+        await supabase.from('estoque').upsert({ code: original.code, qty: (stOld?.qty || 0) + (original.qty * factor) });
+
+        // Atualiza estoque da peça nova (retirando/aplicando)
+        const { data: stNew } = await supabase.from('estoque').select('qty').eq('code', newCode).single();
+        await supabase.from('estoque').upsert({ code: newCode, qty: (stNew?.qty || 0) - (original.qty * factor) });
+    }
+
+    // 3. Atualiza o registro original
+    const { error: errUpdate } = await supabase.from('historico').update({
+        selb: newSelb,
+        code: newCode
+    }).eq('id', id);
+
+    if (errUpdate) {
+        status.innerHTML = '❌ Erro ao atualizar: ' + errUpdate.message;
+        return;
+    }
+
+    // 4. Cria registro de auditoria (TIPO AJUSTE)
+    await supabase.from('historico').insert({
+        tipo: 'ajuste',
+        code: newCode,
+        qty: original.qty,
+        selb: newSelb,
+        descricao: `AJUSTE: ${obs} (Original: ${original.code} / ${original.selb})`,
+        user_email: currentUser.email,
+        ts: new Date().toISOString()
+    });
+
+    status.innerHTML = '<span style="color:var(--green)">✅ Ajuste concluído com sucesso!</span>';
+    setTimeout(() => {
+        closeAjusteHistorico();
+        renderHistorico();
+        updateDashboard();
+    }, 1500);
+};
 
 // --- EXPOR PARA GLOBAL (BOTÕES HTML) ---
 window.switchTab = switchTab;

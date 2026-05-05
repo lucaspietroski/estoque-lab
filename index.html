@@ -598,6 +598,40 @@
   </div>
 </div>
 
+<!-- MODAL AJUSTE DE HISTÓRICO -->
+<div class="modal-overlay" id="modal-ajuste-historico">
+  <div class="modal-box" style="max-width: 450px;">
+    <h3 style="color: var(--orange);">✏️ Ajustar Registro de Histórico</h3>
+    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;">
+        Você está editando um registro existente. O sistema registrará uma trilha de auditoria para esta alteração.
+    </p>
+
+    <input type="hidden" id="ajuste-id">
+    
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+        <div>
+            <div class="modal-label">SELB Original</div>
+            <input type="text" class="modal-input" id="ajuste-selb" placeholder="SELB">
+        </div>
+        <div>
+            <div class="modal-label">Código da Peça</div>
+            <input type="text" class="modal-input" id="ajuste-code" placeholder="Código">
+        </div>
+    </div>
+
+    <div style="margin-bottom: 20px;">
+        <div class="modal-label">Motivo do Ajuste / Observação</div>
+        <input type="text" class="modal-input" id="ajuste-obs" placeholder="Ex: Operador registrou SELB errado">
+    </div>
+
+    <div style="display: flex; gap: 10px;">
+      <button class="btn-cancel" onclick="closeAjusteHistorico()" style="flex: 1;">Cancelar</button>
+      <button class="btn-confirm" onclick="saveAjusteHistorico()" style="flex: 2; background: var(--orange);">Confirmar Ajuste</button>
+    </div>
+    <div id="ajuste-status" style="margin-top: 15px; font-size: 13px; text-align: center;"></div>
+  </div>
+</div>
+
 <script type="module" src="src/main.js"></script>
 </body>
 </html>
