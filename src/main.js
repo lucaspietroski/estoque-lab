@@ -554,12 +554,20 @@ async function renderHistorico() {
         <tr>
             <td>${new Date(h.ts).toLocaleString()}</td>
             <td class="td-code">${h.code}</td>
-            <td><span class="hist-badge ${h.tipo === 'entrada' ? 'badge-entrada' : 'badge-saida'}${h.tipo === 'ajuste' ? ' badge-ajuste' : ''}">${h.tipo}</span></td>
+            <td>
+                <span class="hist-badge ${h.tipo === 'entrada' ? 'badge-entrada' : 'badge-saida'}${h.tipo === 'ajuste' ? ' badge-ajuste' : ''}" 
+                      ${h.tipo === 'ajuste' ? `title="${h.descricao}" style="cursor:help"` : ''}>
+                    ${h.tipo}
+                </span>
+            </td>
             <td class="text-center">${h.qty}</td>
             <td style="text-align:right; color: var(--text-muted)">${h.vlr_unit ? 'R$ ' + h.vlr_unit.toLocaleString('pt-BR', {minimumFractionDigits: 2}) : '-'}</td>
             <td style="text-align:right; font-weight: bold;">${h.vlr_total ? 'R$ ' + h.vlr_total.toLocaleString('pt-BR', {minimumFractionDigits: 2}) : '-'}</td>
             <td>${h.user_email?.split('@')[0] || ''}</td>
-            <td>${h.selb || h.descricao || ''}</td>
+            <td style="font-size: 0.85rem;">
+                <strong>${h.selb || ''}</strong>
+                ${h.tipo === 'ajuste' ? `<div style="font-size: 0.7rem; color: var(--text-muted); line-height:1.2">${h.descricao}</div>` : ''}
+            </td>
             <td>
                 ${currentUser.email === 'lucas.araujo@selbetti.com.br' ? `<button class="btn-edit-hist" onclick="openAjusteHistorico('${h.id}')" title="Ajustar Registro">✏️</button>` : ''}
             </td>
