@@ -601,7 +601,12 @@ window.saveAjusteHistorico = async () => {
     const { data: original } = await supabase.from('historico').select('*').eq('id', id).single();
     if (!original) return;
 
-    // 2. Se mudou o código, ajusta o estoque
+    // 2. Buscar o preço da peça (seja a antiga ou a nova)
+    const { data: costData } = await supabase.from('custos').select('last_cost').eq('code', newCode).single();
+    const newPrice = costData?.last_cost || original.vlr_unit || 0;
+    const newTotal = newPrice * original.qty;
+
+    // 3. Se mudou o código, ajusta o estoque
     if (original.code !== newCode) {
         // Devolve o antigo
         const factor = (original.tipo === 'saída' || original.tipo === 'saida') ? 1 : -1;
@@ -615,10 +620,12 @@ window.saveAjusteHistorico = async () => {
         await supabase.from('estoque').upsert({ code: newCode, qty: (stNew?.qty || 0) - (original.qty * factor) });
     }
 
-    // 3. Atualiza o registro original
+    // 4. Atualiza o registro original
     const { error: errUpdate } = await supabase.from('historico').update({
         selb: newSelb,
-        code: newCode
+        code: newCode,
+        vlr_unit: newPrice,
+        vlr_total: newTotal
     }).eq('id', id);
 
     if (errUpdate) {
@@ -626,11 +633,13 @@ window.saveAjusteHistorico = async () => {
         return;
     }
 
-    // 4. Cria registro de auditoria (TIPO AJUSTE)
+    // 5. Cria registro de auditoria (TIPO AJUSTE) com os valores
     await supabase.from('historico').insert({
         tipo: 'ajuste',
         code: newCode,
         qty: original.qty,
+        vlr_unit: newPrice,
+        vlr_total: newTotal,
         selb: newSelb,
         descricao: `AJUSTE: ${obs} (Original: ${original.code} / ${original.selb})`,
         user_email: currentUser.email,
