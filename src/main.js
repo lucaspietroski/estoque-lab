@@ -932,23 +932,38 @@ window.processarBI = async (file) => {
             const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
             const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
 
-            // Pula cabeçalho e filtra linhas válidas
+            // Processamento resiliente
             const seen = new Set();
             const validRows = [];
             
-            rows.slice(1).forEach(r => {
-                const selb = String(r[0] || '').trim().toUpperCase();
-                // Inteligência: tenta a Coluna D (r[3]), depois C (r[2]), depois B (r[1])
-                const modelo = String(r[3] || r[2] || r[1] || '').trim().toUpperCase();
-                const desc = String(r[3] || r[2] || '').trim().toUpperCase() || 'IMPORTAÇÃO MASSIVA';
+            rows.forEach((r, index) => {
+                // Converte a linha em uma lista de strings limpas
+                const cells = r.map(c => String(c || '').trim().toUpperCase());
+                
+                // Tenta achar o SELB (geralmente é a primeira coluna ou a que tem texto curto)
+                const selb = cells[0] || '';
+                
+                // Tenta achar o Modelo (procura nas colunas B, C ou D)
+                let modelo = cells[3] || cells[2] || cells[1] || '';
+
+                // Se a linha for o cabeçalho (ex: contiver a palavra SELB), pula
+                if (selb === 'SELB' || selb === 'CODIGO' || !selb) return;
+
+                // Se achou SELB mas o modelo tá vazio, tenta pegar qualquer outra célula da linha
+                if (selb && !modelo) {
+                    modelo = cells.find((c, i) => i > 0 && c.length > 2) || '';
+                }
                 
                 if (selb && modelo && !seen.has(selb)) {
                     seen.add(selb);
-                    validRows.push({ selb, modelo, descricao: desc });
+                    validRows.push({ selb, modelo, descricao: cells[3] || cells[2] || 'IMPORTAÇÃO MASSIVA' });
                 }
             });
 
-            if (!validRows.length) { status.innerHTML = '❌ Nenhum dado válido encontrado.'; return; }
+            if (!validRows.length) { 
+                status.innerHTML = '❌ Nenhum dado válido encontrado.<br><small>Verifique se o SELB está na Coluna A.</small>'; 
+                return; 
+            }
             status.innerHTML = `⌛ Enviando ${validRows.length} registros...`;
 
             // Envia em lotes de 500 para não estourar a API
