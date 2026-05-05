@@ -932,14 +932,15 @@ window.processarBI = async (file) => {
             const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
             const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
 
-            // Pula cabeçalho e filtra linhas válidas (Col A, C, D)
+            // Pula cabeçalho e filtra linhas válidas
             const seen = new Set();
             const validRows = [];
             
             rows.slice(1).forEach(r => {
                 const selb = String(r[0] || '').trim().toUpperCase();
-                const modelo = String(r[3] || r[2] || '').trim().toUpperCase(); // Prefere a Descrição (Col D) para bater com o print antigo
-                const desc = String(r[3] || '').trim().toUpperCase();
+                // Inteligência: tenta a Coluna D (r[3]), depois C (r[2]), depois B (r[1])
+                const modelo = String(r[3] || r[2] || r[1] || '').trim().toUpperCase();
+                const desc = String(r[3] || r[2] || '').trim().toUpperCase() || 'IMPORTAÇÃO MASSIVA';
                 
                 if (selb && modelo && !seen.has(selb)) {
                     seen.add(selb);
