@@ -76,6 +76,39 @@ async function init() {
         searchTimeout = setTimeout(renderModeloCusto, 300);
     });
 
+    document.getElementById('saida-selb')?.addEventListener('input', async (e) => {
+        const selb = e.target.value.trim().toUpperCase();
+        const infoDiv = document.getElementById('saida-selb-info');
+        if (!infoDiv) return;
+
+        if (selb.length === 4) {
+            infoDiv.style.display = 'block';
+            infoDiv.style.background = 'var(--bg-hover)';
+            infoDiv.style.color = 'var(--text-muted)';
+            infoDiv.innerHTML = '⌛ Buscando SELB no banco de dados...';
+
+            const { data, error } = await supabase.from('equipamentos').select('modelo').eq('selb', selb).maybeSingle();
+            if (error) {
+                console.error('Erro ao buscar SELB:', error.message);
+                infoDiv.style.background = '#fee2e2';
+                infoDiv.style.color = '#991b1b';
+                infoDiv.innerHTML = `❌ Erro ao verificar SELB: ${error.message}`;
+            } else if (data) {
+                infoDiv.style.background = '#dcfce7';
+                infoDiv.style.color = '#166534';
+                infoDiv.innerHTML = `✅ <strong>Modelo:</strong> ${data.modelo}`;
+            } else {
+                infoDiv.style.background = '#fee2e2';
+                infoDiv.style.color = '#991b1b';
+                infoDiv.innerHTML = `⚠️ SELB incorreto! Caso esteja correto, solicite ao administrador para cadastrar.`;
+                alert(`❌ SELB incorreto!\n\nEste SELB não foi encontrado no banco de dados. Caso o SELB esteja correto, solicite ao administrador que realize o cadastro no sistema.`);
+            }
+        } else {
+            infoDiv.style.display = 'none';
+            infoDiv.innerHTML = '';
+        }
+    });
+
     btnAuthSubmit?.addEventListener('click', doLogin);
     btnLogout?.addEventListener('click', async () => {
         await supabase.auth.signOut();
@@ -445,7 +478,23 @@ async function confirmarSaida() {
     if (selb.length !== 4 || !saidaItems.length) { alert('Verifique o SELB e as peças.'); return; }
 
     const btn = document.getElementById('saida-confirm-btn');
-    btn.disabled = true; btn.textContent = 'Gravando...';
+    btn.disabled = true; btn.textContent = 'Verificando SELB...';
+
+    // Dupla validação do SELB no banco de dados para segurança extra
+    const { data: equip, error: equipErr } = await supabase.from('equipamentos').select('modelo').eq('selb', selb).maybeSingle();
+    if (equipErr) {
+        alert('❌ Erro ao verificar o SELB: ' + equipErr.message);
+        btn.disabled = false; btn.textContent = 'Finalizar Baixa';
+        return;
+    }
+
+    if (!equip) {
+        alert(`❌ SELB incorreto!\n\nEste SELB não foi encontrado no banco de dados. Caso o SELB esteja correto, solicite ao administrador que realize o cadastro no sistema.`);
+        btn.disabled = false; btn.textContent = 'Finalizar Baixa';
+        return;
+    }
+
+    btn.textContent = 'Gravando...';
 
     const { error } = await supabase.rpc('processar_saida', {
         p_lote_id: `SELB-${selb}-${Date.now()}`,
@@ -463,6 +512,13 @@ async function confirmarSaida() {
 function openSaidaModal(code) {
     saidaItems = [];
     document.getElementById('saida-selb').value = '';
+    
+    const infoDiv = document.getElementById('saida-selb-info');
+    if (infoDiv) {
+        infoDiv.style.display = 'none';
+        infoDiv.innerHTML = '';
+    }
+
     document.getElementById('saida-peca').value = code || '';
     document.getElementById('saida-busca-desc').value = '';
     renderSaidaItems();
