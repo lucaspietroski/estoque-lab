@@ -1441,6 +1441,20 @@ window.renderModeloCusto = async () => {
                     indexAxis: 'y',
                     responsive: true,
                     maintainAspectRatio: false,
+                    onClick: (e, activeEls) => {
+                        if (activeEls && activeEls.length > 0) {
+                            const idx = activeEls[0].index;
+                            const model = top10[idx];
+                            if (model) {
+                                window.openDetalheModelo(model);
+                            }
+                        }
+                    },
+                    onHover: (e, activeEls) => {
+                        if (e.chart) {
+                            e.chart.canvas.style.cursor = activeEls.length > 0 ? 'pointer' : 'default';
+                        }
+                    },
                     plugins: {
                         legend: { display: false },
                         tooltip: {
@@ -1484,8 +1498,18 @@ window.exportarRelatorioModelo = () => {
 };
 
 // --- MODAL DETALHE CUSTO MODELO ---
-window.openDetalheModelo = (type) => {
-    const model = type === 'expensive' ? window.topModelData : window.bottomModelData;
+window.openDetalheModelo = (typeOrModel) => {
+    let model = null;
+    let type = 'expensive';
+    
+    if (typeof typeOrModel === 'string') {
+        model = typeOrModel === 'expensive' ? window.topModelData : window.bottomModelData;
+        type = typeOrModel;
+    } else {
+        model = typeOrModel;
+        type = 'chart';
+    }
+
     if (!model) {
         alert('Nenhum dado de modelo disponível para exibir.');
         return;
@@ -1497,15 +1521,23 @@ window.openDetalheModelo = (type) => {
     const title = document.getElementById('modal-detalhe-title');
     
     // Configurar layout e textos
-    kicker.textContent = type === 'expensive' ? '🔴 MODELO MAIS CARO' : '🟢 MODELO MAIS BARATO';
-    header.style.background = type === 'expensive' ? 'linear-gradient(135deg, #e74c3c, #c0392b)' : 'linear-gradient(135deg, #27ae60, #1e8449)';
+    if (type === 'expensive') {
+        kicker.textContent = '🔴 MODELO MAIS CARO';
+        header.style.background = 'linear-gradient(135deg, #e74c3c, #c0392b)';
+    } else if (type === 'cheap') {
+        kicker.textContent = '🟢 MODELO MAIS BARATO';
+        header.style.background = 'linear-gradient(135deg, #27ae60, #1e8449)';
+    } else {
+        kicker.textContent = '📊 DETALHES DO MODELO';
+        header.style.background = 'linear-gradient(135deg, #f39c12, #d68910)';
+    }
     title.textContent = model.modelo;
     
     const fmt = v => 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const fmtNum = v => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     
     document.getElementById('detalhe-com-peca').textContent = model.comPeca;
-    document.getElementById('detalhe-sem-peca').textContent = model.semPeca;
+    document.getElementById('detalhe-sem-peca').textContent = model.semPeca > 0 ? model.semPeca : '—';
     document.getElementById('detalhe-total-maquinas').textContent = model.atendimentos;
     document.getElementById('detalhe-pecas').textContent = model.pecas;
     document.getElementById('detalhe-custo-geral').textContent = fmt(model.custoMedio);
@@ -1514,7 +1546,7 @@ window.openDetalheModelo = (type) => {
     
     const totalEl = document.getElementById('detalhe-custo-total');
     totalEl.textContent = fmt(model.custo);
-    totalEl.style.color = type === 'expensive' ? '#e74c3c' : '#27ae60';
+    totalEl.style.color = type === 'expensive' ? '#e74c3c' : (type === 'cheap' ? '#27ae60' : '#f39c12');
 
     overlay.classList.add('open');
 };
