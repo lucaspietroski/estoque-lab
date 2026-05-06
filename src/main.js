@@ -981,12 +981,12 @@ window.renderMovDashboard = async () => {
         const dt = h.ts ? h.ts.split('T')[0] : 'Sem Data';
 
         if (h.tipo === 'entrada') { totIn += qty; vlrIn += vlr; }
-        else { totOut += qty; vlrOut += vlr; }
+        else if (h.tipo === 'saída' || h.tipo === 'saida') { totOut += qty; vlrOut += vlr; }
 
         if (dt !== 'Sem Data') {
             if (!daily[dt]) daily[dt] = { in: 0, out: 0, vlrIn: 0, vlrOut: 0 };
             if (h.tipo === 'entrada') { daily[dt].in += qty; daily[dt].vlrIn += vlr; }
-            else { daily[dt].out += qty; daily[dt].vlrOut += vlr; }
+            else if (h.tipo === 'saída' || h.tipo === 'saida') { daily[dt].out += qty; daily[dt].vlrOut += vlr; }
 
             const dateObj = new Date(h.ts);
             const startOfYear = new Date(dateObj.getFullYear(), 0, 1);

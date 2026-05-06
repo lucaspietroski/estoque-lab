@@ -6,10 +6,11 @@ const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 async function check() {
-    const { data, error } = await supabase.from('equipamentos').select('*').eq('selb', 'TEST');
-    console.log('QueryResult for TEST:', data, error);
-
-    const { data: list, error: errList } = await supabase.from('equipamentos').select('*').limit(5);
-    console.log('Sample Equipamentos:', list, errList);
+    const { data, error } = await supabase
+        .from('historico')
+        .select('*')
+        .eq('code', '302LV94270')
+        .eq('tipo', 'ajuste');
+    console.log('QueryResult for 302LV94270:', data, error);
 }
 check();
