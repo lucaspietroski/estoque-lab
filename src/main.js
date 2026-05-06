@@ -1382,7 +1382,9 @@ window.renderModeloCusto = async () => {
 
         const fmt = v => 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         const top = rows[0];
-        const bottom = rows.length > 1 ? rows.filter(r => r.custo > 0).pop() : null;
+        const bottom = rows.length > 1 ? rows.filter(r => r.custo > 0).pop() : (rows[0] || null);
+        window.topModelData = top;
+        window.bottomModelData = bottom;
         const totalCusto = rows.reduce((s, r) => s + r.custo, 0);
         const totalAtend = rows.reduce((s, r) => s + r.atendimentos, 0);
 
@@ -1480,6 +1482,53 @@ window.exportarRelatorioModelo = () => {
     XLSX.utils.book_append_sheet(wb, ws, "Custo por Modelo");
     XLSX.writeFile(wb, `RELATORIO_CUSTO_MODELO_${new Date().toISOString().split('T')[0]}.xlsx`);
 };
+
+// --- MODAL DETALHE CUSTO MODELO ---
+window.openDetalheModelo = (type) => {
+    const model = type === 'expensive' ? window.topModelData : window.bottomModelData;
+    if (!model) {
+        alert('Nenhum dado de modelo disponível para exibir.');
+        return;
+    }
+
+    const overlay = document.getElementById('modal-detalhe-modelo');
+    const header = document.getElementById('modal-detalhe-header');
+    const kicker = document.getElementById('modal-detalhe-kicker');
+    const title = document.getElementById('modal-detalhe-title');
+    
+    // Configurar layout e textos
+    kicker.textContent = type === 'expensive' ? '🔴 MODELO MAIS CARO' : '🟢 MODELO MAIS BARATO';
+    header.style.background = type === 'expensive' ? 'linear-gradient(135deg, #e74c3c, #c0392b)' : 'linear-gradient(135deg, #27ae60, #1e8449)';
+    title.textContent = model.modelo;
+    
+    const fmt = v => 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fmtNum = v => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    
+    document.getElementById('detalhe-com-peca').textContent = model.comPeca;
+    document.getElementById('detalhe-sem-peca').textContent = model.semPeca;
+    document.getElementById('detalhe-total-maquinas').textContent = model.atendimentos;
+    document.getElementById('detalhe-pecas').textContent = model.pecas;
+    document.getElementById('detalhe-custo-geral').textContent = fmt(model.custoMedio);
+    document.getElementById('detalhe-custo-com-peca').textContent = model.comPeca > 0 ? fmt(model.custo / model.comPeca) : 'R$ 0,00';
+    document.getElementById('detalhe-media-pecas').textContent = model.atendimentos > 0 ? fmtNum(model.pecas / model.atendimentos) : '0,00';
+    
+    const totalEl = document.getElementById('detalhe-custo-total');
+    totalEl.textContent = fmt(model.custo);
+    totalEl.style.color = type === 'expensive' ? '#e74c3c' : '#27ae60';
+
+    overlay.classList.add('open');
+};
+
+window.closeDetalheModelo = () => {
+    document.getElementById('modal-detalhe-modelo').classList.remove('open');
+};
+
+// Registrar fechamento por clique fora
+document.getElementById('modal-detalhe-modelo')?.addEventListener('click', (e) => {
+    if (e.target.id === 'modal-detalhe-modelo') {
+        window.closeDetalheModelo();
+    }
+});
 
 // --- INICIALIZAÇÃO ---
 init();

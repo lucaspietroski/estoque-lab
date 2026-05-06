@@ -344,7 +344,7 @@
             </div>
           </div>
 
-          <div class="mod-kpi-item c-expensive">
+          <div class="mod-kpi-item c-expensive" style="cursor: pointer;" onclick="window.openDetalheModelo('expensive')">
             <div class="mod-kpi-icon">⚠️</div>
             <div class="mod-kpi-content">
               <div class="mod-kpi-label">MODELO MAIS CARO 🔍</div>
@@ -353,7 +353,7 @@
             </div>
           </div>
 
-          <div class="mod-kpi-item c-cheap">
+          <div class="mod-kpi-item c-cheap" style="cursor: pointer;" onclick="window.openDetalheModelo('cheap')">
             <div class="mod-kpi-icon">✅</div>
             <div class="mod-kpi-content">
               <div class="mod-kpi-label">MODELO MAIS BARATO 🔍</div>
@@ -638,6 +638,65 @@
       <button class="btn-confirm" onclick="saveAjusteHistorico()" style="flex: 2; background: var(--orange);">Confirmar Ajuste</button>
     </div>
     <div id="ajuste-status" style="margin-top: 15px; font-size: 13px; text-align: center;"></div>
+  </div>
+</div>
+
+<!-- MODAL DETALHE CUSTO MODELO -->
+<div class="modal-overlay" id="modal-detalhe-modelo">
+  <div class="modal-box" style="max-width: 550px; border-radius: 16px; overflow: hidden; padding: 0; border: none; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);">
+    <div id="modal-detalhe-header" style="padding: 24px; color: white; position: relative;">
+      <button onclick="window.closeDetalheModelo()" style="position: absolute; right: 20px; top: 20px; background: rgba(255,255,255,0.2); border: none; width: 32px; height: 32px; border-radius: 50%; color: white; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s;">✕</button>
+      <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; opacity: 0.9;" id="modal-detalhe-kicker">MODELO MAIS CARO</div>
+      <h3 style="font-size: 18px; font-weight: 800; color: white; margin: 8px 0 0 0; line-height: 1.3;" id="modal-detalhe-title">—</h3>
+    </div>
+    
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); padding: 1px;">
+      
+      <!-- Linha 1 -->
+      <div style="background: white; padding: 16px 20px;">
+        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Revisões com Peça</div>
+        <div style="font-size: 20px; font-weight: 800;" id="detalhe-com-peca">0</div>
+      </div>
+      <div style="background: white; padding: 16px 20px;">
+        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Revisada sem Peça</div>
+        <div style="font-size: 20px; font-weight: 800;" id="detalhe-sem-peca">0</div>
+      </div>
+      
+      <!-- Linha 2 -->
+      <div style="background: white; padding: 16px 20px;">
+        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Total de Máquinas</div>
+        <div style="font-size: 20px; font-weight: 800;" id="detalhe-total-maquinas">0</div>
+      </div>
+      <div style="background: white; padding: 16px 20px;">
+        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Peças Utilizadas</div>
+        <div style="font-size: 20px; font-weight: 800;" id="detalhe-pecas">0</div>
+      </div>
+      
+      <!-- Linha 3 -->
+      <div style="background: white; padding: 16px 20px;">
+        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Custo Médio por Revisão (Geral)</div>
+        <div style="font-size: 20px; font-weight: 800;" id="detalhe-custo-geral">R$ 0,00</div>
+      </div>
+      <div style="background: white; padding: 16px 20px;">
+        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Custo Médio por Revisão (Com Peça)</div>
+        <div style="font-size: 20px; font-weight: 800;" id="detalhe-custo-com-peca">R$ 0,00</div>
+      </div>
+      
+      <!-- Linha 4 -->
+      <div style="background: white; padding: 16px 20px;">
+        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Média de Peças por Máquina</div>
+        <div style="font-size: 20px; font-weight: 800;" id="detalhe-media-pecas">0,00</div>
+      </div>
+      <div style="background: white; padding: 16px 20px;">
+        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Custo Total de Revisão</div>
+        <div style="font-size: 20px; font-weight: 800; font-family: var(--mono);" id="detalhe-custo-total">R$ 0,00</div>
+      </div>
+      
+    </div>
+    
+    <div style="padding: 12px; text-align: center; background: #f8fafc; font-size: 11px; color: var(--text-muted);">
+      Clique fora para fechar
+    </div>
   </div>
 </div>
 
