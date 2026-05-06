@@ -569,22 +569,72 @@ function renderSaidaItems() {
 
 // --- AJUSTE MANUAL ---
 let currentEditCode = '';
+let currentEditPrevQty = 0;
+let currentEditPrevPrice = 0;
+
 function openEditModal(code, desc) {
     currentEditCode = code;
     document.getElementById('modal-code').textContent = code;
     document.getElementById('modal-desc').textContent = desc;
-    supabase.from('estoque').select('qty').eq('code', code).single().then(({ data }) => document.getElementById('modal-qty').value = data?.qty || 0);
-    supabase.from('custos').select('last_cost').eq('code', code).single().then(({ data }) => document.getElementById('modal-price').value = data?.last_cost || 0);
+    document.getElementById('modal-obs').value = ''; // Limpa observação anterior
+
+    supabase.from('estoque').select('qty').eq('code', code).single().then(({ data }) => {
+        currentEditPrevQty = data?.qty || 0;
+        document.getElementById('modal-qty').value = currentEditPrevQty;
+    });
+    supabase.from('custos').select('last_cost').eq('code', code).single().then(({ data }) => {
+        currentEditPrevPrice = data?.last_cost || 0;
+        document.getElementById('modal-price').value = currentEditPrevPrice;
+    });
     document.getElementById('modal-overlay').classList.add('open');
 }
 
 async function savePriceModal() {
+    if (!currentUser || currentUser.email !== 'lucas.araujo@selbetti.com.br') {
+        alert('❌ Permissão negada! Apenas o usuário lucas.araujo@selbetti.com.br pode realizar ajustes manuais.');
+        return;
+    }
+
     const qty = parseInt(document.getElementById('modal-qty').value) || 0;
     const price = parseFloat(document.getElementById('modal-price').value) || 0;
-    await supabase.from('estoque').upsert({ code: currentEditCode, qty });
-    await supabase.from('custos').upsert({ code: currentEditCode, last_cost: price });
-    document.getElementById('modal-overlay').classList.remove('open');
-    renderEstoque(); updateDashboard();
+    const obs = document.getElementById('modal-obs').value.trim();
+
+    if (!obs) {
+        alert('⚠️ A observação é obrigatória para registrar o histórico do ajuste.');
+        return;
+    }
+
+    const btn = document.querySelector('#modal-overlay .btn-confirm');
+    const originalText = btn ? btn.textContent : '';
+    if (btn) { btn.disabled = true; btn.textContent = 'Gravando...'; }
+
+    try {
+        await supabase.from('estoque').upsert({ code: currentEditCode, qty });
+        await supabase.from('custos').upsert({ code: currentEditCode, last_cost: price });
+
+        const formatChange = `AJUSTE MANUAL: ${obs} (Qtd: ${currentEditPrevQty} ➡️ ${qty} | Preço: R$ ${currentEditPrevPrice.toFixed(2)} ➡️ R$ ${price.toFixed(2)})`;
+
+        await supabase.from('historico').insert({
+            tipo: 'ajuste',
+            code: currentEditCode,
+            qty: qty,
+            vlr_unit: price,
+            vlr_total: qty * price,
+            selb: 'AJUSTE',
+            descricao: formatChange,
+            user_email: currentUser.email,
+            ts: new Date().toISOString()
+        });
+
+        document.getElementById('modal-overlay').classList.remove('open');
+        renderEstoque(); 
+        updateDashboard();
+        alert('✅ Ajuste realizado e registrado no histórico com sucesso!');
+    } catch (err) {
+        alert('❌ Erro ao salvar o ajuste: ' + err.message);
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = originalText; }
+    }
 }
 
 // --- HISTÓRICO ---
