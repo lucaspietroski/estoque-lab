@@ -16,14 +16,13 @@ window.toggleModeCusto = () => {
     const active = localStorage.getItem('mode_custo_ativo') === '1';
     localStorage.setItem('mode_custo_ativo', active ? '0' : '1');
     window.updateModeCustoBtn();
-    
-    // Recarregar os dados de todas as telas que exibem custos
+
+    // Recarregar a tela atual que exibe custos
     if (currentTab === 'dashboard') updateDashboard();
-    if (currentTab === 'modelo-custo') {
-        if (typeof window.renderModeloCusto === 'function') window.renderModeloCusto();
-    }
+    if (currentTab === 'modelo-custo') renderModeloCusto();
+    if (currentTab === 'movimentacoes') renderMovDashboard();
     if (currentTab === 'historico') renderHistorico();
-    renderEstoque();
+    if (currentTab === 'estoque') renderEstoque();
 };
 
 window.updateModeCustoBtn = () => {
