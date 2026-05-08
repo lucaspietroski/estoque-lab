@@ -398,3 +398,8 @@ mark { background: #fff3b0; color: #7a5700; border-radius: 2px; padding: 0 1px; 
   .header-subtitle { display: none; }
   .search-area { padding: 0.7rem 0.9rem 0.4rem; }
 }
+
+@keyframes pulse-badge {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.5); }
+  50%       { box-shadow: 0 0 0 5px rgba(16, 185, 129, 0); }
+}

@@ -27,14 +27,20 @@ window.toggleModeCusto = () => {
 
 window.updateModeCustoBtn = () => {
     const btn = document.getElementById('btn-toggle-custo');
-    if (!btn) return;
+    const badge = document.getElementById('custo-real-badge');
     const active = localStorage.getItem('mode_custo_ativo') === '1';
+
+    // Badge no header
+    if (badge) badge.style.display = active ? 'inline-flex' : 'none';
+
+    // Botão no menu admin
+    if (!btn) return;
     if (active) {
-        btn.style.background = '#10b981'; // Green (Active state)
+        btn.style.background = '#10b981';
         btn.style.color = '#ffffff';
         btn.textContent = '💲 Modo Custo Real (ATIVADO)';
     } else {
-        btn.style.background = 'var(--bg-hover)'; // Standard gray background
+        btn.style.background = 'var(--bg-hover)';
         btn.style.color = 'var(--text)';
         btn.textContent = '💲 Modo Custo Real (DESATIVADO)';
     }
