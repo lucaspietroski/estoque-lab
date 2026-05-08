@@ -537,17 +537,39 @@ async function confirmarSaida() {
 
     btn.textContent = 'Gravando...';
 
-    const { error } = await supabase.rpc('processar_saida', {
-        p_lote_id: `SELB-${selb}-${Date.now()}`,
-        p_selb: selb,
-        p_user: currentUser.email,
-        p_dt: new Date().toLocaleString('pt-BR'),
-        p_items: saidaItems
-    });
+    try {
+        const ts = new Date().toISOString();
 
-    if (error) alert('❌ Erro: ' + error.message);
-    else { alert('✅ Baixa concluída!'); closeSaidaModal(); updateDashboard(); }
-    btn.disabled = false; btn.textContent = 'Finalizar Baixa';
+        for (const item of saidaItems) {
+            // 1) Baixa o estoque
+            const { data: cur } = await supabase.from('estoque').select('qty').eq('code', item.code).single();
+            const newQty = Math.max(0, (cur?.qty || 0) - item.qty);
+            const { error: estoqueErr } = await supabase.from('estoque').upsert({ code: item.code, qty: newQty });
+            if (estoqueErr) throw new Error(`Erro ao baixar estoque de ${item.code}: ${estoqueErr.message}`);
+
+            // 2) Grava no histórico COM vlr_unit e vlr_total
+            const { error: histErr } = await supabase.from('historico').insert({
+                tipo: 'sa\u00edda',
+                code: item.code,
+                descricao: item.descricao,
+                qty: item.qty,
+                vlr_unit: item.vlrUnit,
+                vlr_total: item.vlrTotal,
+                selb: selb,
+                user_email: currentUser.email,
+                ts: ts
+            });
+            if (histErr) throw new Error(`Erro ao gravar hist\u00f3rico de ${item.code}: ${histErr.message}`);
+        }
+
+        alert('\u2705 Baixa conclu\u00edda!');
+        closeSaidaModal();
+        updateDashboard();
+    } catch (err) {
+        alert('\u274c ' + err.message);
+    } finally {
+        btn.disabled = false; btn.textContent = 'Finalizar Baixa';
+    }
 }
 
 function openSaidaModal(code) {
