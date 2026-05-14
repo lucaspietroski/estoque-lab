@@ -6,6 +6,16 @@ let currentTab = 'dashboard';
 let searchTimeout = null;
 let saidaItems = []; // Carrinho de saída SELB
 
+// --- HELPER DE BUSCA ---
+window.formatSearchQuery = (val) => {
+    if (!val) return '';
+    let safeVal = val.replace(/,/g, ' ');
+    if (safeVal.includes('%')) {
+        return safeVal.split('%').map(p => p.trim()).filter(p => p.length > 0).join('%');
+    }
+    return safeVal;
+};
+
 // --- MODO CUSTO REAL ---
 window.adjC = (val) => {
     const active = localStorage.getItem('mode_custo_ativo') === '1';
@@ -419,7 +429,8 @@ async function renderEstoque(query = '') {
         }
 
         if (isSearchActive) {
-            dbQuery = dbQuery.or(`code.ilike.%${query}%,descricao.ilike.%${query}%`);
+            const safeQuery = window.formatSearchQuery(query);
+            dbQuery = dbQuery.or(`code.ilike.%${safeQuery}%,descricao.ilike.%${safeQuery}%`);
         }
 
         const { data: rawData } = await dbQuery.limit(isSearchActive ? 100 : 500);
@@ -500,13 +511,8 @@ window.buscarPecaPorDesc = async (val) => {
 
     let q = supabase.from('parts').select('code, descricao').limit(20);
     
-    if (queryVal.includes('%')) {
-        // Busca com coringa: ilike.%word%word%
-        const parts = queryVal.split('%').filter(p => p.length > 0);
-        q = q.ilike('descricao', `%${parts.join('%')}%`);
-    } else {
-        q = q.ilike('descricao', `%${queryVal}%`);
-    }
+    const safeQuery = window.formatSearchQuery(queryVal);
+    q = q.ilike('descricao', `%${safeQuery}%`);
 
     const { data } = await q;
     if (data) {
@@ -711,7 +717,10 @@ async function renderHistorico() {
     let q = supabase.from('historico').select('*').order('ts', { ascending: false }).limit(200);
 
     if (tipoF) q = q.eq('tipo', tipoF);
-    if (searchQ) q = q.or(`code.ilike.%${searchQ}%,descricao.ilike.%${searchQ}%,selb.ilike.%${searchQ}%`);
+    if (searchQ) {
+        const sq = window.formatSearchQuery(searchQ);
+        q = q.or(`code.ilike.%${sq}%,descricao.ilike.%${sq}%,selb.ilike.%${sq}%`);
+    }
     if (d1Str) q = q.gte('ts', d1Str + 'T00:00:00Z');
     if (d2Str) q = q.lte('ts', d2Str + 'T23:59:59.999Z');
 
@@ -1027,7 +1036,10 @@ window.renderMovDashboard = async () => {
 
     let q = supabase.from('historico').select('*').order('ts', { ascending: true });
     if (tipoF) q = q.eq('tipo', tipoF);
-    if (prodF) q = q.or(`code.ilike.%${prodF}%,descricao.ilike.%${prodF}%`);
+    if (prodF) {
+        const sq = window.formatSearchQuery(prodF);
+        q = q.or(`code.ilike.%${sq}%,descricao.ilike.%${sq}%`);
+    }
     if (d1) q = q.gte('ts', d1 + 'T00:00:00Z');
     if (d2) q = q.lte('ts', d2 + 'T23:59:59Z');
 
@@ -1267,7 +1279,8 @@ async function renderEquipamentos(query = '') {
 
     let q = supabase.from('equipamentos').select('*').order('selb', { ascending: true }).limit(100);
     if (query) {
-        q = q.or(`selb.ilike.%${query}%,modelo.ilike.%${query}%,descricao.ilike.%${query}%`);
+        const sq = window.formatSearchQuery(query);
+        q = q.or(`selb.ilike.%${sq}%,modelo.ilike.%${sq}%,descricao.ilike.%${sq}%`);
     }
 
     const { data } = await q;
@@ -1293,7 +1306,8 @@ window.renderBIList = async (query = '') => {
 
     let q = supabase.from('equipamentos').select('*').order('selb', { ascending: true }).limit(200);
     if (query) {
-        q = q.or(`selb.ilike.%${query}%,modelo.ilike.%${query}%,descricao.ilike.%${query}%`);
+        const sq = window.formatSearchQuery(query);
+        q = q.or(`selb.ilike.%${sq}%,modelo.ilike.%${sq}%,descricao.ilike.%${sq}%`);
     }
 
     const { data } = await q;

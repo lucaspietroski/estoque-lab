@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <title>🔧 Correção de Valores de Saída</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #e2e8f0; min-height: 100vh; padding: 30px 20px; }
+    .container { max-width: 960px; margin: 0 auto; }
+    h1 { font-size: 1.6rem; font-weight: 800; color: #f8fafc; margin-bottom: 6px; }
+    .subtitle { color: #94a3b8; font-size: 0.9rem; margin-bottom: 30px; }
+    .card { background: #1e293b; border: 1px solid #334155; border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+    .card h2 { font-size: 1rem; font-weight: 700; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 16px; }
+    .kpi-row { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 20px; }
+    .kpi { background: #0f172a; border: 1px solid #334155; border-radius: 8px; padding: 16px 20px; flex: 1; min-width: 150px; }
+    .kpi-label { font-size: 0.75rem; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+    .kpi-value { font-size: 1.6rem; font-weight: 800; }
+    .kpi-value.red { color: #f87171; }
+    .kpi-value.yellow { color: #fbbf24; }
+    .kpi-value.green { color: #34d399; }
+    .kpi-value.blue { color: #60a5fa; }
+    button { cursor: pointer; border: none; border-radius: 8px; font-weight: 700; font-size: 0.9rem; padding: 12px 24px; transition: all 0.2s; }
+    #btn-analisar { background: #3b82f6; color: white; }
+    #btn-analisar:hover { background: #2563eb; }
+    #btn-executar { background: #10b981; color: white; display: none; }
+    #btn-executar:hover { background: #059669; }
+    #btn-executar:disabled { background: #374151; color: #6b7280; cursor: not-allowed; }
+    .btn-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+    .warning { background: #451a03; border: 1px solid #92400e; border-radius: 8px; padding: 14px 18px; font-size: 0.88rem; color: #fcd34d; line-height: 1.6; margin-bottom: 16px; }
+    .info { background: #0c2240; border: 1px solid #1e40af; border-radius: 8px; padding: 14px 18px; font-size: 0.88rem; color: #93c5fd; line-height: 1.6; margin-bottom: 16px; }
+    .success { background: #052e16; border: 1px solid #166534; border-radius: 8px; padding: 14px 18px; font-size: 0.88rem; color: #86efac; line-height: 1.6; }
+    #log { background: #0f172a; border: 1px solid #1e293b; border-radius: 8px; padding: 16px; font-family: 'Courier New', monospace; font-size: 0.8rem; max-height: 400px; overflow-y: auto; line-height: 1.7; display: none; }
+    .log-ok { color: #34d399; }
+    .log-skip { color: #94a3b8; }
+    .log-err { color: #f87171; }
+    .log-info { color: #60a5fa; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    th { text-align: left; padding: 8px 10px; background: #0f172a; color: #64748b; font-weight: 600; border-bottom: 1px solid #334155; }
+    td { padding: 8px 10px; border-bottom: 1px solid #1e293b; vertical-align: middle; }
+    tr:hover td { background: rgba(255,255,255,0.02); }
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; }
+    .badge-ok { background: #052e16; color: #34d399; }
+    .badge-skip { background: #1e293b; color: #64748b; }
+    .badge-semcusto { background: #450a0a; color: #f87171; }
+    #preview-table-wrap { max-height: 350px; overflow-y: auto; margin-top: 16px; display: none; }
+    .progress-bar { background: #1e293b; border-radius: 999px; height: 8px; overflow: hidden; margin: 12px 0; }
+    .progress-fill { background: #10b981; height: 100%; border-radius: 999px; transition: width 0.3s; }
+    #progress-text { font-size: 0.82rem; color: #64748b; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <h1>🔧 Correção de Valores de Saída</h1>
+  <p class="subtitle">Backfill retroativo de <strong>vlr_unit</strong> e <strong>vlr_total</strong> em registros de saída sem valor.</p>
+
+  <div class="card">
+    <h2>⚠️ Entenda o que esta ferramenta faz</h2>
+    <div class="warning">
+      <strong>Esta ferramenta irá:</strong><br>
+      1. Buscar todos os registros de <strong>saída</strong> no histórico onde <code>vlr_total</code> é nulo ou zero.<br>
+      2. Para cada registro, buscar o custo atual da peça na tabela <code>custos</code>.<br>
+      3. Preencher <code>vlr_unit</code> e <code>vlr_total</code> com base no custo atual (não o custo na época da saída).<br>
+      4. <strong>Pular</strong> registros de peças sem custo cadastrado (deixa como está, sem erro).<br><br>
+      ⚡ <strong>Faça a análise primeiro (Passo 1) antes de executar qualquer coisa.</strong>
+    </div>
+    <div class="info">
+      🔐 Você precisará estar <strong>logado</strong> com sua conta <code>@selbetti.com.br</code> para executar. A correção é feita diretamente no banco Supabase.
+    </div>
+
+    <!-- LOGIN -->
+    <div id="login-area">
+      <div style="display:flex; gap:12px; flex-wrap:wrap; align-items:flex-end; margin-bottom:16px;">
+        <div>
+          <div style="font-size:0.8rem;color:#94a3b8;margin-bottom:4px;">E-mail</div>
+          <input id="inp-email" type="email" value="lucas.araujo@selbetti.com.br"
+            style="background:#0f172a;border:1px solid #334155;border-radius:6px;padding:8px 12px;color:#f1f5f9;font-size:0.88rem;width:280px;" />
+        </div>
+        <div>
+          <div style="font-size:0.8rem;color:#94a3b8;margin-bottom:4px;">Senha</div>
+          <input id="inp-pass" type="password"
+            style="background:#0f172a;border:1px solid #334155;border-radius:6px;padding:8px 12px;color:#f1f5f9;font-size:0.88rem;width:200px;" />
+        </div>
+        <button id="btn-login" style="background:#6366f1;color:white;">🔑 Fazer Login</button>
+      </div>
+      <div id="login-status" style="font-size:0.85rem;color:#94a3b8;"></div>
+    </div>
+  </div>
+
+  <!-- ANALISE -->
+  <div class="card" id="card-analise" style="display:none;">
+    <h2>📊 Passo 1 — Análise (sem alterar nada)</h2>
+    <div class="kpi-row">
+      <div class="kpi"><div class="kpi-label">Saídas sem valor</div><div class="kpi-value red" id="kpi-nulos">—</div></div>
+      <div class="kpi"><div class="kpi-label">Podem ser corrigidas</div><div class="kpi-value green" id="kpi-corrigiveis">—</div></div>
+      <div class="kpi"><div class="kpi-label">Sem custo cadastrado</div><div class="kpi-value yellow" id="kpi-semcusto">—</div></div>
+      <div class="kpi"><div class="kpi-label">Valor a recuperar</div><div class="kpi-value blue" id="kpi-valor">—</div></div>
+    </div>
+    <div class="btn-row">
+      <button id="btn-analisar">🔍 Analisar Registros</button>
+      <button id="btn-executar">⚡ Executar Correção</button>
+      <span id="progress-text"></span>
+    </div>
+    <div class="progress-bar" id="progress-wrap" style="display:none;"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+    <div id="preview-table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>DATA</th><th>CÓDIGO</th><th>DESCRIÇÃO</th><th>QTD</th><th>CUSTO UNIT.</th><th>TOTAL CALC.</th><th>STATUS</th>
+          </tr>
+        </thead>
+        <tbody id="preview-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- LOG -->
+  <div class="card" id="card-log" style="display:none;">
+    <h2>📝 Log de Execução</h2>
+    <div id="log"></div>
+    <div id="resultado-final" style="margin-top:16px;"></div>
+  </div>
+
+</div>
+
+<script type="module">
+import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+const SUPABASE_URL = 'https://idpmrjjalhnpsxpfugph.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkcG1yamphbGhucHN4cGZ1Z3BoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NjU2NjcsImV4cCI6MjA5MzI0MTY2N30.L4hV7YM9yjdOOW9zBl84L-1si2DU8nBI3J1WgmW02lY';
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const fmtBRL = v => 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+// ── LOGIN ──────────────────────────────────────────────────────────────
+document.getElementById('btn-login').addEventListener('click', async () => {
+  const email = document.getElementById('inp-email').value.trim();
+  const pass  = document.getElementById('inp-pass').value;
+  const status = document.getElementById('login-status');
+  status.textContent = '⌛ Autenticando...';
+  const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
+  if (error) {
+    status.style.color = '#f87171';
+    status.textContent = '❌ ' + error.message;
+  } else {
+    status.style.color = '#34d399';
+    status.textContent = '✅ Login OK! Pode prosseguir.';
+    document.getElementById('card-analise').style.display = 'block';
+  }
+});
+
+// ── ANÁLISE ────────────────────────────────────────────────────────────
+let preview = []; // lista global para a execução
+
+document.getElementById('btn-analisar').addEventListener('click', async () => {
+  const btn = document.getElementById('btn-analisar');
+  btn.disabled = true; btn.textContent = '⌛ Analisando...';
+
+  document.getElementById('kpi-nulos').textContent = '...';
+  document.getElementById('kpi-corrigiveis').textContent = '...';
+  document.getElementById('kpi-semcusto').textContent = '...';
+  document.getElementById('kpi-valor').textContent = '...';
+  document.getElementById('preview-table-wrap').style.display = 'none';
+  document.getElementById('btn-executar').style.display = 'none';
+
+  // 1) Buscar saídas sem vlr_total
+  const { data: saidas, error } = await supabase
+    .from('historico')
+    .select('id, ts, code, descricao, qty, vlr_total')
+    .in('tipo', ['saída', 'saida'])
+    .or('vlr_total.is.null,vlr_total.eq.0')
+    .order('ts', { ascending: false });
+
+  if (error) { alert('Erro ao buscar histórico: ' + error.message); btn.disabled = false; btn.textContent = '🔍 Analisar Registros'; return; }
+
+  // 2) Buscar todos os custos de uma vez
+  const { data: custos } = await supabase.from('custos').select('code, last_cost');
+  const custoMap = {};
+  (custos || []).forEach(c => custoMap[c.code] = c.last_cost);
+
+  // 3) Montar preview
+  preview = (saidas || []).map(s => {
+    const custo = custoMap[s.code];
+    const temCusto = custo != null && custo > 0;
+    return {
+      id: s.id,
+      ts: s.ts,
+      code: s.code,
+      descricao: s.descricao || s.code,
+      qty: s.qty || 1,
+      vlr_unit: temCusto ? custo : null,
+      vlr_total: temCusto ? (custo * (s.qty || 1)) : null,
+      status: temCusto ? 'ok' : 'semcusto'
+    };
+  });
+
+  const corrigiveis = preview.filter(p => p.status === 'ok');
+  const semcusto    = preview.filter(p => p.status === 'semcusto');
+  const valorTotal  = corrigiveis.reduce((s, p) => s + p.vlr_total, 0);
+
+  document.getElementById('kpi-nulos').textContent       = preview.length.toLocaleString('pt-BR');
+  document.getElementById('kpi-corrigiveis').textContent = corrigiveis.length.toLocaleString('pt-BR');
+  document.getElementById('kpi-semcusto').textContent    = semcusto.length.toLocaleString('pt-BR');
+  document.getElementById('kpi-valor').textContent       = fmtBRL(valorTotal);
+
+  // 4) Montar tabela de preview (top 200)
+  const tbody = document.getElementById('preview-tbody');
+  tbody.innerHTML = preview.slice(0, 200).map(p => {
+    const dt = p.ts ? new Date(p.ts).toLocaleString('pt-BR') : '—';
+    const desc = (p.descricao || '').substring(0, 45) + ((p.descricao || '').length > 45 ? '…' : '');
+    const badge = p.status === 'ok'
+      ? `<span class="badge badge-ok">✓ Corrigível</span>`
+      : `<span class="badge badge-semcusto">✗ Sem custo</span>`;
+    return `<tr>
+      <td style="white-space:nowrap;color:#94a3b8">${dt}</td>
+      <td style="font-family:monospace;color:#60a5fa">${p.code}</td>
+      <td>${desc}</td>
+      <td style="text-align:center">${p.qty}</td>
+      <td style="text-align:right">${p.vlr_unit != null ? fmtBRL(p.vlr_unit) : '<span style="color:#64748b">—</span>'}</td>
+      <td style="text-align:right;font-weight:700">${p.vlr_total != null ? fmtBRL(p.vlr_total) : '<span style="color:#64748b">—</span>'}</td>
+      <td>${badge}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('preview-table-wrap').style.display = 'block';
+  if (corrigiveis.length > 0) {
+    document.getElementById('btn-executar').style.display = 'inline-block';
+  }
+
+  btn.disabled = false; btn.textContent = '🔍 Analisar Registros';
+});
+
+// ── EXECUÇÃO ───────────────────────────────────────────────────────────
+document.getElementById('btn-executar').addEventListener('click', async () => {
+  const ok = confirm(
+    `Você está prestes a corrigir ${preview.filter(p => p.status === 'ok').length} registros de saída.\n\n` +
+    `Registros sem custo cadastrado serão ignorados.\n\n` +
+    `Deseja continuar?`
+  );
+  if (!ok) return;
+
+  const btnEx   = document.getElementById('btn-executar');
+  const btnAn   = document.getElementById('btn-analisar');
+  const log     = document.getElementById('log');
+  const progWrap = document.getElementById('progress-wrap');
+  const progFill = document.getElementById('progress-fill');
+  const progText = document.getElementById('progress-text');
+
+  btnEx.disabled = true; btnEx.textContent = '⌛ Executando...';
+  btnAn.disabled = true;
+
+  document.getElementById('card-log').style.display = 'block';
+  log.style.display = 'block';
+  log.innerHTML = '';
+  progWrap.style.display = 'block';
+
+  const itens = preview.filter(p => p.status === 'ok');
+  let ok_count = 0, err_count = 0;
+
+  const addLog = (cls, msg) => {
+    const line = document.createElement('div');
+    line.className = cls;
+    line.textContent = msg;
+    log.appendChild(line);
+    log.scrollTop = log.scrollHeight;
+  };
+
+  addLog('log-info', `▶ Iniciando correção de ${itens.length} registros...`);
+  addLog('log-info', `  (${preview.filter(p => p.status === 'semcusto').length} sem custo serão ignorados)`);
+  addLog('log-info', '');
+
+  for (let i = 0; i < itens.length; i++) {
+    const item = itens[i];
+    const pct = Math.round(((i + 1) / itens.length) * 100);
+    progFill.style.width = pct + '%';
+    progText.textContent = `${i + 1} / ${itens.length} (${pct}%)`;
+
+    const { error } = await supabase
+      .from('historico')
+      .update({ vlr_unit: item.vlr_unit, vlr_total: item.vlr_total })
+      .eq('id', item.id);
+
+    if (error) {
+      err_count++;
+      addLog('log-err', `✗ [${item.code}] ${error.message}`);
+    } else {
+      ok_count++;
+      if (ok_count % 10 === 0 || ok_count <= 5) {
+        addLog('log-ok', `✓ ${item.code} × ${item.qty}  →  ${fmtBRL(item.vlr_total)}`);
+      }
+    }
+  }
+
+  addLog('log-info', '');
+  addLog('log-info', `▶ Concluído! ${ok_count} corrigidos | ${err_count} erros | ${preview.filter(p => p.status === 'semcusto').length} ignorados (sem custo)`);
+
+  const res = document.getElementById('resultado-final');
+  res.innerHTML = `<div class="success">
+    ✅ <strong>Correção concluída!</strong><br>
+    ${ok_count} registros foram atualizados com vlr_unit e vlr_total.<br>
+    ${err_count > 0 ? `⚠️ ${err_count} registros falharam (veja o log acima).` : ''}<br>
+    ${preview.filter(p => p.status === 'semcusto').length} registros foram ignorados (peça sem custo cadastrado).<br><br>
+    Volte ao sistema e verifique a aba <strong>Movimentações</strong> e <strong>Custo/Modelo</strong>.
+  </div>`;
+
+  btnEx.disabled = false; btnEx.textContent = '⚡ Executar Correção';
+  btnAn.disabled = false;
+  progText.textContent = '✅ Finalizado';
+});
+</script>
+</body>
+</html>
