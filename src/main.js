@@ -496,8 +496,14 @@ async function processarEntrada() {
 
 // --- LOGICA DE SAÍDA (SELB) ---
 window.buscarPecaPorDesc = async (val) => {
-    const list = document.getElementById('pecas-sugestoes');
-    if (!val || val.length < 2) { list.innerHTML = ''; return; }
+    const list = document.getElementById('pecas-sugestoes-custom');
+    if (!list) return;
+
+    if (!val || val.length < 2) { 
+        list.style.display = 'none'; 
+        list.innerHTML = ''; 
+        return; 
+    }
 
     // Lógica do Coringa %
     let queryVal = val.trim().toUpperCase();
@@ -506,6 +512,7 @@ window.buscarPecaPorDesc = async (val) => {
     if (queryVal.includes(' [') && queryVal.endsWith(']')) {
         const code = queryVal.split(' [').pop().replace(']', '');
         document.getElementById('saida-peca').value = code;
+        list.style.display = 'none';
         return;
     }
 
@@ -515,10 +522,32 @@ window.buscarPecaPorDesc = async (val) => {
     q = q.ilike('descricao', `%${safeQuery}%`);
 
     const { data } = await q;
-    if (data) {
-        list.innerHTML = data.map(p => `<option value="${p.descricao} [${p.code}]">`).join('');
+    if (data && data.length > 0) {
+        list.innerHTML = data.map(p => {
+            const descSanitized = p.descricao.replace(/'/g, "\\'");
+            return `<div class="custom-datalist-item" onclick="window.selecionarPeca('${descSanitized}', '${p.code}')">${p.descricao} <span style="color:var(--text-muted);font-size:0.75rem;">[${p.code}]</span></div>`;
+        }).join('');
+        list.style.display = 'block';
+    } else {
+        list.innerHTML = '<div style="padding:10px 15px;color:var(--text-muted);font-size:12px;">Nenhuma peça encontrada...</div>';
+        list.style.display = 'block';
     }
 };
+
+window.selecionarPeca = (desc, code) => {
+    document.getElementById('saida-busca-desc').value = `${desc} [${code}]`;
+    document.getElementById('saida-peca').value = code;
+    document.getElementById('pecas-sugestoes-custom').style.display = 'none';
+};
+
+// Fechar o dropdown customizado se clicar fora dele
+document.addEventListener('click', (e) => {
+    const list = document.getElementById('pecas-sugestoes-custom');
+    const input = document.getElementById('saida-busca-desc');
+    if (list && list.style.display === 'block' && !list.contains(e.target) && e.target !== input) {
+        list.style.display = 'none';
+    }
+});
 
 async function confirmarSaida() {
     const selb = document.getElementById('saida-selb').value.trim().toUpperCase();
