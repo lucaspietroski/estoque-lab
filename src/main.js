@@ -5,6 +5,30 @@ let currentUser = null;
 let currentTab = 'dashboard';
 let searchTimeout = null;
 let saidaItems = []; // Carrinho de saída SELB
+window.currentSector = 'LAB'; // Setor atual (LAB ou REMANU)
+
+window.changeSector = (sector) => {
+    window.currentSector = sector;
+    
+    // Atualiza botões
+    const btnLab = document.getElementById('btn-sector-lab');
+    const btnRemanu = document.getElementById('btn-sector-remanu');
+    if (btnLab) btnLab.classList.toggle('active', sector === 'LAB');
+    if (btnRemanu) btnRemanu.classList.toggle('active', sector === 'REMANU');
+    
+    // Limpa pesquisa
+    const searchInp = document.getElementById('search-main');
+    if (searchInp) searchInp.value = '';
+    
+    // Recarrega aba atual
+    if (currentTab === 'dashboard') updateDashboard();
+    else if (currentTab === 'estoque') { renderChips(); renderEstoque(); }
+    else if (currentTab === 'historico') renderHistorico();
+    else if (currentTab === 'movimentacoes') renderMovDashboard();
+};
+
+const getEstoqueTable = () => window.currentSector === 'REMANU' ? 'estoque_remanu' : 'estoque';
+const getHistoricoTable = () => window.currentSector === 'REMANU' ? 'historico_remanu' : 'historico';
 
 // --- HELPER DE BUSCA ---
 window.formatSearchQuery = (val) => {
@@ -204,12 +228,18 @@ function updateUIForAuth() {
         btnLogout.style.display = 'inline-flex';
         btnLoginArea.style.display = 'none';
         if (currentUser.email.endsWith('@selbetti.com.br')) adminBadge.style.display = 'inline-flex';
+        if (currentUser.email === 'lucas.araujo@selbetti.com.br') {
+            const ss = document.getElementById('sector-switcher');
+            if (ss) ss.style.display = 'inline-flex';
+        }
     } else {
         authScreen.style.display = 'flex';
         appShell.style.display = 'none';
         btnLogout.style.display = 'none';
         btnLoginArea.style.display = 'inline-flex';
         adminBadge.style.display = 'none';
+        const ss = document.getElementById('sector-switcher');
+        if (ss) ss.style.display = 'none';
     }
 }
 
@@ -256,11 +286,11 @@ async function updateDashboard() {
         console.log('📊 Atualizando Dashboard...');
         const { count: totalParts } = await supabase.from('parts').select('*', { count: 'exact', head: true });
         
-        const { data: stockData } = await supabase.from('estoque').select('qty').gt('qty', 0);
+        const { data: stockData } = await supabase.from(getEstoqueTable()).select('qty').gt('qty', 0);
         const inStockCount = stockData?.length || 0;
         const volTotal = stockData?.reduce((acc, curr) => acc + curr.qty, 0) || 0;
 
-        const { count: lowCount } = await supabase.from('estoque').select('*', { count: 'exact', head: true }).lt('qty', 5).gt('qty', 0);
+        const { count: lowCount } = await supabase.from(getEstoqueTable()).select('*', { count: 'exact', head: true }).lt('qty', 5).gt('qty', 0);
 
         document.getElementById('dash-total').textContent = (totalParts || 0).toLocaleString('pt-BR');
         document.getElementById('dash-instock').textContent = inStockCount.toLocaleString('pt-BR');
@@ -269,7 +299,7 @@ async function updateDashboard() {
 
         if (document.getElementById('stat-in-stock')) document.getElementById('stat-in-stock').textContent = volTotal;
         if (document.getElementById('stat-zero')) {
-             const { count: zeroCount } = await supabase.from('estoque').select('*', { count: 'exact', head: true }).eq('qty', 0);
+             const { count: zeroCount } = await supabase.from(getEstoqueTable()).select('*', { count: 'exact', head: true }).eq('qty', 0);
              document.getElementById('stat-zero').textContent = zeroCount || 0;
         }
 
@@ -298,7 +328,7 @@ async function renderDashTable() {
         const tbody = document.getElementById('dash-tbody');
         if (!tbody) return;
 
-        let query = supabase.from('estoque')
+        let query = supabase.from(getEstoqueTable())
             .select('qty, parts!inner(code, descricao)')
             .order('qty', { ascending: false });
 
@@ -356,9 +386,10 @@ async function renderChips() {
     if (!el) return;
 
     // Busca todas as peças com estoque para calcular os totais lendo a descrição
+    const tName = getEstoqueTable();
     const { data } = await supabase.from('parts')
-        .select('descricao, estoque!inner(qty)')
-        .gt('estoque.qty', 0);
+        .select(`descricao, ${tName}!inner(qty)`)
+        .gt(`${tName}.qty`, 0);
 
     const totals = {};
     if (data) {
@@ -366,7 +397,7 @@ async function renderChips() {
             const desc = (p.descricao || '').toUpperCase();
             // Identifica a marca dentro do texto da descrição
             const brand = MARCAS.find(m => desc.includes(m)) || 'OUTROS';
-            const qty = p.estoque?.qty ?? p.estoque?.[0]?.qty ?? 0;
+            const qty = p[tName]?.qty ?? p[tName]?.[0]?.qty ?? 0;
             totals[brand] = (totals[brand] || 0) + qty;
         });
     }
@@ -408,13 +439,14 @@ async function renderEstoque(query = '') {
         const isSearchActive = query.length > 0;
         
         // Se não estiver pesquisando um código específico, usamos inner join para trazer só o que tem saldo
-        const relEstoque = isSearchActive ? 'estoque!left(qty)' : 'estoque!inner(qty)';
+        const tName = getEstoqueTable();
+        const relEstoque = isSearchActive ? `${tName}!left(qty)` : `${tName}!inner(qty)`;
 
         let dbQuery = supabase.from('parts').select(`code, descricao, marca, ${relEstoque}, custos!left(last_cost)`);
 
         // Regra: Se NÃO estiver pesquisando um código/termo específico, filtramos SÓ o que tem saldo
         if (!isSearchActive) {
-            dbQuery = dbQuery.gt('estoque.qty', 0);
+            dbQuery = dbQuery.gt(`${tName}.qty`, 0);
         }
 
         if (currentFilter) {
@@ -441,8 +473,8 @@ async function renderEstoque(query = '') {
 
         // Ordenação por maior volume (físico) primeiro
         const data = rawData.sort((a, b) => {
-            const qtyA = a.estoque?.qty ?? a.estoque?.[0]?.qty ?? 0;
-            const qtyB = b.estoque?.qty ?? b.estoque?.[0]?.qty ?? 0;
+            const qtyA = a[tName]?.qty ?? a[tName]?.[0]?.qty ?? 0;
+            const qtyB = b[tName]?.qty ?? b[tName]?.[0]?.qty ?? 0;
             return qtyB - qtyA;
         });
 
@@ -453,7 +485,7 @@ async function renderEstoque(query = '') {
         countEl.textContent = data.length;
 
         tbody.innerHTML = data.map(p => {
-            const qty = p.estoque?.qty ?? p.estoque?.[0]?.qty ?? 0;
+            const qty = p[tName]?.qty ?? p[tName]?.[0]?.qty ?? 0;
             const cost = p.custos?.last_cost ?? p.custos?.[0]?.last_cost ?? 0;
             return `
                 <tr>
@@ -484,10 +516,10 @@ async function processarEntrada() {
     for (const [code, qty] of Object.entries(counts)) {
         const { data: part } = await supabase.from('parts').select('descricao').eq('code', code).single();
         if (!part) continue;
-        const { data: cur } = await supabase.from('estoque').select('qty').eq('code', code).single();
+        const { data: cur } = await supabase.from(getEstoqueTable()).select('qty').eq('code', code).single();
         const newQty = (cur?.qty || 0) + qty;
-        await supabase.from('estoque').upsert({ code, qty: newQty });
-        await supabase.from('historico').insert({ tipo: 'entrada', code, descricao: part.descricao, qty, user_email: currentUser.email, dt: new Date().toLocaleString('pt-BR') });
+        await supabase.from(getEstoqueTable()).upsert({ code, qty: newQty });
+        await supabase.from(getHistoricoTable()).insert({ tipo: 'entrada', code, descricao: part.descricao, qty, user_email: currentUser.email, dt: new Date().toLocaleString('pt-BR') });
     }
     textarea.value = '';
     resultDiv.innerHTML = '✅ Entradas registradas!';
@@ -577,13 +609,13 @@ async function confirmarSaida() {
 
         for (const item of saidaItems) {
             // 1) Baixa o estoque
-            const { data: cur } = await supabase.from('estoque').select('qty').eq('code', item.code).single();
+            const { data: cur } = await supabase.from(getEstoqueTable()).select('qty').eq('code', item.code).single();
             const newQty = Math.max(0, (cur?.qty || 0) - item.qty);
-            const { error: estoqueErr } = await supabase.from('estoque').upsert({ code: item.code, qty: newQty });
+            const { error: estoqueErr } = await supabase.from(getEstoqueTable()).upsert({ code: item.code, qty: newQty });
             if (estoqueErr) throw new Error(`Erro ao baixar estoque de ${item.code}: ${estoqueErr.message}`);
 
             // 2) Grava no histórico COM vlr_unit e vlr_total
-            const { error: histErr } = await supabase.from('historico').insert({
+            const { error: histErr } = await supabase.from(getHistoricoTable()).insert({
                 tipo: 'sa\u00edda',
                 code: item.code,
                 descricao: item.descricao,
@@ -629,7 +661,7 @@ async function addSaidaItem() {
     if (!code) { alert('Selecione uma peça primeiro pesquisando pela descrição.'); return; }
 
     // TRAVA DE ESTOQUE: Verifica saldo antes de adicionar
-    const { data: st } = await supabase.from('estoque').select('qty').eq('code', code).single();
+    const { data: st } = await supabase.from(getEstoqueTable()).select('qty').eq('code', code).single();
     const currentStock = st?.qty || 0;
 
     // Verifica se já tem esse item no lote atual
@@ -676,7 +708,7 @@ function openEditModal(code, desc) {
     document.getElementById('modal-desc').textContent = desc;
     document.getElementById('modal-obs').value = ''; // Limpa observação anterior
 
-    supabase.from('estoque').select('qty').eq('code', code).single().then(({ data }) => {
+    supabase.from(getEstoqueTable()).select('qty').eq('code', code).single().then(({ data }) => {
         currentEditPrevQty = data?.qty || 0;
         document.getElementById('modal-qty').value = currentEditPrevQty;
     });
@@ -707,12 +739,12 @@ async function savePriceModal() {
     if (btn) { btn.disabled = true; btn.textContent = 'Gravando...'; }
 
     try {
-        await supabase.from('estoque').upsert({ code: currentEditCode, qty });
+        await supabase.from(getEstoqueTable()).upsert({ code: currentEditCode, qty });
         await supabase.from('custos').upsert({ code: currentEditCode, last_cost: price });
 
         const formatChange = `AJUSTE MANUAL: ${obs} (Qtd: ${currentEditPrevQty} ➡️ ${qty} | Preço: R$ ${currentEditPrevPrice.toFixed(2)} ➡️ R$ ${price.toFixed(2)})`;
 
-        await supabase.from('historico').insert({
+        await supabase.from(getHistoricoTable()).insert({
             tipo: 'ajuste',
             code: currentEditCode,
             qty: qty,
@@ -743,7 +775,7 @@ async function renderHistorico() {
     const d1Str = document.getElementById('hist-d1')?.value || '';
     const d2Str = document.getElementById('hist-d2')?.value || '';
 
-    let q = supabase.from('historico').select('*').order('ts', { ascending: false }).limit(200);
+    let q = supabase.from(getHistoricoTable()).select('*').order('ts', { ascending: false }).limit(200);
 
     if (tipoF) q = q.eq('tipo', tipoF);
     if (searchQ) {
@@ -784,7 +816,7 @@ async function renderHistorico() {
 
 // --- AJUSTE DE HISTÓRICO (SOMENTE LUCAS) ---
 window.openAjusteHistorico = async (id) => {
-    const { data } = await supabase.from('historico').select('*').eq('id', id).single();
+    const { data } = await supabase.from(getHistoricoTable()).select('*').eq('id', id).single();
     if (!data) return;
 
     document.getElementById('ajuste-id').value = data.id;
@@ -813,7 +845,7 @@ window.saveAjusteHistorico = async () => {
     status.innerHTML = '⌛ Processando ajuste...';
 
     // 1. Pegar registro original
-    const { data: original } = await supabase.from('historico').select('*').eq('id', id).single();
+    const { data: original } = await supabase.from(getHistoricoTable()).select('*').eq('id', id).single();
     if (!original) return;
 
     // 2. Buscar o preço da peça (seja a antiga ou a nova)
@@ -827,16 +859,16 @@ window.saveAjusteHistorico = async () => {
         const factor = (original.tipo === 'saída' || original.tipo === 'saida') ? 1 : -1;
         
         // Atualiza estoque da peça antiga (devolvendo/revertendo)
-        const { data: stOld } = await supabase.from('estoque').select('qty').eq('code', original.code).single();
-        await supabase.from('estoque').upsert({ code: original.code, qty: (stOld?.qty || 0) + (original.qty * factor) });
+        const { data: stOld } = await supabase.from(getEstoqueTable()).select('qty').eq('code', original.code).single();
+        await supabase.from(getEstoqueTable()).upsert({ code: original.code, qty: (stOld?.qty || 0) + (original.qty * factor) });
 
         // Atualiza estoque da peça nova (retirando/aplicando)
-        const { data: stNew } = await supabase.from('estoque').select('qty').eq('code', newCode).single();
-        await supabase.from('estoque').upsert({ code: newCode, qty: (stNew?.qty || 0) - (original.qty * factor) });
+        const { data: stNew } = await supabase.from(getEstoqueTable()).select('qty').eq('code', newCode).single();
+        await supabase.from(getEstoqueTable()).upsert({ code: newCode, qty: (stNew?.qty || 0) - (original.qty * factor) });
     }
 
     // 4. Atualiza o registro original
-    const { error: errUpdate } = await supabase.from('historico').update({
+    const { error: errUpdate } = await supabase.from(getHistoricoTable()).update({
         selb: newSelb,
         code: newCode,
         vlr_unit: newPrice,
@@ -849,7 +881,7 @@ window.saveAjusteHistorico = async () => {
     }
 
     // 5. Cria registro de auditoria (TIPO AJUSTE) com os valores
-    await supabase.from('historico').insert({
+    await supabase.from(getHistoricoTable()).insert({
         tipo: 'ajuste',
         code: newCode,
         qty: original.qty,
@@ -1010,19 +1042,23 @@ window.processarXML = async (file) => {
             document.getElementById('xml-drop-area').innerHTML = `<h3 style="color:#2e7d32;text-align:center">Processando ${keys.length} itens no banco de dados... Aguarde.</h3>`;
 
             let processados = 0;
+            const targetSector = document.querySelector('input[name="xml-sector"]:checked').value;
+            const tableEstoque = targetSector === 'REMANU' ? 'estoque_remanu' : 'estoque';
+            const tableHist = targetSector === 'REMANU' ? 'historico_remanu' : 'historico';
+
             for (const code of keys) {
                 const { qty, vlrUnit } = itemsMap[code];
 
-                const { data: cur } = await supabase.from('estoque').select('qty').eq('code', code).single();
+                const { data: cur } = await supabase.from(tableEstoque).select('qty').eq('code', code).single();
                 const newQty = (cur?.qty || 0) + qty;
 
-                await supabase.from('estoque').upsert({ code, qty: newQty });
+                await supabase.from(tableEstoque).upsert({ code, qty: newQty });
                 if (vlrUnit > 0) {
                     await supabase.from('custos').upsert({ code, last_cost: vlrUnit });
                 }
 
                 if (currentUser) {
-                    await supabase.from('historico').insert({
+                    await supabase.from(tableHist).insert({
                         tipo: 'entrada', code, descricao: 'Entrada Lote XML', qty,
                         user_email: currentUser.email, dt: new Date().toLocaleString('pt-BR'),
                         vlr_unit: vlrUnit, vlr_total: vlrUnit * qty
@@ -1063,7 +1099,7 @@ window.renderMovDashboard = async () => {
     const d1 = d1El?.value || '';
     const d2 = d2El?.value || '';
 
-    let q = supabase.from('historico').select('*').order('ts', { ascending: true });
+    let q = supabase.from(getHistoricoTable()).select('*').order('ts', { ascending: true });
     if (tipoF) q = q.eq('tipo', tipoF);
     if (prodF) {
         const sq = window.formatSearchQuery(prodF);
@@ -1110,7 +1146,7 @@ window.renderMovDashboard = async () => {
     document.getElementById('mov-kpi-saldo').textContent = (totIn - totOut).toLocaleString('pt-BR');
 
     // Patrimônio Real (Independente do filtro de data)
-    const { data: currentInv } = await supabase.from('estoque').select('qty, code');
+    const { data: currentInv } = await supabase.from(getEstoqueTable()).select('qty, code');
     const { data: currentCosts } = await supabase.from('custos').select('code, last_cost');
     
     let totalVol = 0;

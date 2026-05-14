@@ -47,6 +47,9 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); font
 .btn-admin.logout { background: none; color: var(--text-muted); border: 1px solid var(--border); box-shadow: none; }
 .btn-admin.logout:hover { background: var(--red-light); color: var(--red); border-color: var(--red); }
 .badge-admin-pill { display: inline-flex; align-items: center; gap: 0.35rem; background: var(--green-light); border: 1px solid var(--green-mid); border-radius: 99px; padding: 0.25rem 0.75rem; font-size: 0.72rem; font-weight: 700; color: var(--green-dark); }
+.sector-btn { background: transparent; color: var(--text-muted); border: none; border-radius: 99px; font-family: var(--sans); font-size: 0.75rem; font-weight: 700; padding: 0.3rem 0.8rem; cursor: pointer; transition: all .2s; display: inline-flex; align-items: center; gap: 0.35rem; }
+.sector-btn:hover { color: var(--text); }
+.sector-btn.active { background: var(--white); color: var(--blue); box-shadow: var(--shadow-sm); }
 
 /* ── TABS ── */
 .tab-bar { background: var(--white); border-bottom: 1px solid var(--border); padding: 0 1.75rem; display: flex; gap: 0; flex-shrink: 0; }

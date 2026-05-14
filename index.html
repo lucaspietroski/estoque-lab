@@ -54,6 +54,10 @@
       <div class="header-subtitle">Consulte o estoque e registre entradas e saídas de componentes</div>
     </div>
     <div class="header-right">
+      <div id="sector-switcher" style="display:none; align-items: center; background: var(--surface2); border: 1px solid var(--border); border-radius: 99px; padding: 3px; gap: 2px;">
+        <button id="btn-sector-lab" class="sector-btn active" onclick="window.changeSector('LAB')">🔬 Lab</button>
+        <button id="btn-sector-remanu" class="sector-btn" onclick="window.changeSector('REMANU')">⚙️ Remanufatura</button>
+      </div>
       <div id="admin-badge" class="badge-admin-pill" style="display:none">🔒 Admin</div>
       <div id="custo-real-badge" style="display:none; align-items:center; gap:6px; background:#10b981; color:#fff; font-size:11px; font-weight:700; padding:4px 10px; border-radius:999px; letter-spacing:0.5px; animation: pulse-badge 2s infinite;">💲 CUSTO REAL</div>
       <div class="stat-pill"><span class="dot"></span><span id="stat-in-stock">0</span> em estoque</div>
@@ -568,6 +572,18 @@
       <h3 style="margin-bottom: 10px;">📥 Importação XML</h3>
       <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.4;">Selecione o arquivo XML exportado pelo Protheus. O sistema irá ler as Tags &lt;cProd&gt;, &lt;qCom&gt; e &lt;vUnCom&gt; para atualizar saldos e custos automaticamente.</p>
       
+      <div style="margin-bottom: 15px; padding: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;">
+        <div class="modal-label" style="margin-bottom: 8px;">Selecione o Setor Destino:</div>
+        <div style="display: flex; gap: 15px;">
+          <label style="display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 13px; font-weight: 600;">
+            <input type="radio" name="xml-sector" value="LAB" checked> Laboratório
+          </label>
+          <label style="display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 13px; font-weight: 600;">
+            <input type="radio" name="xml-sector" value="REMANU"> Remanufatura
+          </label>
+        </div>
+      </div>
+
       <div id="xml-drop-area" style="border: 2px dashed var(--border); padding: 20px; text-align: center; border-radius: 8px; margin-bottom: 20px;">
         <input type="file" id="xml-file-input" accept=".xml" onchange="processarXML(this.files[0])" style="display: none;">
         <label for="xml-file-input" style="cursor: pointer; color: var(--blue); font-weight: 500;">
@@ -702,6 +718,6 @@
   </div>
 </div>
 
-<script type="module" src="src/main.js?v=1.4"></script>
+<script type="module" src="src/main.js?v=1.5"></script>
 </body>
 </html>
