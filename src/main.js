@@ -1456,13 +1456,14 @@ window.renderModeloCusto = async () => {
 
         // Carregar Dados
         const [hRes, rRes, eRes] = await Promise.all([
-            supabase.from('historico').select('*').eq('tipo', 'saída'),
+            supabase.from(getHistoricoTable()).select('*').eq('tipo', 'saída'),
             supabase.from('revisados').select('*'),
             supabase.from('equipamentos').select('selb, modelo')
         ]);
 
         const saídas = hRes.data || [];
-        const revisados = rRes.data || [];
+        // A Remanufatura não utiliza a tabela de revisados do Laboratório
+        const revisados = window.currentSector === 'REMANU' ? [] : (rRes.data || []);
         const equipamentos = eRes.data || [];
 
         const eqMap = {};
