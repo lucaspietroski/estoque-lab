@@ -16,6 +16,9 @@ window.changeSector = (sector) => {
     if (btnLab) btnLab.classList.toggle('active', sector === 'LAB');
     if (btnRemanu) btnRemanu.classList.toggle('active', sector === 'REMANU');
     
+    const btnVinculos = document.getElementById('btn-remanu-vinculos');
+    if (btnVinculos) btnVinculos.style.display = sector === 'REMANU' ? 'inline-block' : 'none';
+
     // Limpa pesquisa
     const searchInp = document.getElementById('search-main');
     if (searchInp) searchInp.value = '';
@@ -628,6 +631,8 @@ async function confirmarSaida() {
         const ts = new Date().toISOString();
         
         let revision_id = null;
+        let vlr_nova_ref = null;
+
         if (window.currentSector === 'REMANU') {
             const now = new Date();
             const yyyy = now.getFullYear();
@@ -637,6 +642,15 @@ async function confirmarSaida() {
             const min = String(now.getMinutes()).padStart(2, '0');
             const ss = String(now.getSeconds()).padStart(2, '0');
             revision_id = `REV-${yyyy}${mm}${dd}-${hh}${min}${ss}`;
+
+            // Snapshot Financeiro
+            const { data: vinculo } = await supabase.from('modelos_remanu').select('codigo_nova').eq('modelo', equip.modelo).maybeSingle();
+            if (vinculo && vinculo.codigo_nova) {
+                const { data: custoNova } = await supabase.from('custos').select('last_cost').eq('code', vinculo.codigo_nova).maybeSingle();
+                if (custoNova && custoNova.last_cost) {
+                    vlr_nova_ref = custoNova.last_cost;
+                }
+            }
         }
 
         for (const item of saidaItems) {
@@ -659,9 +673,10 @@ async function confirmarSaida() {
                 ts: ts
             };
             if (revision_id) histPayload.revision_id = revision_id;
+            if (vlr_nova_ref !== null) histPayload.vlr_nova_ref = vlr_nova_ref;
 
             const { error: histErr } = await supabase.from(getHistoricoTable()).insert(histPayload);
-            if (histErr) throw new Error(`Erro ao gravar hist\u00f3rico de ${item.code}: ${histErr.message}`);
+            if (histErr) throw new Error(`Erro ao gravar histórico de ${item.code}: ${histErr.message}`);
         }
 
         alert('\u2705 Baixa conclu\u00edda!');
@@ -1586,10 +1601,15 @@ window.renderModeloCusto = async () => {
             const modelo = eqMap[selb] || 'MODELO NÃO IDENTIFICADO (' + selb + ')';
             if (query && !modelo.includes(query)) return;
 
-            if (!byModel[modelo]) byModel[modelo] = { atendimentos: 0, comPeca: new Set(), semPeca: new Set(), pecas: 0, custo: 0 };
+            if (!byModel[modelo]) byModel[modelo] = { atendimentos: 0, comPeca: new Set(), semPeca: new Set(), pecas: 0, custo: 0, vlrNovaRef: 0, vlrNovaRevs: new Set() };
             
             if (window.currentSector === 'REMANU' && s.revision_id) {
                 byModel[modelo].comPeca.add(s.revision_id);
+                // Acumula vlr_nova_ref uma vez por revision_id (não por peça)
+                if (s.vlr_nova_ref && !byModel[modelo].vlrNovaRevs.has(s.revision_id)) {
+                    byModel[modelo].vlrNovaRef += s.vlr_nova_ref;
+                    byModel[modelo].vlrNovaRevs.add(s.revision_id);
+                }
             } else {
                 byModel[modelo].comPeca.add(selb);
             }
@@ -1614,6 +1634,8 @@ window.renderModeloCusto = async () => {
 
         const rows = Object.entries(byModel).map(([modelo, d]) => {
             const totalAtend = d.comPeca.size + d.semPeca.size;
+            const economiaReal = (d.vlrNovaRef || 0) - d.custo;
+            const economiaPct = (d.vlrNovaRef || 0) > 0 ? (economiaReal / d.vlrNovaRef) * 100 : 0;
             return {
                 modelo,
                 atendimentos: totalAtend,
@@ -1621,106 +1643,174 @@ window.renderModeloCusto = async () => {
                 semPeca: d.semPeca.size,
                 pecas: d.pecas,
                 custo: d.custo,
-                custoMedio: totalAtend > 0 ? d.custo / totalAtend : 0
+                custoMedio: totalAtend > 0 ? d.custo / totalAtend : 0,
+                vlrNovaRef: d.vlrNovaRef || 0,
+                economiaReal: economiaReal,
+                economiaPct: economiaPct
             };
         }).sort((a, b) => b.custo - a.custo);
 
         const fmt = v => 'R$ ' + Number(window.adjC(v)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-        const top = rows[0];
-        const bottom = rows.length > 1 ? rows.filter(r => r.custo > 0).pop() : (rows[0] || null);
-        window.topModelData = top;
-        window.bottomModelData = bottom;
         const totalCusto = rows.reduce((s, r) => s + r.custo, 0);
         const totalAtend = rows.reduce((s, r) => s + r.atendimentos, 0);
 
-        // Atualizar Cards KPI Premium
-        document.getElementById('mod-kpi-modelos').textContent = rows.length;
-        document.getElementById('mod-kpi-modelos-label').textContent = `MODELOS ATENDIDOS (${totalAtend} MÁQUINAS)`;
-        
-        document.getElementById('mod-kpi-total').textContent = fmt(totalCusto);
-        
-        document.getElementById('mod-kpi-top').textContent = top ? top.modelo : '—';
-        document.getElementById('mod-kpi-top-val').textContent = top ? fmt(top.custo) : 'R$ 0,00';
-        
-        document.getElementById('mod-kpi-bottom').textContent = bottom ? bottom.modelo : '—';
-        document.getElementById('mod-kpi-bottom-val').textContent = bottom ? fmt(bottom.custo) : 'R$ 0,00';
-        
-        document.getElementById('mod-kpi-medio').textContent = totalAtend > 0 ? fmt(totalCusto / totalAtend) : 'R$ 0,00';
+        if (window.currentSector === 'REMANU') {
+            document.getElementById('kpi-container-lab').style.display = 'none';
+            document.getElementById('kpi-container-remanu').style.display = 'flex';
+            
+            const totalEconomia = rows.reduce((s, r) => s + r.economiaReal, 0);
+            const totalNova = rows.reduce((s, r) => s + r.vlrNovaRef, 0);
+            const mediaEconomiaPct = totalNova > 0 ? (totalEconomia / totalNova) * 100 : 0;
+            const modelosComEconomia = rows.filter(r => r.vlrNovaRef > 0).sort((a, b) => b.economiaPct - a.economiaPct);
+            const melhorModelo = modelosComEconomia.length > 0 ? modelosComEconomia[0].modelo : '-';
 
-        // Tabela Compacta
-        const tbody = document.getElementById('mod-tbody');
-        tbody.innerHTML = rows.slice(0, 50).map(r => `
-            <tr>
-                <td style="font-size: 13px; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${r.modelo}</td>
-                <td style="text-align:center; font-family: var(--mono);">${r.atendimentos}</td>
-                <td style="text-align:center; font-family: var(--mono);">${r.pecas}</td>
-                <td style="text-align:right; font-family: var(--mono); font-weight: bold;">${fmt(r.custo)}</td>
-            </tr>
-        `).join('');
+            document.getElementById('remanu-kpi-economia').textContent = fmt(totalEconomia);
+            document.getElementById('remanu-kpi-percentual').textContent = mediaEconomiaPct.toFixed(1) + '%';
+            document.getElementById('remanu-kpi-melhor').textContent = melhorModelo.length > 25 ? melhorModelo.substring(0,25)+'...' : melhorModelo;
+
+            // Render Table for Remanu
+            document.getElementById('mod-thead-tr').innerHTML = `
+                <th style="text-align: left; padding: 12px;">Modelo</th>
+                <th class="text-center" style="padding: 12px;">Revisões</th>
+                <th style="text-align: right; padding: 12px;">Custo Revisão</th>
+                <th style="text-align: right; padding: 12px;">Preço Nova (Ref)</th>
+                <th style="text-align: right; padding: 12px;">Economia Gerada</th>
+            `;
+            document.getElementById('mod-tbody').innerHTML = rows.slice(0, 50).map(r => `
+                <tr style="cursor:default">
+                    <td style="font-size: 13px; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><strong>${r.modelo}</strong></td>
+                    <td class="text-center" style="font-family: var(--mono);">${r.atendimentos}</td>
+                    <td style="text-align:right; font-family: var(--mono);">${fmt(r.custo)}</td>
+                    <td style="text-align:right; font-family: var(--mono);">${fmt(r.vlrNovaRef)}</td>
+                    <td style="text-align:right; font-family: var(--mono); font-weight: bold; color: ${r.economiaReal > 0 ? 'var(--green)' : (r.economiaReal < 0 ? 'var(--red)' : 'var(--text)')}">
+                        ${fmt(r.economiaReal)} (${r.economiaPct.toFixed(1)}%)
+                    </td>
+                </tr>
+            `).join('');
+
+        } else {
+            document.getElementById('kpi-container-lab').style.display = 'grid';
+            document.getElementById('kpi-container-remanu').style.display = 'none';
+
+            const top = rows[0];
+            const bottom = rows.length > 1 ? rows.filter(r => r.custo > 0).pop() : (rows[0] || null);
+            window.topModelData = top;
+            window.bottomModelData = bottom;
+
+            // Atualizar Cards KPI Premium
+            document.getElementById('mod-kpi-modelos').textContent = rows.length;
+            document.getElementById('mod-kpi-modelos-label').textContent = `MODELOS ATENDIDOS (${totalAtend} MÁQUINAS)`;
+            document.getElementById('mod-kpi-total').textContent = fmt(totalCusto);
+            document.getElementById('mod-kpi-top').textContent = top ? top.modelo : '—';
+            document.getElementById('mod-kpi-top-val').textContent = top ? fmt(top.custo) : 'R$ 0,00';
+            document.getElementById('mod-kpi-bottom').textContent = bottom ? bottom.modelo : '—';
+            document.getElementById('mod-kpi-bottom-val').textContent = bottom ? fmt(bottom.custo) : 'R$ 0,00';
+            document.getElementById('mod-kpi-medio').textContent = totalAtend > 0 ? fmt(totalCusto / totalAtend) : 'R$ 0,00';
+
+            // Tabela Compacta
+            document.getElementById('mod-thead-tr').innerHTML = `
+                <th style="text-align: left; padding: 12px;">Modelo</th>
+                <th class="text-center" style="padding: 12px;">Atendimentos</th>
+                <th class="text-center" style="padding: 12px;">Peças Usadas</th>
+                <th style="text-align: right; padding: 12px;">Custo Total</th>
+            `;
+            document.getElementById('mod-tbody').innerHTML = rows.slice(0, 50).map(r => `
+                <tr>
+                    <td style="font-size: 13px; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${r.modelo}</td>
+                    <td style="text-align:center; font-family: var(--mono);">${r.atendimentos}</td>
+                    <td style="text-align:center; font-family: var(--mono);">${r.pecas}</td>
+                    <td style="text-align:right; font-family: var(--mono); font-weight: bold;">${fmt(r.custo)}</td>
+                </tr>
+            `).join('');
+        }
 
         // GRÁFICO TOP 10 (POR CUSTO MÉDIO)
         if (chartModelo) chartModelo.destroy();
         const ctx = document.getElementById('chart-modelo')?.getContext('2d');
         if (ctx) {
-            const top10 = [...rows].sort((a,b) => b.custoMedio - a.custoMedio).slice(0, 10);
-            
-            // Gradiente do Vermelho ao Verde
-            const barColors = [
-                '#ef4444', '#f87171', '#fb923c', '#fbbf24', '#facc15',
-                '#eab308', '#d9f99d', '#a3e635', '#84cc16', '#22c55e'
-            ];
+            if (window.currentSector === 'REMANU') {
+                const topEconomia = rows.filter(r => r.vlrNovaRef > 0).sort((a, b) => b.economiaReal - a.economiaReal).slice(0, 10);
+                document.querySelector('.chart-header').textContent = '💰 TOP 10 MODELOS COM MAIOR ECONOMIA GERADA';
+                
+                chartModelo = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: topEconomia.map(r => r.modelo.length > 35 ? r.modelo.substring(0, 35) + '...' : r.modelo),
+                        datasets: [{
+                            label: 'Economia (R$)',
+                            data: topEconomia.map(r => r.economiaReal),
+                            backgroundColor: '#10b981',
+                            borderRadius: 8,
+                            maxBarThickness: 30
+                        }]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        maintainAspectRatio: false
+                    }
+                });
+            } else {
+                document.querySelector('.chart-header').textContent = '💰 TOP 10 MODELOS POR CUSTO MÉDIO POR REVISÃO (GERAL)';
+                const top10 = [...rows].sort((a,b) => b.custoMedio - a.custoMedio).slice(0, 10);
+                
+                const barColors = [
+                    '#ef4444', '#f87171', '#fb923c', '#fbbf24', '#facc15',
+                    '#eab308', '#d9f99d', '#a3e635', '#84cc16', '#22c55e'
+                ];
 
-            chartModelo = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: top10.map(r => r.modelo.length > 35 ? r.modelo.substring(0, 35) + '...' : r.modelo),
-                    datasets: [{
-                        label: 'Custo Médio (R$)',
-                        data: top10.map(r => r.custoMedio),
-                        backgroundColor: top10.map((_, i) => barColors[i] || '#64748b'),
-                        borderRadius: 8,
-                        maxBarThickness: 30
-                    }]
-                },
-                options: {
-                    indexAxis: 'y',
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    onClick: (e, activeEls) => {
-                        if (activeEls && activeEls.length > 0) {
-                            const idx = activeEls[0].index;
-                            const model = top10[idx];
-                            if (model) {
-                                window.openDetalheModelo(model);
+                chartModelo = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: top10.map(r => r.modelo.length > 35 ? r.modelo.substring(0, 35) + '...' : r.modelo),
+                        datasets: [{
+                            label: 'Custo Médio (R$)',
+                            data: top10.map(r => r.custoMedio),
+                            backgroundColor: top10.map((_, i) => barColors[i] || '#64748b'),
+                            borderRadius: 8,
+                            maxBarThickness: 30
+                        }]
+                    },
+                    options: {
+                        indexAxis: 'y',
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        onClick: (e, activeEls) => {
+                            if (activeEls && activeEls.length > 0) {
+                                const idx = activeEls[0].index;
+                                const model = top10[idx];
+                                if (model) {
+                                    window.openDetalheModelo(model);
+                                }
                             }
-                        }
-                    },
-                    onHover: (e, activeEls) => {
-                        if (e.chart) {
-                            e.chart.canvas.style.cursor = activeEls.length > 0 ? 'pointer' : 'default';
-                        }
-                    },
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                label: (ctx) => `Média: ${fmt(ctx.raw)}`
-                            }
-                        }
-                    },
-                    scales: {
-                        x: { 
-                            beginAtZero: true, 
-                            grid: { display: false },
-                            ticks: { font: { size: 10 } }
                         },
-                        y: { 
-                            grid: { display: false },
-                            ticks: { font: { size: 11, weight: '600' }, color: '#1e293b' }
+                        onHover: (e, activeEls) => {
+                            if (e.chart) {
+                                e.chart.canvas.style.cursor = activeEls.length > 0 ? 'pointer' : 'default';
+                            }
+                        },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: (ctx) => `Média: ${fmt(ctx.raw)}`
+                                }
+                            }
+                        },
+                        scales: {
+                            x: { 
+                                beginAtZero: true, 
+                                grid: { display: false },
+                                ticks: { font: { size: 10 } }
+                            },
+                            y: { 
+                                grid: { display: false },
+                                ticks: { font: { size: 11, weight: '600' }, color: '#1e293b' }
+                            }
                         }
                     }
-                }
-            });
+                });
+            }
         }
     } catch (e) { console.error('❌ Erro Relatório Custo:', e); }
 };
@@ -1809,3 +1899,78 @@ document.getElementById('modal-detalhe-modelo')?.addEventListener('click', (e) =
 
 // --- INICIALIZAÇÃO ---
 init();
+
+// --- VÍNCULOS REMANUFATURA ---
+window.openVinculosRemanu = async () => {
+    document.getElementById('modal-vinculos-remanu').classList.add('open');
+    const combo = document.getElementById('vinc-modelo');
+    
+    combo.innerHTML = '<option value="">Aguarde, carregando modelos...</option>';
+    const { data: equip } = await supabase.from('equipamentos').select('modelo').order('modelo');
+    if (equip) {
+        const unique = [...new Set(equip.map(e => e.modelo))];
+        combo.innerHTML = '<option value="">Selecione o Modelo</option>' + unique.map(m => `<option value="${m}">${m}</option>`).join('');
+    }
+    
+    await carregarVinculosRemanu();
+};
+
+window.salvarVinculoRemanu = async () => {
+    const btn = document.getElementById('btn-salvar-vinculo');
+    const modelo = document.getElementById('vinc-modelo').value;
+    const codNova = document.getElementById('vinc-nova').value.trim().toUpperCase();
+    const codRS = document.getElementById('vinc-rs').value.trim().toUpperCase();
+
+    if (!modelo || !codNova || !codRS) {
+        alert('Preencha todos os campos!');
+        return;
+    }
+
+    btn.disabled = true;
+    btn.textContent = 'Salvando...';
+
+    const { error } = await supabase.from('modelos_remanu').upsert({
+        modelo: modelo,
+        codigo_nova: codNova,
+        codigo_rs: codRS
+    }, { onConflict: 'modelo' });
+    
+    btn.disabled = false;
+    btn.textContent = 'Salvar Vínculo';
+
+    if (error) {
+        alert('Erro ao salvar: ' + error.message);
+    } else {
+        document.getElementById('vinc-nova').value = '';
+        document.getElementById('vinc-rs').value = '';
+        await carregarVinculosRemanu();
+    }
+};
+
+window.carregarVinculosRemanu = async () => {
+    const tbody = document.getElementById('tbody-vinculos-remanu');
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center">Aguarde...</td></tr>';
+    
+    const { data, error } = await supabase.from('modelos_remanu').select('*').order('modelo');
+    if (error || !data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center">Nenhum vínculo cadastrado.</td></tr>';
+        return;
+    }
+    
+    tbody.innerHTML = data.map(v => `
+        <tr>
+            <td style="font-size: 11px;">${v.modelo}</td>
+            <td class="text-center" style="font-weight: 500">${v.codigo_nova}</td>
+            <td class="text-center" style="color: var(--primary); font-weight: 500">${v.codigo_rs}</td>
+            <td class="text-center">
+                <button class="btn-cancel" onclick="deletarVinculoRemanu('${v.id}')" style="padding: 3px 8px; font-size: 11px;">Excluir</button>
+            </td>
+        </tr>
+    `).join('');
+};
+
+window.deletarVinculoRemanu = async (id) => {
+    if (!confirm('Deseja excluir este vínculo?')) return;
+    await supabase.from('modelos_remanu').delete().eq('id', id);
+    await carregarVinculosRemanu();
+};

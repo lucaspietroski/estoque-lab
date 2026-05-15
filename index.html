@@ -323,6 +323,7 @@
           <input type="date" id="mod-d2" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); font-size: 13px;">
         </div>
         <button class="btn-cancel" onclick="clearModFilters()" style="padding: 8px 15px; border-radius: 8px; font-size: 16px;">✕</button>
+        <button class="btn-cancel" id="btn-remanu-vinculos" onclick="openVinculosRemanu()" style="display:none; padding: 10px 15px; border-radius: 8px; font-size: 13px; font-weight: bold;">🔗 Vincular Fusões</button>
         <button class="btn-confirm" onclick="renderModeloCusto()" style="padding: 10px 25px; border-radius: 8px;">Gerar Relatório</button>
       </div>
 
@@ -330,7 +331,7 @@
       <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 25px;">
         
         <!-- Coluna da Esquerda: Cards KPI -->
-        <div class="mod-kpi-list">
+        <div class="mod-kpi-list" id="kpi-container-lab">
           <div class="mod-kpi-item c-atend">
             <div class="mod-kpi-icon">📠</div>
             <div class="mod-kpi-content">
@@ -379,6 +380,33 @@
           <button class="btn-saida-lote" onclick="exportarRelatorioModelo()" style="margin-top: 10px; width: 100%; justify-content: center;">📥 Exportar Relatório Excel</button>
         </div>
 
+        <div class="mod-kpi-list" id="kpi-container-remanu" style="display:none;">
+          <div class="mod-kpi-item c-atend" style="border-left-color: #10b981;">
+            <div class="mod-kpi-icon" style="color:#10b981;">💰</div>
+            <div class="mod-kpi-content">
+              <div class="mod-kpi-label">ECONOMIA GERADA TOTAL</div>
+              <div class="mod-kpi-value" id="remanu-kpi-economia" style="color:#10b981">R$ 0,00</div>
+              <div class="mod-kpi-sub">margem real de lucro</div>
+            </div>
+          </div>
+          <div class="mod-kpi-item c-pecas" style="border-left-color: #3b82f6;">
+            <div class="mod-kpi-icon" style="color:#3b82f6;">📈</div>
+            <div class="mod-kpi-content">
+              <div class="mod-kpi-label">MARGEM MÉDIA DE ECONOMIA</div>
+              <div class="mod-kpi-value" id="remanu-kpi-percentual" style="color:#3b82f6">0%</div>
+              <div class="mod-kpi-sub">economia vs nova</div>
+            </div>
+          </div>
+          <div class="mod-kpi-item c-custo" style="border-left-color: #f59e0b;">
+            <div class="mod-kpi-icon" style="color:#f59e0b;">🏆</div>
+            <div class="mod-kpi-content">
+              <div class="mod-kpi-label">MODELO MAIS ECONÔMICO</div>
+              <div class="mod-kpi-value" id="remanu-kpi-melhor" style="font-size: 1.2rem; line-height: 1.3">-</div>
+              <div class="mod-kpi-sub">maior % de margem</div>
+            </div>
+          </div>
+        </div>
+
         <!-- Coluna da Direita: Gráfico e Tabela -->
         <div>
           <div class="chart-container-premium">
@@ -393,11 +421,12 @@
             <div class="table-wrap" style="max-height: 400px; overflow-y: auto;">
               <table class="dash-table">
                 <thead>
-                  <tr>
-                    <th>Modelo</th>
-                    <th style="text-align:center">Atend.</th>
-                    <th style="text-align:center">Peças</th>
-                    <th style="text-align:right">Total</th>
+                  <tr id="mod-thead-tr">
+                    <th style="text-align: left; padding: 12px;">Modelo</th>
+                    <th class="text-center" style="padding: 12px;">Atendimentos</th>
+                    <th class="text-center" style="padding: 12px;">Peças Usadas</th>
+                    <th style="text-align: right; padding: 12px;">Custo Total</th>
+                    <th style="text-align: right; padding: 12px;">Média p/ Atend.</th>
                   </tr>
                 </thead>
                 <tbody id="mod-tbody"></tbody>
