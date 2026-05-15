@@ -157,6 +157,18 @@ async function init() {
         if (!infoDiv) return;
 
         if (selb.length === 4) {
+            // Validação Remanufatura
+            if (window.currentSector === 'REMANU') {
+                const allowed = ['RI43', 'RK55', 'RI37', 'KY40'];
+                if (!allowed.includes(selb)) {
+                    infoDiv.style.display = 'block';
+                    infoDiv.style.background = '#fee2e2';
+                    infoDiv.style.color = '#991b1b';
+                    infoDiv.innerHTML = `⚠️ SELB Bloqueado! A Remanufatura só pode utilizar: ${allowed.join(', ')}`;
+                    return;
+                }
+            }
+
             infoDiv.style.display = 'block';
             infoDiv.style.background = 'var(--bg-hover)';
             infoDiv.style.color = 'var(--text-muted)';
@@ -584,6 +596,14 @@ document.addEventListener('click', (e) => {
 async function confirmarSaida() {
     const selb = document.getElementById('saida-selb').value.trim().toUpperCase();
     if (selb.length !== 4 || !saidaItems.length) { alert('Verifique o SELB e as peças.'); return; }
+
+    if (window.currentSector === 'REMANU') {
+        const allowed = ['RI43', 'RK55', 'RI37', 'KY40'];
+        if (!allowed.includes(selb)) {
+            alert(`❌ SELB Inválido para a Remanufatura!\n\nEste setor está restrito aos seguintes modelos:\n${allowed.join(', ')}`);
+            return;
+        }
+    }
 
     const btn = document.getElementById('saida-confirm-btn');
     btn.disabled = true; btn.textContent = 'Verificando SELB...';
