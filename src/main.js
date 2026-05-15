@@ -1052,17 +1052,21 @@ window.processarXML = async (file) => {
                 const { data: cur } = await supabase.from(tableEstoque).select('qty').eq('code', code).single();
                 const newQty = (cur?.qty || 0) + qty;
 
-                await supabase.from(tableEstoque).upsert({ code, qty: newQty });
+                const { error: errEst } = await supabase.from(tableEstoque).upsert({ code, qty: newQty });
+                if (errEst) throw new Error(`Estoque: ${errEst.message}`);
+                
                 if (vlrUnit > 0) {
-                    await supabase.from('custos').upsert({ code, last_cost: vlrUnit });
+                    const { error: errCust } = await supabase.from('custos').upsert({ code, last_cost: vlrUnit });
+                    if (errCust) throw new Error(`Custos: ${errCust.message}`);
                 }
 
                 if (currentUser) {
-                    await supabase.from(tableHist).insert({
+                    const { error: errHist } = await supabase.from(tableHist).insert({
                         tipo: 'entrada', code, descricao: 'Entrada Lote XML', qty,
                         user_email: currentUser.email, dt: new Date().toLocaleString('pt-BR'),
                         vlr_unit: vlrUnit, vlr_total: vlrUnit * qty
                     });
+                    if (errHist) throw new Error(`Histórico: ${errHist.message}`);
                 }
                 processados++;
             }
