@@ -626,6 +626,18 @@ async function confirmarSaida() {
 
     try {
         const ts = new Date().toISOString();
+        
+        let revision_id = null;
+        if (window.currentSector === 'REMANU') {
+            const now = new Date();
+            const yyyy = now.getFullYear();
+            const mm = String(now.getMonth() + 1).padStart(2, '0');
+            const dd = String(now.getDate()).padStart(2, '0');
+            const hh = String(now.getHours()).padStart(2, '0');
+            const min = String(now.getMinutes()).padStart(2, '0');
+            const ss = String(now.getSeconds()).padStart(2, '0');
+            revision_id = `REV-${yyyy}${mm}${dd}-${hh}${min}${ss}`;
+        }
 
         for (const item of saidaItems) {
             // 1) Baixa o estoque
@@ -635,8 +647,8 @@ async function confirmarSaida() {
             if (estoqueErr) throw new Error(`Erro ao baixar estoque de ${item.code}: ${estoqueErr.message}`);
 
             // 2) Grava no histórico COM vlr_unit e vlr_total
-            const { error: histErr } = await supabase.from(getHistoricoTable()).insert({
-                tipo: 'sa\u00edda',
+            const histPayload = {
+                tipo: 'saída',
                 code: item.code,
                 descricao: item.descricao,
                 qty: item.qty,
@@ -645,7 +657,10 @@ async function confirmarSaida() {
                 selb: selb,
                 user_email: currentUser.email,
                 ts: ts
-            });
+            };
+            if (revision_id) histPayload.revision_id = revision_id;
+
+            const { error: histErr } = await supabase.from(getHistoricoTable()).insert(histPayload);
             if (histErr) throw new Error(`Erro ao gravar hist\u00f3rico de ${item.code}: ${histErr.message}`);
         }
 
@@ -808,8 +823,65 @@ async function renderHistorico() {
     const { data } = await q;
     if (!data) return;
 
-    document.getElementById('hist-count').textContent = `${data.length} registros (limite de visualização)`;
-    tbody.innerHTML = data.map(h => `
+    let displayData = [];
+    
+    if (window.currentSector === 'REMANU') {
+        const grouped = {};
+        for (const h of data) {
+            if (h.revision_id) {
+                if (!grouped[h.revision_id]) {
+                    grouped[h.revision_id] = {
+                        isGroup: true,
+                        revision_id: h.revision_id,
+                        ts: h.ts,
+                        tipo: h.tipo,
+                        selb: h.selb,
+                        user_email: h.user_email,
+                        vlr_total: 0,
+                        items: []
+                    };
+                }
+                grouped[h.revision_id].vlr_total += (h.vlr_total || 0);
+                grouped[h.revision_id].items.push(h);
+            } else {
+                displayData.push(h);
+            }
+        }
+        for (const key in grouped) displayData.push(grouped[key]);
+        displayData.sort((a, b) => new Date(b.ts) - new Date(a.ts));
+    } else {
+        displayData = data;
+    }
+
+    document.getElementById('hist-count').textContent = `${displayData.length} registros (limite de visualização)`;
+
+    tbody.innerHTML = displayData.map(h => {
+        if (h.isGroup) {
+            return `
+            <tr style="background-color: var(--bg-hover);">
+                <td>${new Date(h.ts).toLocaleString()}</td>
+                <td class="td-code" style="font-size: 0.75rem; color: var(--primary)">${h.revision_id}</td>
+                <td>
+                    <span class="hist-badge badge-saida" style="background:#6366f1; color:white">REVISÃO</span>
+                </td>
+                <td class="text-center">${h.items.length} itens</td>
+                <td style="text-align:right; color: var(--text-muted)">-</td>
+                <td style="text-align:right; font-weight: bold;">${h.vlr_total ? 'R$ ' + window.adjC(h.vlr_total).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-'}</td>
+                <td>${h.user_email?.split('@')[0] || ''}</td>
+                <td style="font-size: 0.85rem;">
+                    <strong>${h.selb || ''}</strong>
+                    <details style="margin-top: 5px; cursor: pointer;">
+                        <summary style="color: var(--primary); font-weight: 500; font-size: 0.75rem;">Ver Peças (${h.items.length})</summary>
+                        <ul style="margin: 5px 0; padding-left: 15px; font-size: 0.7rem; color: var(--text-muted);">
+                            ${h.items.map(i => `<li>${i.code} (Qtd: ${i.qty}) - R$ ${window.adjC(i.vlr_total).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</li>`).join('')}
+                        </ul>
+                    </details>
+                </td>
+                <td></td>
+            </tr>`;
+        }
+
+        return `
         <tr>
             <td>${new Date(h.ts).toLocaleString()}</td>
             <td class="td-code">${h.code}</td>
@@ -830,8 +902,8 @@ async function renderHistorico() {
             <td>
                 ${currentUser.email === 'lucas.araujo@selbetti.com.br' ? `<button class="btn-edit-hist" onclick="openAjusteHistorico('${h.id}')" title="Ajustar Registro">✏️</button>` : ''}
             </td>
-        </tr>
-    `).join('');
+        </tr>`;
+    }).join('');
 }
 
 // --- AJUSTE DE HISTÓRICO (SOMENTE LUCAS) ---
@@ -1515,7 +1587,13 @@ window.renderModeloCusto = async () => {
             if (query && !modelo.includes(query)) return;
 
             if (!byModel[modelo]) byModel[modelo] = { atendimentos: 0, comPeca: new Set(), semPeca: new Set(), pecas: 0, custo: 0 };
-            byModel[modelo].comPeca.add(selb);
+            
+            if (window.currentSector === 'REMANU' && s.revision_id) {
+                byModel[modelo].comPeca.add(s.revision_id);
+            } else {
+                byModel[modelo].comPeca.add(selb);
+            }
+            
             byModel[modelo].pecas += (s.qty || 1);
             byModel[modelo].custo += (s.vlr_total || 0);
         });
