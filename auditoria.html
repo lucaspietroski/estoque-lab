@@ -1,146 +1,165 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
   <meta charset="UTF-8">
-  <title>Auditoria Firebase vs Supabase</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Auditoria de Inventário | Fast Check</title>
+  <link rel="stylesheet" href="style.css">
   <style>
-    body { font-family: system-ui; background: #111; color: #fff; padding: 40px; }
-    h1 { color: #60a5fa; }
-    #log { background: #000; padding: 20px; font-family: monospace; border-radius: 8px; white-space: pre-wrap; margin-top: 20px;}
-    .btn { background: #3b82f6; color: white; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer; font-weight: bold; }
+    :root {
+      --bg: #f8fafc;
+      --card: #ffffff;
+      --green: #10b981;
+      --red: #ef4444;
+      --blue: #3b82f6;
+    }
+    body { background: var(--bg); font-family: 'Inter', sans-serif; padding: 20px; }
+    .audit-container { max-width: 1000px; margin: 0 auto; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+    .input-section { background: white; padding: 25px; border-radius: 12px; margin-bottom: 25px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); text-align: center; }
+    #bipador { width: 100%; max-width: 400px; padding: 15px; font-size: 18px; border: 2px solid var(--blue); border-radius: 8px; outline: none; text-align: center; }
+    .results-section { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+    .status-badge { padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: bold; text-transform: uppercase; }
+    .status-ok { background: #dcfce7; color: #166534; }
+    .status-error { background: #fee2e2; color: #991b1b; }
+    .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-bottom: 25px; }
+    .stat-card { background: white; padding: 20px; border-radius: 12px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .stat-val { font-size: 24px; font-weight: 800; margin-top: 5px; }
+    .btn-reset { background: var(--red); color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; font-weight: 600; }
   </style>
 </head>
 <body>
 
-  <h1>Auditoria de Migração</h1>
-  <p>Este script acessa o Supabase para comparar os dados.</p>
-  
-  <div style="background: #222; padding: 20px; border-radius: 8px; margin-bottom: 20px;">
-    <h3>Fazer Login no Sistema</h3>
-    <input type="text" id="email" placeholder="Seu email de admin" style="padding: 8px; margin-right: 10px; border-radius: 4px; border: 1px solid #444; background: #111; color: white;">
-    <input type="password" id="senha" placeholder="Sua senha" style="padding: 8px; margin-right: 10px; border-radius: 4px; border: 1px solid #444; background: #111; color: white;">
-    <button class="btn" onclick="iniciarAuditoria()">Iniciar Auditoria</button>
+<div class="audit-container">
+  <div class="header">
+    <div>
+      <h1 style="margin:0; font-size: 22px;">🔍 Auditoria de Inventário</h1>
+      <p style="margin:5px 0 0; color: #64748b; font-size: 14px;">Compare o estoque físico com o sistema em tempo real</p>
+    </div>
+    <button class="btn-reset" onclick="resetAudit()">Zerar Auditoria</button>
   </div>
 
-  <div id="log">Aguardando início...</div>
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div style="font-size: 12px; color: #64748b; font-weight: 700;">ITENS CONFERIDOS</div>
+      <div class="stat-val" id="total-itens">0</div>
+    </div>
+    <div class="stat-card" style="border-bottom: 4px solid var(--green);">
+      <div style="font-size: 12px; color: #64748b; font-weight: 700;">CONCORDANTES (OK)</div>
+      <div class="stat-val" id="total-ok" style="color: var(--green);">0</div>
+    </div>
+    <div class="stat-card" style="border-bottom: 4px solid var(--red);">
+      <div style="font-size: 12px; color: #64748b; font-weight: 700;">DIVERGENTES (ERRO)</div>
+      <div class="stat-val" id="total-error" style="color: var(--red);">0</div>
+    </div>
+  </div>
 
-  <!-- FIREBASE -->
-  <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-app.js";
-    import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/10.10.0/firebase-firestore.js";
-    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+  <div class="input-section">
+    <label style="display:block; margin-bottom: 10px; font-weight: 700; color: #1e293b;">BIPE O CÓDIGO DA PEÇA</label>
+    <input type="text" id="bipador" placeholder="Aguardando bipagem..." autofocus>
+    <p style="margin-top: 15px; font-size: 12px; color: #94a3b8;">Dica: O sistema acumula a quantidade automaticamente a cada bipagem.</p>
+  </div>
 
-    const firebaseConfig = {
-      apiKey: "AIzaSyAjxhYEf5z_BG_ciqPQUuqW8ar1VKrjJfk",
-      authDomain: "estoque-laboratorio.firebaseapp.com",
-      projectId: "estoque-laboratorio",
-      storageBucket: "estoque-laboratorio.firebasestorage.app",
-      messagingSenderId: "358346799293",
-      appId: "1:358346799293:web:93a51ede8e17082a2e9fd4",
-      measurementId: "G-THZPKPPT3S"
-    };
+  <div class="results-section">
+    <table class="data-table" style="width: 100%;">
+      <thead>
+        <tr>
+          <th style="text-align: left;">Código</th>
+          <th style="text-align: center;">Físico (Bipado)</th>
+          <th style="text-align: center;">Sistema (Saldo)</th>
+          <th style="text-align: center;">Diferença</th>
+          <th style="text-align: center;">Status</th>
+        </tr>
+      </thead>
+      <tbody id="audit-tbody">
+        <tr><td colspan="5" style="text-align: center; padding: 40px; color: #94a3b8;">Nenhuma peça bipada ainda.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
 
-    const supabaseUrl = 'https://idpmrjjalhnpsxpfugph.supabase.co';
-    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkcG1yamphbGhucHN4cGZ1Z3BoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NjU2NjcsImV4cCI6MjA5MzI0MTY2N30.L4hV7YM9yjdOOW9zBl84L-1si2DU8nBI3J1WgmW02lY';
+<script type="module">
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
 
-    const app = initializeApp(firebaseConfig);
-    const db = getFirestore(app);
-    const supabase = createClient(supabaseUrl, supabaseAnonKey);
+  const SUPABASE_URL = 'https://idpmrjjalhnpsxpfugph.supabase.co';
+  const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkcG1yamphbGhucHN4cGZ1Z3BoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NjU2NjcsImV4cCI6MjA5MzI0MTY2N30.L4hV7YM9yjdOOW9zBl84L-1si2DU8nBI3J1WgmW02lY';
 
-    const logEl = document.getElementById('log');
-    function appendLog(text) { logEl.textContent += text + '\n'; }
+  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-    async function iniciarAuditoria() {
-      const email = document.getElementById('email').value.trim();
-      const senha = document.getElementById('senha').value;
+  let scanData = {}; // { 'CODIGO': { fisico: 0, sistema: 0 } }
 
-      logEl.textContent = 'Verificando login...\n';
-      let session = null;
-      const { data: sessionData } = await supabase.auth.getSession();
-      
-      if (sessionData && sessionData.session) {
-          session = sessionData.session;
-      } else {
-          if (!email || !senha) {
-              appendLog('❌ ERRO: Por favor, digite seu email e senha de administrador para poder ler o banco.');
-              return;
-          }
-          appendLog('Tentando fazer login com: ' + email + '...');
-          const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password: senha });
-          if (authError) {
-              appendLog('❌ ERRO AO LOGAR: ' + authError.message);
-              return;
-          }
-          session = authData.session;
+  const bipador = document.getElementById('bipador');
+
+  bipador.addEventListener('keypress', async (e) => {
+    if (e.key === 'Enter') {
+      const code = bipador.value.trim().toUpperCase();
+      if (code) {
+        await processCode(code);
       }
-
-      appendLog('✅ Autenticado como: ' + session.user.email);
-      appendLog('\n📦 Coletando dados do Firebase (pode demorar alguns segundos)...');
-      
-      try {
-          const fbCustosSnap = await getDocs(collection(db, "custos"));
-          const fbEstoqueSnap = await getDocs(collection(db, "estoque"));
-
-          const fbCustos = {};
-          fbCustosSnap.docs.forEach(d => fbCustos[d.id] = d.data().lastCost || 0);
-          const fbEstoque = {};
-          fbEstoqueSnap.docs.forEach(d => fbEstoque[d.id] = d.data().qty || 0);
-
-          appendLog(`   - Firebase: ${Object.keys(fbCustos).length} preços e ${Object.keys(fbEstoque).length} saldos.`);
-          appendLog('\n📦 Coletando dados do Supabase...');
-
-          const { data: sbCustosData } = await supabase.from('custos').select('*');
-          const { data: sbEstoqueData } = await supabase.from('estoque').select('*');
-
-          const sbCustos = {};
-          (sbCustosData || []).forEach(d => sbCustos[d.code] = d.last_cost || 0);
-          const sbEstoque = {};
-          (sbEstoqueData || []).forEach(d => sbEstoque[d.code] = d.qty || 0);
-
-          appendLog(`   - Supabase: ${Object.keys(sbCustos).length} preços e ${Object.keys(sbEstoque).length} saldos.`);
-
-          const faltaCustos = [];
-          const diferencaCustos = [];
-          const faltaEstoque = [];
-
-          for (const [code, fCost] of Object.entries(fbCustos)) {
-              if (sbCustos[code] === undefined) faltaCustos.push(code);
-              else if (Math.abs(sbCustos[code] - fCost) > 0.01) diferencaCustos.push(code);
-          }
-
-          for (const [code, fQty] of Object.entries(fbEstoque)) {
-              if (sbEstoque[code] === undefined) faltaEstoque.push(code);
-          }
-
-          appendLog('\n================ RELATÓRIO ================');
-          
-          if (faltaCustos.length === 0 && diferencaCustos.length === 0) {
-              appendLog('✅ SUCESSO: Todos os preços (custos) do Firebase migraram perfeitamente!');
-          } else {
-              appendLog(`❌ ALERTA: Faltam ${faltaCustos.length} preços no Supabase.`);
-              if (diferencaCustos.length > 0) appendLog(`❌ ALERTA: Existem ${diferencaCustos.length} preços diferentes.`);
-          }
-
-          if (faltaEstoque.length === 0) {
-              appendLog('✅ SUCESSO: Todos os códigos com saldo no Firebase estão no Supabase!');
-          } else {
-              appendLog(`❌ ALERTA: Faltam ${faltaEstoque.length} saldos no Supabase.`);
-          }
-          
-          appendLog('===========================================');
-          
-          if (faltaCustos.length > 0 || faltaEstoque.length > 0) {
-              appendLog('\n🚨 ITENS FALTANDO NO ESTOQUE (CÓDIGOS):');
-              appendLog(faltaEstoque.join(', '));
-              appendLog('\n🚨 ITENS FALTANDO NO CUSTO (CÓDIGOS):');
-              appendLog(faltaCustos.join(', '));
-          }
-
-      } catch (err) {
-          appendLog('❌ ERRO DURANTE AUDITORIA: ' + err.message);
-      }
+      bipador.value = '';
     }
-    window.iniciarAuditoria = iniciarAuditoria;
-  </script>
+  });
+
+  async function processCode(code) {
+    // 1. Incrementa físico
+    if (!scanData[code]) {
+      scanData[code] = { fisico: 0, sistema: 0 };
+      // Busca saldo no sistema (LAB e REMANU)
+      const { data: lab } = await supabase.from('estoque').select('qty').eq('code', code).maybeSingle();
+      const { data: remanu } = await supabase.from('estoque_remanu').select('qty').eq('code', code).maybeSingle();
+      
+      const saldoLab = lab?.qty || 0;
+      const saldoRemanu = remanu?.qty || 0;
+      scanData[code].sistema = saldoLab + saldoRemanu;
+    }
+    
+    scanData[code].fisico += 1;
+    renderAudit();
+  }
+
+  function renderAudit() {
+    const tbody = document.getElementById('audit-tbody');
+    tbody.innerHTML = '';
+    
+    let ok = 0;
+    let err = 0;
+    const codes = Object.keys(scanData);
+
+    codes.forEach(code => {
+      const item = scanData[code];
+      const diff = item.fisico - item.sistema;
+      const isOk = diff === 0;
+      
+      if (isOk) ok++; else err++;
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="font-weight: bold;">${code}</td>
+        <td style="text-align: center; font-size: 16px;">${item.fisico}</td>
+        <td style="text-align: center; color: #64748b;">${item.sistema}</td>
+        <td style="text-align: center; font-weight: 700; color: ${diff > 0 ? 'var(--blue)' : (diff < 0 ? 'var(--red)' : 'inherit')}">
+          ${diff > 0 ? '+' + diff : diff}
+        </td>
+        <td style="text-align: center;">
+          <span class="status-badge ${isOk ? 'status-ok' : 'status-error'}">${isOk ? 'OK' : 'DIVERGENTE'}</span>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+
+    document.getElementById('total-itens').textContent = codes.length;
+    document.getElementById('total-ok').textContent = ok;
+    document.getElementById('total-error').textContent = err;
+  }
+
+  window.resetAudit = () => {
+    if (confirm('Deseja zerar toda a conferência atual?')) {
+      scanData = {};
+      renderAudit();
+      bipador.focus();
+    }
+  };
+</script>
+
 </body>
 </html>
