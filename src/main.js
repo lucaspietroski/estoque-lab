@@ -1903,13 +1903,15 @@ init();
 // --- VÍNCULOS REMANUFATURA ---
 window.openVinculosRemanu = async () => {
     document.getElementById('modal-vinculos-remanu').classList.add('open');
-    const combo = document.getElementById('vinc-modelo');
+    const dl = document.getElementById('list-modelos-remanu');
+    const input = document.getElementById('vinc-modelo');
     
-    combo.innerHTML = '<option value="">Aguarde, carregando modelos...</option>';
+    input.value = ''; // Limpa pesquisa anterior
+    dl.innerHTML = '<option value="Aguarde, carregando modelos...">';
     const { data: equip } = await supabase.from('equipamentos').select('modelo').order('modelo');
     if (equip) {
         const unique = [...new Set(equip.map(e => e.modelo))];
-        combo.innerHTML = '<option value="">Selecione o Modelo</option>' + unique.map(m => `<option value="${m}">${m}</option>`).join('');
+        dl.innerHTML = unique.map(m => `<option value="${m}">`).join('');
     }
     
     await carregarVinculosRemanu();

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Estoque Check | Auditoria Física</title>
+  <link rel="stylesheet" href="style.css">
+  <style>
+    :root {
+      --bg: #f1f5f9;
+      --card: #ffffff;
+      --green: #10b981;
+      --red: #ef4444;
+      --blue: #3b82f6;
+    }
+    body { background: var(--bg); font-family: 'Inter', sans-serif; padding: 20px; }
+    .audit-container { max-width: 900px; margin: 0 auto; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    .input-section { background: white; padding: 30px; border-radius: 12px; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); text-align: center; }
+    #bipador { width: 100%; max-width: 450px; padding: 18px; font-size: 20px; border: 3px solid var(--blue); border-radius: 12px; outline: none; text-align: center; font-weight: bold; }
+    .results-section { background: white; padding: 10px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    .status-badge { padding: 4px 12px; border-radius: 20px; font-size: 11px; font-weight: 800; }
+    .status-ok { background: #dcfce7; color: #166534; }
+    .status-error { background: #fee2e2; color: #991b1b; }
+    .stats-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 15px; margin-bottom: 20px; }
+    .stat-card { background: white; padding: 15px; border-radius: 12px; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
+    .stat-val { font-size: 28px; font-weight: 900; }
+    .btn-reset { background: #64748b; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; font-size: 12px; }
+  </style>
+</head>
+<body>
+
+<div class="audit-container">
+  <div class="header">
+    <div>
+      <h1 style="margin:0; font-size: 24px; color: #0f172a;">📦 Estoque Check</h1>
+      <p style="margin:5px 0 0; color: #64748b; font-size: 13px;">Auditoria de Saldo Físico vs Sistema</p>
+    </div>
+    <button class="btn-reset" onclick="resetAudit()">Limpar Tudo</button>
+  </div>
+
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div style="font-size: 11px; color: #94a3b8; font-weight: 700;">TOTAL BIPADO</div>
+      <div class="stat-val" id="total-itens">0</div>
+    </div>
+    <div class="stat-card" style="background: #ecfdf5;">
+      <div style="font-size: 11px; color: #059669; font-weight: 700;">CORRETOS (OK)</div>
+      <div class="stat-val" id="total-ok" style="color: #059669;">0</div>
+    </div>
+    <div class="stat-card" style="background: #fff1f2;">
+      <div style="font-size: 11px; color: #e11d48; font-weight: 700;">DIVERGENTES</div>
+      <div class="stat-val" id="total-error" style="color: #e11d48;">0</div>
+    </div>
+  </div>
+
+  <div class="input-section">
+    <div style="font-size: 14px; font-weight: 800; color: #334155; margin-bottom: 12px; text-transform: uppercase;">Aguardando Bipagem...</div>
+    <input type="text" id="bipador" placeholder="BIPE O CÓDIGO AQUI" autofocus autocomplete="off">
+  </div>
+
+  <div class="results-section">
+    <table class="data-table" style="width: 100%; border-collapse: collapse;">
+      <thead style="background: #f8fafc; border-bottom: 2px solid #f1f5f9;">
+        <tr>
+          <th style="text-align: left; padding: 15px;">Código</th>
+          <th style="text-align: center;">Físico</th>
+          <th style="text-align: center;">Sistema</th>
+          <th style="text-align: center;">Diferença</th>
+          <th style="text-align: center;">Status</th>
+        </tr>
+      </thead>
+      <tbody id="audit-tbody">
+        <tr><td colspan="5" style="text-align: center; padding: 60px; color: #94a3b8;">Nenhuma peça bipada.</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script type="module">
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+  const SUPABASE_URL = 'https://idpmrjjalhnpsxpfugph.supabase.co';
+  const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkcG1yamphbGhucHN4cGZ1Z3BoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NjU2NjcsImV4cCI6MjA5MzI0MTY2N30.L4hV7YM9yjdOOW9zBl84L-1si2DU8nBI3J1WgmW02lY';
+  const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+  let scanData = {}; 
+
+  const bipador = document.getElementById('bipador');
+
+  bipador.addEventListener('keypress', async (e) => {
+    if (e.key === 'Enter') {
+      const code = bipador.value.trim().toUpperCase();
+      if (code) { await processCode(code); }
+      bipador.value = '';
+    }
+  });
+
+  async function processCode(code) {
+    if (!scanData[code]) {
+      scanData[code] = { fisico: 0, sistema: 0 };
+      const [lab, remanu] = await Promise.all([
+        supabase.from('estoque').select('qty').eq('code', code).maybeSingle(),
+        supabase.from('estoque_remanu').select('qty').eq('code', code).maybeSingle()
+      ]);
+      scanData[code].sistema = (lab.data?.qty || 0) + (remanu.data?.qty || 0);
+    }
+    scanData[code].fisico += 1;
+    renderAudit();
+  }
+
+  function renderAudit() {
+    const tbody = document.getElementById('audit-tbody');
+    tbody.innerHTML = '';
+    let ok = 0, err = 0;
+    const codes = Object.keys(scanData);
+
+    codes.forEach(code => {
+      const item = scanData[code];
+      const diff = item.fisico - item.sistema;
+      const isOk = diff === 0;
+      if (isOk) ok++; else err++;
+
+      const tr = document.createElement('tr');
+      tr.style.borderBottom = "1px solid #f1f5f9";
+      tr.innerHTML = `
+        <td style="padding: 12px 15px; font-weight: bold;">${code}</td>
+        <td style="text-align: center; font-size: 18px; font-weight: 800;">${item.fisico}</td>
+        <td style="text-align: center; color: #64748b;">${item.sistema}</td>
+        <td style="text-align: center; font-weight: 800; color: ${diff > 0 ? '#3b82f6' : (diff < 0 ? '#ef4444' : '#1e293b')}">
+          ${diff > 0 ? '+' + diff : diff}
+        </td>
+        <td style="text-align: center;">
+          <span class="status-badge ${isOk ? 'status-ok' : 'status-error'}">${isOk ? 'OK' : 'ERRO'}</span>
+        </td>
+      `;
+      tbody.prepend(tr); // Adiciona o último bipado no topo
+    });
+
+    document.getElementById('total-itens').textContent = codes.length;
+    document.getElementById('total-ok').textContent = ok;
+    document.getElementById('total-error').textContent = err;
+  }
+
+  window.resetAudit = () => {
+    if (confirm('Zerar toda a conferência?')) { scanData = {}; renderAudit(); bipador.focus(); }
+  };
+</script>
+
+</body>
+</html>

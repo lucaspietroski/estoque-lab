@@ -747,6 +747,79 @@
   </div>
 </div>
 
+<!-- MODAL AJUSTE HISTÓRICO -->
+<div id="modal-ajuste-historico" class="modal-overlay">
+  <div class="modal-content">
+    <h2>Ajustar Registro Histórico</h2>
+    <div class="form-group" style="margin-top:15px;">
+      <label>Nova Quantidade</label>
+      <input type="number" id="hist-ajuste-qty" min="1" class="modal-input" placeholder="Qtd">
+    </div>
+    <div class="form-group">
+      <label>Valor Total do Registro (R$)</label>
+      <input type="text" id="hist-ajuste-valor" class="modal-input" placeholder="Ex: 150,00">
+    </div>
+    <div class="form-group">
+      <label>Motivo do Ajuste</label>
+      <input type="text" id="hist-ajuste-motivo" class="modal-input" placeholder="Ex: Correção de digitação">
+    </div>
+    <div class="modal-actions" style="margin-top:20px;">
+      <button class="btn-cancel" onclick="document.getElementById('modal-ajuste-historico').classList.remove('open')">Cancelar</button>
+      <button class="btn-confirm" id="btn-salvar-ajuste-hist">Salvar Ajuste</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL VÍNCULOS REMANUFATURA (NOVO VS RS) -->
+<div class="modal-overlay" id="modal-vinculos-remanu">
+  <div class="modal-box" style="max-width: 500px;">
+    <h3>🔗 Vincular Fusões (Nova vs RS)</h3>
+    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;">
+      Use esta tela para cadastrar os códigos de fusões correspondentes a cada modelo de equipamento.
+    </p>
+
+    <div class="modal-label">MODELO DO EQUIPAMENTO</div>
+    <input type="text" id="vinc-modelo" list="list-modelos-remanu" class="modal-input" placeholder="Ex: RICOH IM 430F">
+    <datalist id="list-modelos-remanu"></datalist>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+      <div>
+        <div class="modal-label">CÓDIGO PEÇA NOVA</div>
+        <input type="text" id="vinc-nova" class="modal-input" placeholder="Ex: D0A44164" style="text-transform: uppercase;">
+      </div>
+      <div>
+        <div class="modal-label">CÓDIGO PEÇA RS</div>
+        <input type="text" id="vinc-rs" class="modal-input" placeholder="Ex: D0A44164RS" style="text-transform: uppercase;">
+      </div>
+    </div>
+
+    <div class="modal-btns" style="margin-top: 10px;">
+      <button class="btn-confirm" id="btn-salvar-vinculo" onclick="salvarVinculoRemanu()" style="width: 100%;">Salvar Vínculo</button>
+    </div>
+
+    <h3 style="font-size: 14px; margin-top: 30px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">Vínculos Cadastrados</h3>
+    <div style="max-height: 200px; overflow-y: auto; margin-top: 10px; border: 1px solid var(--border); border-radius: 8px;">
+      <table class="dash-table" style="font-size: 12px; margin-top: 0;">
+        <thead>
+          <tr>
+            <th style="text-align: left;">Modelo</th>
+            <th style="text-align: center;">Nova</th>
+            <th style="text-align: center;">RS</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tbody-vinculos-remanu">
+          <tr><td colspan="4" class="text-center">Nenhum vínculo.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="modal-btns" style="margin-top: 20px;">
+      <button class="btn-cancel" onclick="document.getElementById('modal-vinculos-remanu').classList.remove('open')" style="width: 100%;">Fechar Janela</button>
+    </div>
+  </div>
+</div>
+
 <script type="module" src="src/main.js?v=1.5"></script>
 </body>
 </html>
