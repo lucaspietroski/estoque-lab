@@ -646,9 +646,14 @@
           <span class="comp-label">Descompasso Técnico (Diferença)</span>
           <span class="comp-val" id="comp-diff">—</span>
         </div>
-        <div class="comp-item">
-          <span class="comp-label">Ação Corretiva Recomendada</span>
-          <span class="comp-val" style="font-size: 0.9rem; font-weight: 600; color: var(--yellow);" id="comp-rec">—</span>
+        <div class="comp-item" style="display: flex; flex-direction: column; justify-content: space-between;">
+          <div>
+            <span class="comp-label">Ação Corretiva Recomendada</span>
+            <span class="comp-val" style="font-size: 0.9rem; font-weight: 600; color: var(--yellow);" id="comp-rec">—</span>
+          </div>
+          <button id="btn-reconcile" class="btn-action" style="display: none; width: 100%; margin-top: 8px; justify-content: center; padding: 10px; font-weight: bold;" onclick="window.reconcileHistoryItem()">
+            ⚡ Sincronizar Histórico
+          </button>
         </div>
       </div>
 
@@ -1044,17 +1049,30 @@
     diffEl.textContent = diffVal === 0 ? 'Conciliado (0)' : (diffVal > 0 ? `+${diffVal} unidades extras` : `${diffVal} unidades ausentes`);
     diffEl.className = 'comp-val ' + (diffVal === 0 ? 'badge-success' : (diffVal > 0 ? 'diff-plus' : 'diff-minus'));
 
-    // Set Recommendation Text
+    // Set Recommendation Text & Configure Reconcile Button
     const recEl = document.getElementById('comp-rec');
+    const btnReconcile = document.getElementById('btn-reconcile');
+
+    // Store state globally for reconciling
+    window.activeReconcileCode = result.code;
+    window.activeReconcileDiff = diffVal;
+
     if (diffVal === 0) {
       recEl.textContent = '✔ Nenhuma ação necessária.';
       recEl.style.color = 'var(--green)';
+      btnReconcile.style.display = 'none';
     } else if (diffVal > 0) {
-      recEl.textContent = `⚡ Fazer saída de ajuste manual de -${diffVal} ou preencher o histórico faltante.`;
+      recEl.textContent = `⚡ Físico maior que Histórico. Faltam Entradas para conciliar.`;
       recEl.style.color = 'var(--yellow)';
+      btnReconcile.style.display = 'inline-flex';
+      btnReconcile.style.background = 'var(--green)';
+      btnReconcile.textContent = `⚡ Sincronizar Histórico (Lançar Entrada de +${diffVal} un)`;
     } else {
-      recEl.textContent = `⚡ Fazer entrada de ajuste manual de +${Math.abs(diffVal)} para sincronizar o saldo real.`;
+      recEl.textContent = `⚡ Histórico maior que Físico. Faltam Saídas para conciliar.`;
       recEl.style.color = 'var(--yellow)';
+      btnReconcile.style.display = 'inline-flex';
+      btnReconcile.style.background = 'var(--red)';
+      btnReconcile.textContent = `⚡ Sincronizar Histórico (Lançar Saída de -${Math.abs(diffVal)} un)`;
     }
 
     // Fetch and Chronological render timeline
@@ -1120,6 +1138,71 @@
       tbody.innerHTML = `<tr><td colspan="6" class="empty-state" style="color:var(--red);">
         ❌ Erro ao buscar timeline: ${e.message}
       </td></tr>`;
+    }
+  };
+
+  // SECURE AUTO-RECONCILIATION
+  window.reconcileHistoryItem = async () => {
+    const code = window.activeReconcileCode;
+    const diff = window.activeReconcileDiff;
+    if (!code || diff === 0) return;
+
+    const actionText = diff > 0 
+      ? `Lançar uma ENTRADA de ajuste de +${diff} unidades`
+      : `Lançar uma SAÍDA de ajuste de -${Math.abs(diff)} unidades`;
+
+    const confirmMsg = `⚠️ ATENÇÃO: Conciliação de Histórico\n\nIsso irá:\n1. ${actionText} na tabela de histórico (${currentSector === 'REMANU' ? 'historico_remanu' : 'historico'}).\n2. Preservar TODOS os outros logs de entradas/saídas existentes.\n3. Deixar o saldo físico atual intacto.\n\nDeseja confirmar este ajuste de conciliação para a peça ${code}?`;
+
+    if (!confirm(confirmMsg)) return;
+
+    const btn = document.getElementById('btn-reconcile');
+    btn.disabled = true;
+    btn.textContent = '⌛ Gravando no Supabase...';
+
+    try {
+      const historicoTable = currentSector === 'REMANU' ? 'historico_remanu' : 'historico';
+      const { data: { session } } = await supabase.auth.getSession();
+      const userEmail = session?.user?.email || 'lucas.araujo@selbetti.com.br';
+
+      // Busca o registro mais antigo desta peça no histórico para retroagir o lançamento de ajuste
+      const { data: oldestRecord, error: oldestErr } = await supabase.from(historicoTable)
+        .select('ts')
+        .eq('code', code)
+        .order('ts', { ascending: true })
+        .limit(1);
+
+      if (oldestErr) throw oldestErr;
+
+      let targetTs = new Date().toISOString();
+      if (oldestRecord && oldestRecord.length > 0 && oldestRecord[0].ts) {
+        // Retroage em 1 hora antes da primeiríssima movimentação histórica para que o estoque nasça antes das saídas
+        targetTs = new Date(new Date(oldestRecord[0].ts).getTime() - 3600000).toISOString();
+      }
+
+      const payload = {
+        code: code,
+        tipo: diff > 0 ? 'entrada' : 'saída',
+        qty: Math.abs(diff),
+        descricao: diff > 0 
+          ? 'Entrada de Ajuste por Conciliação de Histórico (Auditor)' 
+          : 'Saída de Ajuste por Conciliação de Histórico (Auditor)',
+        user_email: userEmail,
+        ts: targetTs
+      };
+
+      const { error } = await supabase.from(historicoTable).insert(payload);
+      if (error) throw error;
+
+      alert(`✅ Conciliação concluída com sucesso para a peça ${code}!`);
+      
+      // Refresh global audit and timeline
+      await runGlobalAudit();
+      await traceTimeline(code);
+
+    } catch (e) {
+      alert('❌ Erro ao conciliar histórico: ' + e.message);
+    } finally {
+      btn.disabled = false;
     }
   };
 
