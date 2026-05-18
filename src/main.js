@@ -690,6 +690,15 @@ async function confirmarSaida() {
     btn.textContent = 'Gravando...';
 
     try {
+        // Validação preventiva: impede baixar itens que não possuem saldo em estoque
+        for (const item of saidaItems) {
+            const { data: cur } = await supabase.from(getEstoqueTable()).select('qty').eq('code', item.code).maybeSingle();
+            const currentQty = cur?.qty || 0;
+            if (currentQty < item.qty) {
+                throw new Error(`Saldo insuficiente para a peça ${item.code} (${item.descricao || 'Sem descrição'}). Saldo atual em estoque: ${currentQty}, solicitado para baixa: ${item.qty}.`);
+            }
+        }
+
         const ts = new Date().toISOString();
         
         let revision_id = null;
@@ -718,7 +727,7 @@ async function confirmarSaida() {
         for (const item of saidaItems) {
             // 1) Baixa o estoque
             const { data: cur } = await supabase.from(getEstoqueTable()).select('qty').eq('code', item.code).single();
-            const newQty = Math.max(0, (cur?.qty || 0) - item.qty);
+            const newQty = (cur?.qty || 0) - item.qty;
             const { error: estoqueErr } = await supabase.from(getEstoqueTable()).upsert({ code: item.code, qty: newQty });
             if (estoqueErr) throw new Error(`Erro ao baixar estoque de ${item.code}: ${estoqueErr.message}`);
 

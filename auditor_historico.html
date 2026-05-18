@@ -559,6 +559,11 @@
         <span class="kpi-value" style="color: var(--primary);" id="kpi-accuracy">—</span>
         <span class="kpi-sub" id="kpi-accuracy-sub">Proporção de itens saudáveis</span>
       </div>
+      <div class="kpi-card" style="border-left: 4px solid var(--yellow);">
+        <span class="kpi-label">Saldo Histórico Negativo</span>
+        <span class="kpi-value" style="color: var(--yellow);" id="kpi-negativos">—</span>
+        <span class="kpi-sub" style="color: var(--yellow);" id="kpi-negativos-sub">Itens com saídas sem saldo</span>
+      </div>
     </div>
 
     <!-- main list -->
@@ -576,6 +581,7 @@
             <button class="filter-tab" onclick="setFilter('DISCREPANCY')">Apenas Descompassos</button>
             <button class="filter-tab" onclick="setFilter('SOBRA')">Sobra (Saldo > Histórico)</button>
             <button class="filter-tab" onclick="setFilter('FALTA')">Falta (Saldo < Histórico)</button>
+            <button class="filter-tab" onclick="setFilter('NEGATIVO')">Saldo Negativo (Histórico &lt; 0)</button>
           </div>
           <button class="btn-action" style="background: var(--green); padding: 10px 16px; border-radius: 8px;" onclick="window.exportInconsistencies()">
             📥 Exportar Inconsistências (CSV)
@@ -882,6 +888,7 @@
     const okItens = auditResults.filter(r => r.discrepancy === 0).length;
     const errorItens = totalItens - okItens;
     const accuracy = totalItens > 0 ? (okItens / totalItens) * 100 : 100;
+    const negativoItens = auditResults.filter(r => r.calculatedStock < 0).length;
 
     document.getElementById('kpi-total').textContent = totalItens.toLocaleString('pt-BR');
     document.getElementById('kpi-ok').textContent = okItens.toLocaleString('pt-BR');
@@ -890,6 +897,9 @@
     
     document.getElementById('kpi-ok-sub').textContent = `${okItens} itens em perfeita sincronia`;
     document.getElementById('kpi-errors-sub').textContent = `${errorItens} descompassos encontrados`;
+
+    document.getElementById('kpi-negativos').textContent = negativoItens.toLocaleString('pt-BR');
+    document.getElementById('kpi-negativos-sub').textContent = `${negativoItens} componentes no vermelho`;
   }
 
   // FILTER TABS & SEARCH
@@ -899,7 +909,8 @@
       tab.classList.toggle('active', tab.textContent.includes(
         type === 'ALL' ? 'Todos os Itens' :
         type === 'DISCREPANCY' ? 'Apenas Descompassos' :
-        type === 'SOBRA' ? 'Sobra' : 'Falta'
+        type === 'SOBRA' ? 'Sobra' :
+        type === 'FALTA' ? 'Falta' : 'Saldo Negativo'
       ));
     });
     applyFilters();
@@ -919,6 +930,8 @@
       filtered = filtered.filter(r => r.discrepancy > 0);
     } else if (filterType === 'FALTA') {
       filtered = filtered.filter(r => r.discrepancy < 0);
+    } else if (filterType === 'NEGATIVO') {
+      filtered = filtered.filter(r => r.calculatedStock < 0);
     }
 
     // 2. Filter by Search Query
@@ -935,8 +948,8 @@
 
     if (filtered.length === 0) {
       tbody.innerHTML = `<tr><td colspan="6" class="empty-state">
-        <h3>Nenhum descompasso encontrado</h3>
-        <p>Tudo está perfeitamente conciliado no filtro selecionado.</p>
+        <h3>Nenhum componente encontrado</h3>
+        <p>Não há itens que correspondam ao filtro selecionado.</p>
       </td></tr>`;
       return;
     }
@@ -951,6 +964,10 @@
         ? `<span class="badge badge-success">✔ Conciliado</span>` 
         : `<span class="diff-badge ${discClass}">${discText} un</span>`;
 
+      const isNeg = r.calculatedStock < 0;
+      const calcStockStyle = isNeg ? 'color: var(--red); font-weight: bold;' : 'color: var(--text-muted);';
+      const calcStockSuffix = isNeg ? ' <span class="badge badge-danger" style="font-size:0.65rem; padding: 2px 6px; margin-left: 6px; font-family: var(--font);">⚠️ NEGATIVADO</span>' : '';
+
       return `
         <tr>
           <td><span class="code-span">${r.code}</span></td>
@@ -961,7 +978,7 @@
             </div>
           </td>
           <td style="text-align: center; font-weight: bold; font-family: var(--mono);">${r.currentStock}</td>
-          <td style="text-align: center; font-family: var(--mono); color: var(--text-muted);">${r.calculatedStock}</td>
+          <td style="text-align: center; font-family: var(--mono); ${calcStockStyle}">${r.calculatedStock}${calcStockSuffix}</td>
           <td style="text-align: center;">${badgeHtml}</td>
           <td style="text-align: center;">
             <button class="btn-action" onclick="window.traceTimeline('${r.code}')">
