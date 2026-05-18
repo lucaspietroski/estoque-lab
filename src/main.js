@@ -2094,19 +2094,34 @@ window.iniciarAuditoria = async () => {
 
         // 4. Congelar saldo teórico (Bulk Snapshot)
         let stockItems = [];
-        if (sector === 'LAB') {
-            const { data } = await supabase.from('estoque').select('code, description, qty');
-            stockItems = data || [];
-        } else if (sector === 'REMANU') {
-            const { data } = await supabase.from('estoque_remanu').select('code, description, qty');
-            stockItems = data || [];
-        } else if (sector === '3D') {
-            try {
-                const { data } = await supabase.from('estoque_3d').select('code, description, qty');
-                stockItems = data || [];
-            } catch (e) {
-                stockItems = [];
+        const tName = sector === 'LAB' ? 'estoque' : (sector === 'REMANU' ? 'estoque_remanu' : 'estoque_3d');
+        try {
+            // Busca as peças com saldo no estoque correspondente
+            const { data: stData, error: stErr } = await supabase.from(tName).select('code, qty');
+            if (stErr) throw stErr;
+
+            if (stData && stData.length > 0) {
+                // Busca as descrições na tabela 'parts' (onde a coluna correta é 'descricao')
+                const { data: ptData } = await supabase.from('parts').select('code, descricao');
+                const partsMap = {};
+                if (ptData) {
+                    ptData.forEach(p => {
+                        if (p.code) partsMap[p.code.toUpperCase()] = p.descricao;
+                    });
+                }
+
+                stockItems = stData.map(item => {
+                    const codeUpper = item.code?.trim().toUpperCase();
+                    return {
+                        code: item.code,
+                        description: partsMap[codeUpper] || 'Peça sem descrição',
+                        qty: item.qty || 0
+                    };
+                });
             }
+        } catch (e) {
+            console.error(`Erro ao congelar saldo do setor ${sector}:`, e.message);
+            stockItems = [];
         }
 
         // Preparar linhas de bulk insert
@@ -2228,12 +2243,9 @@ window.biparItemAuditoria = async (code) => {
             // Item Extra (não existia no estoque teórico)
             // Buscar descrição geral no banco
             let desc = 'Peça Extra (Não cadastrada no setor)';
-            const { data: pData } = await supabase.from('parts').select('description').eq('code', code).maybeSingle();
-            if (pData?.description) {
-                desc = pData.description;
-            } else {
-                const { data: eData } = await supabase.from('estoque').select('description').eq('code', code).maybeSingle();
-                if (eData?.description) desc = eData.description;
+            const { data: pData } = await supabase.from('parts').select('descricao').eq('code', code).maybeSingle();
+            if (pData?.descricao) {
+                desc = pData.descricao;
             }
 
             activeAuditItems[code] = {
