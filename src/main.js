@@ -6,6 +6,8 @@ let currentTab = 'dashboard';
 let searchTimeout = null;
 let saidaItems = []; // Carrinho de saída SELB
 window.currentSector = 'LAB'; // Setor atual (LAB ou REMANU)
+let activeAudit = null;
+let activeAuditItems = {};
 
 window.changeSector = (sector) => {
     window.currentSector = sector;
@@ -214,6 +216,17 @@ async function init() {
     });
 
     document.getElementById('btn-do-login')?.addEventListener('click', doModalLogin);
+
+    // Bipador Auditoria Integrada
+    document.getElementById('main-audit-bipador')?.addEventListener('keypress', async (e) => {
+        if (e.key === 'Enter') {
+            const code = e.target.value.trim().toUpperCase();
+            if (code) {
+                await window.biparItemAuditoria(code);
+            }
+            e.target.value = '';
+        }
+    });
 }
 
 // --- AUTENTICAÇÃO ---
@@ -243,18 +256,25 @@ function updateUIForAuth() {
         btnLogout.style.display = 'inline-flex';
         btnLoginArea.style.display = 'none';
         if (currentUser.email.endsWith('@selbetti.com.br')) adminBadge.style.display = 'inline-flex';
-        if (currentUser.email === 'lucas.araujo@selbetti.com.br') {
-            const ss = document.getElementById('sector-switcher');
-            if (ss) ss.style.display = 'inline-flex';
-        }
+        
+        const isLucas = currentUser.email === 'lucas.araujo@selbetti.com.br';
+        const ss = document.getElementById('sector-switcher');
+        if (ss) ss.style.display = isLucas ? 'inline-flex' : 'none';
+        
+        const tabAudit = document.getElementById('tab-btn-auditoria');
+        if (tabAudit) tabAudit.style.display = isLucas ? 'inline-flex' : 'none';
     } else {
         authScreen.style.display = 'flex';
         appShell.style.display = 'none';
         btnLogout.style.display = 'none';
         btnLoginArea.style.display = 'inline-flex';
         adminBadge.style.display = 'none';
+        
         const ss = document.getElementById('sector-switcher');
         if (ss) ss.style.display = 'none';
+        
+        const tabAudit = document.getElementById('tab-btn-auditoria');
+        if (tabAudit) tabAudit.style.display = 'none';
     }
 }
 
@@ -286,6 +306,24 @@ function switchTab(tabId) {
             d2.value = today.toISOString().split('T')[0];
         }
         renderModeloCusto();
+    if (tabId === 'auditoria') {
+        if (activeAudit) {
+            document.getElementById('audit-panel-setup').style.display = 'none';
+            document.getElementById('audit-panel-summary').style.display = 'none';
+            document.getElementById('audit-panel-active').style.display = 'block';
+            setTimeout(() => {
+                const b = document.getElementById('main-audit-bipador');
+                if (b) {
+                    b.focus();
+                    b.value = '';
+                }
+            }, 100);
+        } else {
+            document.getElementById('audit-panel-setup').style.display = 'block';
+            document.getElementById('audit-panel-summary').style.display = 'none';
+            document.getElementById('audit-panel-active').style.display = 'none';
+            window.renderHistoricoAuditorias();
+        }
     }
 }
 
@@ -1976,3 +2014,676 @@ window.deletarVinculoRemanu = async (id) => {
     await supabase.from('modelos_remanu').delete().eq('id', id);
     await carregarVinculosRemanu();
 };
+
+// --- AUDITORIA DE INVENTÁRIO CÍCLICO E RASTREABILIDADE (ESTOQUE CHECK) ---
+
+window.iniciarAuditoria = async () => {
+    try {
+        const sectorEl = document.querySelector('input[name="audit-sector"]:checked');
+        if (!sectorEl) {
+            alert('⚠️ Selecione um setor para iniciar a auditoria.');
+            return;
+        }
+        const sector = sectorEl.value;
+        const modoCego = document.getElementById('audit-blind-mode').checked;
+
+        // 1. Prevenir colisão de sessões ativas
+        const { data: existing } = await supabase.from('auditorias')
+            .select('*')
+            .eq('status', 'EM_ANDAMENTO')
+            .limit(1)
+            .maybeSingle();
+
+        if (existing) {
+            if (confirm(`⚠️ Já existe uma auditoria em andamento (${existing.codigo} - Setor ${existing.setor}).\n\nDeseja retomá-la?`)) {
+                await window.retomarAuditoria(existing.id);
+                return;
+            }
+            return;
+        }
+
+        // 2. Gerar código sequencial do dia AUD-YYYYMMDD-XXX
+        const todayStr = new Date().toLocaleDateString('en-CA').replace(/-/g, '');
+        const { data: todayAudits } = await supabase.from('auditorias')
+            .select('codigo')
+            .like('codigo', `AUD-${todayStr}-%`);
+        
+        const nextSeq = String((todayAudits?.length || 0) + 1).padStart(3, '0');
+        const auditCode = `AUD-${todayStr}-${nextSeq}`;
+
+        // 3. Criar registro da sessão
+        const { data: newSession, error: sErr } = await supabase.from('auditorias').insert({
+            codigo: auditCode,
+            usuario: currentUser?.email || 'Lucas Araujo',
+            setor: sector,
+            status: 'EM_ANDAMENTO',
+            modo_cego: modoCego,
+            total_itens: 0,
+            total_divergencias: 0,
+            acuracidade: 0
+        }).select().single();
+
+        if (sErr || !newSession) {
+            alert('❌ Erro ao criar sessão de auditoria: ' + (sErr?.message || 'Erro desconhecido'));
+            return;
+        }
+
+        // 4. Congelar saldo teórico (Bulk Snapshot)
+        let stockItems = [];
+        if (sector === 'LAB') {
+            const { data } = await supabase.from('estoque').select('code, description, qty');
+            stockItems = data || [];
+        } else if (sector === 'REMANU') {
+            const { data } = await supabase.from('estoque_remanu').select('code, description, qty');
+            stockItems = data || [];
+        } else if (sector === '3D') {
+            try {
+                const { data } = await supabase.from('estoque_3d').select('code, description, qty');
+                stockItems = data || [];
+            } catch (e) {
+                stockItems = [];
+            }
+        }
+
+        // Preparar linhas de bulk insert
+        const bulkInsertRows = [];
+        const seen = new Set();
+        stockItems.forEach(item => {
+            const code = item.code?.trim().toUpperCase();
+            if (code && !seen.has(code)) {
+                seen.add(code);
+                const qty = item.qty || 0;
+                bulkInsertRows.push({
+                    auditoria_id: newSession.id,
+                    codigo: code,
+                    descricao: item.description || '',
+                    saldo_teorico: qty,
+                    saldo_fisico: 0,
+                    divergencia: -qty,
+                    status_divergencia: qty === 0 ? 'OK' : 'NAO_LOCALIZADO'
+                });
+            }
+        });
+
+        // Inserir os itens no Supabase
+        if (bulkInsertRows.length > 0) {
+            const { error: iErr } = await supabase.from('auditoria_itens').insert(bulkInsertRows);
+            if (iErr) {
+                console.error("Erro no bulk insert:", iErr.message);
+            }
+        }
+
+        // 5. Salvar na memória do app
+        activeAudit = newSession;
+        activeAuditItems = {};
+        bulkInsertRows.forEach(row => {
+            activeAuditItems[row.codigo] = {
+                codigo: row.codigo,
+                descricao: row.descricao,
+                saldo_teorico: row.saldo_teorico,
+                saldo_fisico: 0,
+                divergencia: row.divergencia,
+                status_divergencia: row.status_divergencia,
+                last_scanned: 0
+            };
+        });
+
+        // 6. Transição de telas
+        document.getElementById('audit-panel-setup').style.display = 'none';
+        document.getElementById('audit-panel-summary').style.display = 'none';
+        document.getElementById('audit-panel-active').style.display = 'block';
+
+        window.renderActiveAudit();
+        
+        setTimeout(() => {
+            const b = document.getElementById('main-audit-bipador');
+            if (b) {
+                b.focus();
+                b.value = '';
+            }
+        }, 150);
+
+    } catch (e) {
+        alert('❌ Ocorreu um erro ao iniciar a auditoria: ' + e.message);
+    }
+};
+
+window.retomarAuditoria = async (id) => {
+    try {
+        const { data: audit, error } = await supabase.from('auditorias').select('*').eq('id', id).single();
+        if (error || !audit) {
+            alert('❌ Erro ao carregar auditoria: ' + error?.message);
+            return;
+        }
+
+        const { data: items } = await supabase.from('auditoria_itens').select('*').eq('auditoria_id', id);
+
+        activeAudit = audit;
+        activeAuditItems = {};
+        if (items) {
+            items.forEach(item => {
+                activeAuditItems[item.codigo] = {
+                    id: item.id,
+                    codigo: item.codigo,
+                    descricao: item.descricao,
+                    saldo_teorico: item.saldo_teorico,
+                    saldo_fisico: item.saldo_fisico,
+                    divergencia: item.divergencia,
+                    status_divergencia: item.status_divergencia,
+                    last_scanned: item.saldo_fisico > 0 ? 1 : 0
+                };
+            });
+        }
+
+        document.getElementById('audit-panel-setup').style.display = 'none';
+        document.getElementById('audit-panel-summary').style.display = 'none';
+        document.getElementById('audit-panel-active').style.display = 'block';
+
+        window.renderActiveAudit();
+
+        setTimeout(() => {
+            const b = document.getElementById('main-audit-bipador');
+            if (b) { b.focus(); b.value = ''; }
+        }, 150);
+    } catch(e) {
+        alert('❌ Erro ao retomar sessão: ' + e.message);
+    }
+};
+
+window.biparItemAuditoria = async (code) => {
+    if (!activeAudit) return;
+    code = code.trim().toUpperCase();
+    if (!code) return;
+
+    try {
+        // Se o item já existia no cache (congelado ou inserido antes)
+        if (activeAuditItems[code]) {
+            activeAuditItems[code].saldo_fisico += 1;
+            activeAuditItems[code].last_scanned = Date.now();
+        } else {
+            // Item Extra (não existia no estoque teórico)
+            // Buscar descrição geral no banco
+            let desc = 'Peça Extra (Não cadastrada no setor)';
+            const { data: pData } = await supabase.from('parts').select('description').eq('code', code).maybeSingle();
+            if (pData?.description) {
+                desc = pData.description;
+            } else {
+                const { data: eData } = await supabase.from('estoque').select('description').eq('code', code).maybeSingle();
+                if (eData?.description) desc = eData.description;
+            }
+
+            activeAuditItems[code] = {
+                codigo: code,
+                descricao: desc,
+                saldo_teorico: 0,
+                saldo_fisico: 1,
+                divergencia: 1,
+                status_divergencia: 'ITEM_EXTRA',
+                last_scanned: Date.now()
+            };
+        }
+
+        // Recalcular divergência
+        const row = activeAuditItems[code];
+        row.divergencia = row.saldo_fisico - row.saldo_teorico;
+        
+        if (row.saldo_fisico === 0 && row.saldo_teorico > 0) {
+            row.status_divergencia = 'NAO_LOCALIZADO';
+        } else if (row.saldo_fisico > 0 && row.saldo_teorico === 0) {
+            row.status_divergencia = 'ITEM_EXTRA';
+        } else if (row.saldo_fisico === row.saldo_teorico) {
+            row.status_divergencia = 'OK';
+        } else if (row.saldo_fisico > row.saldo_teorico) {
+            row.status_divergencia = 'SOBRA';
+        } else if (row.saldo_fisico < row.saldo_teorico) {
+            row.status_divergencia = 'FALTA';
+        }
+
+        // Upsert na tabela de itens
+        await supabase.from('auditoria_itens').upsert({
+            auditoria_id: activeAudit.id,
+            codigo: row.codigo,
+            descricao: row.descricao,
+            saldo_teorico: row.saldo_teorico,
+            saldo_fisico: row.saldo_fisico,
+            divergencia: row.divergencia,
+            status_divergencia: row.status_divergencia
+        }, { onConflict: 'auditoria_id,codigo' });
+
+        window.renderActiveAudit();
+
+    } catch (e) {
+        console.error("Erro ao bipar item:", e.message);
+    }
+};
+
+window.renderActiveAudit = () => {
+    if (!activeAudit) return;
+
+    // Header info
+    document.getElementById('active-audit-title').textContent = `🔍 Auditoria: ${activeAudit.codigo}`;
+    document.getElementById('active-audit-sector').textContent = `Setor: ${activeAudit.setor}`;
+    document.getElementById('active-audit-mode').textContent = `Modo: ${activeAudit.modo_cego ? 'Contagem Cega' : 'Normal/Aberto'}`;
+
+    // Calcular contagens em tempo real
+    const itemsList = Object.values(activeAuditItems);
+    const totalContado = itemsList.reduce((acc, curr) => acc + curr.saldo_fisico, 0);
+
+    let okCount = 0;
+    let errCount = 0;
+    itemsList.forEach(item => {
+        if (item.divergencia === 0) okCount++;
+        else errCount++;
+    });
+
+    document.getElementById('active-audit-total-bipado').textContent = totalContado;
+
+    // Exibir ou ocultar no modo cego
+    if (activeAudit.modo_cego) {
+        document.getElementById('active-audit-total-ok').textContent = '🔒 Oculto';
+        document.getElementById('active-audit-total-error').textContent = '🔒 Oculto';
+    } else {
+        document.getElementById('active-audit-total-ok').textContent = okCount;
+        document.getElementById('active-audit-total-error').textContent = errCount;
+    }
+
+    // Configurar colunas da tabela
+    const thead = document.getElementById('active-audit-thead');
+    if (activeAudit.modo_cego) {
+        thead.innerHTML = `
+            <th style="text-align: left; padding: 12px;">Código</th>
+            <th style="text-align: left; padding: 12px;">Descrição</th>
+            <th style="text-align: center; padding: 12px;">Físico (Contado)</th>
+        `;
+    } else {
+        thead.innerHTML = `
+            <th style="text-align: left; padding: 12px;">Código</th>
+            <th style="text-align: left; padding: 12px;">Descrição</th>
+            <th style="text-align: center; padding: 12px;">Físico</th>
+            <th style="text-align: center; padding: 12px;">Sistema</th>
+            <th style="text-align: center; padding: 12px;">Diferença</th>
+            <th style="text-align: center; padding: 12px;">Status</th>
+        `;
+    }
+
+    // Renderizar linhas
+    const tbody = document.getElementById('active-audit-tbody');
+    tbody.innerHTML = '';
+
+    // Filtrar e ordenar:
+    // No modo cego, só mostra itens fisicamente bipados (saldo_fisico > 0)
+    // No modo aberto, mostra tudo que foi bipado ou que possui saldo teórico
+    let filtered = itemsList.filter(item => {
+        if (activeAudit.modo_cego) return item.saldo_fisico > 0;
+        return (item.saldo_fisico > 0 || item.saldo_teorico > 0);
+    });
+
+    // Ordenar pelo mais recente scanned
+    filtered.sort((a, b) => b.last_scanned - a.last_scanned);
+
+    if (filtered.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="${activeAudit.modo_cego ? 3 : 6}" class="text-center" style="padding: 40px; color: var(--text-muted);">Nenhum item contado ainda nesta sessão.</td></tr>`;
+        return;
+    }
+
+    filtered.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = "1px solid var(--border)";
+        if (item.last_scanned > 0 && Date.now() - item.last_scanned < 3000) {
+            tr.style.background = 'rgba(59, 130, 246, 0.08)'; // Destaque suave de 3 segundos para o recém bipado
+        }
+
+        if (activeAudit.modo_cego) {
+            tr.innerHTML = `
+                <td style="padding: 12px; font-weight: bold; text-align: left;">${item.codigo}</td>
+                <td style="padding: 12px; text-align: left; font-size: 12px; color: var(--text-muted);">${item.descricao}</td>
+                <td style="text-align: center; font-size: 18px; font-weight: 800; color: var(--blue);">${item.saldo_fisico}</td>
+            `;
+        } else {
+            const isOk = item.divergencia === 0;
+            const diff = item.divergencia;
+            tr.innerHTML = `
+                <td style="padding: 12px; font-weight: bold; text-align: left;">${item.codigo}</td>
+                <td style="padding: 12px; text-align: left; font-size: 12px; color: var(--text-muted);">${item.descricao}</td>
+                <td style="text-align: center; font-size: 16px; font-weight: 700;">${item.saldo_fisico}</td>
+                <td style="text-align: center; font-size: 15px; color: var(--text-muted);">${item.saldo_teorico}</td>
+                <td style="text-align: center; font-weight: 800; font-size: 15px; color: ${diff > 0 ? '#22c55e' : (diff < 0 ? '#ef4444' : 'var(--text)')}">
+                    ${diff > 0 ? '+' + diff : diff}
+                </td>
+                <td style="text-align: center;">
+                    <span class="status-badge" style="padding: 3px 10px; border-radius: 20px; font-size: 10px; font-weight: 800; background: ${isOk ? '#dcfce7' : '#fee2e2'}; color: ${isOk ? '#166534' : '#991b1b'};">${item.status_divergencia}</span>
+                </td>
+            `;
+        }
+        tbody.appendChild(tr);
+    });
+};
+
+window.cancelarAuditoria = async () => {
+    if (!activeAudit) return;
+    if (activeAudit.status === 'EM_ANDAMENTO') {
+        if (!confirm('⚠️ Deseja realmente ABANDONAR esta auditoria?\n\nTodos os dados contados nesta sessão ativa serão apagados permanentemente.')) {
+            return;
+        }
+    }
+
+    try {
+        await supabase.from('auditorias').delete().eq('id', activeAudit.id);
+        activeAudit = null;
+        activeAuditItems = {};
+
+        document.getElementById('audit-panel-active').style.display = 'none';
+        document.getElementById('audit-panel-summary').style.display = 'none';
+        document.getElementById('audit-panel-setup').style.display = 'block';
+
+        window.renderHistoricoAuditorias();
+    } catch(e) {
+        alert('Erro ao cancelar sessão: ' + e.message);
+    }
+};
+
+window.finalizarAuditoria = async () => {
+    if (!activeAudit) return;
+    if (!confirm('🏁 Deseja realmente finalizar esta auditoria?\n\nNovas bipagens e alterações de contagem serão bloqueadas.')) return;
+
+    try {
+        const itemsList = Object.values(activeAuditItems);
+        const totalCount = itemsList.length;
+        const okCount = itemsList.filter(item => item.divergencia === 0).length;
+        const errCount = totalCount - okCount;
+        const acuracidade = totalCount > 0 ? parseFloat(((okCount / totalCount) * 100).toFixed(2)) : 100;
+
+        const { error } = await supabase.from('auditorias').update({
+            status: 'FINALIZADA',
+            data_fim: new Date().toISOString(),
+            total_itens: totalCount,
+            total_divergencias: errCount,
+            acuracidade: acuracidade
+        }).eq('id', activeAudit.id);
+
+        if (error) {
+            alert('Erro ao salvar finalização no banco: ' + error.message);
+            return;
+        }
+
+        activeAudit.status = 'FINALIZADA';
+        activeAudit.total_itens = totalCount;
+        activeAudit.total_divergencias = errCount;
+        activeAudit.acuracidade = acuracidade;
+
+        // Abrir painel de resumo
+        window.renderSummaryAudit();
+
+        document.getElementById('audit-panel-active').style.display = 'none';
+        document.getElementById('audit-panel-setup').style.display = 'none';
+        document.getElementById('audit-panel-summary').style.display = 'block';
+
+        window.renderHistoricoAuditorias();
+    } catch (e) {
+        alert('Erro ao finalizar: ' + e.message);
+    }
+};
+
+window.renderSummaryAudit = () => {
+    if (!activeAudit) return;
+
+    // Header labels
+    document.getElementById('summary-audit-code').textContent = activeAudit.codigo;
+    document.getElementById('summary-audit-sector').textContent = `Setor: ${activeAudit.setor}`;
+    
+    const statusEl = document.getElementById('summary-audit-status');
+    statusEl.textContent = `Status: ${activeAudit.status}`;
+    if (activeAudit.status === 'AJUSTADA') {
+        statusEl.style.background = '#dcfce7';
+        statusEl.style.color = '#166534';
+        document.getElementById('btn-sync-estoque-trigger').style.display = 'none';
+    } else {
+        statusEl.style.background = '#fee2e2';
+        statusEl.style.color = '#991b1b';
+        document.getElementById('btn-sync-estoque-trigger').style.display = 'inline-flex';
+    }
+
+    // KPIs
+    document.getElementById('summary-audit-acuracidade').textContent = `${activeAudit.acuracidade || 0}%`;
+    document.getElementById('summary-audit-total-divergentes').textContent = activeAudit.total_divergencias || 0;
+
+    const itemsList = Object.values(activeAuditItems);
+    const faltasCount = itemsList.filter(i => i.divergencia < 0).reduce((acc, curr) => acc + Math.abs(curr.divergencia), 0);
+    const sobrasCount = itemsList.filter(i => i.divergencia > 0).reduce((acc, curr) => acc + curr.divergencia, 0);
+
+    document.getElementById('summary-audit-total-faltas').textContent = `${faltasCount} un`;
+    document.getElementById('summary-audit-total-sobras').textContent = `${sobrasCount} un`;
+
+    // Render list (Revelada 100%, mesmo que fosse blind)
+    const tbody = document.getElementById('summary-audit-tbody');
+    tbody.innerHTML = '';
+
+    // Ordenação especial: Maior divergência absoluta no topo
+    itemsList.sort((a, b) => Math.abs(b.divergencia) - Math.abs(a.divergencia));
+
+    itemsList.forEach(item => {
+        const tr = document.createElement('tr');
+        tr.style.borderBottom = '1px solid var(--border)';
+        
+        const isOk = item.divergencia === 0;
+        const diff = item.divergencia;
+
+        // Tooltip descritiva para a classificação
+        let descTooltip = '';
+        if (item.status_divergencia === 'OK') descTooltip = 'Saldo Físico é igual ao do Sistema';
+        else if (item.status_divergencia === 'SOBRA') descTooltip = 'Físico maior que o Sistema (Sobra detectada)';
+        else if (item.status_divergencia === 'FALTA') descTooltip = 'Físico menor que o Sistema (Falta detectada)';
+        else if (item.status_divergencia === 'NAO_LOCALIZADO') descTooltip = 'Saldo no Sistema mas zero contagem física';
+        else if (item.status_divergencia === 'ITEM_EXTRA') descTooltip = 'Físico contado mas saldo do Sistema era zero';
+
+        tr.innerHTML = `
+            <td style="padding: 12px; font-weight: bold; text-align: left;">${item.codigo}</td>
+            <td style="padding: 12px; text-align: left; font-size: 12px; color: var(--text-muted);">${item.descricao}</td>
+            <td style="text-align: center; font-size: 14px; color: var(--text-muted);">${item.saldo_teorico}</td>
+            <td style="text-align: center; font-size: 15px; font-weight: 700;">${item.saldo_fisico}</td>
+            <td style="text-align: center; font-weight: 800; font-size: 15px; color: ${diff > 0 ? '#22c55e' : (diff < 0 ? '#ef4444' : 'var(--text)')}">
+                ${diff > 0 ? '+' + diff : diff}
+            </td>
+            <td style="text-align: center;">
+                <span class="status-badge" title="${descTooltip}" style="padding: 4px 10px; border-radius: 20px; font-size: 10px; font-weight: 800; background: ${isOk ? '#dcfce7' : (item.divergencia > 0 ? '#ebf5fb' : '#fee2e2')}; color: ${isOk ? '#166534' : (item.divergencia > 0 ? 'var(--blue)' : '#991b1b')}; cursor: help;">
+                    ${item.status_divergencia}
+                </span>
+            </td>
+        `;
+        tbody.appendChild(tr);
+    });
+};
+
+window.renderHistoricoAuditorias = async () => {
+    const tbody = document.getElementById('audit-history-tbody');
+    if (!tbody) return;
+
+    try {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center" style="padding: 20px;">Carregando histórico...</td></tr>';
+        const { data, error } = await supabase.from('auditorias')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error || !data || data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" class="text-center" style="padding: 40px; color: var(--text-muted);">Nenhuma auditoria registrada.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = data.map(aud => {
+            const dataStr = new Date(aud.created_at).toLocaleString('pt-BR', { dateStyle: 'short', timeStyle: 'short' });
+            const isEmAndamento = aud.status === 'EM_ANDAMENTO';
+            
+            let badgeStyle = '';
+            if (aud.status === 'EM_ANDAMENTO') badgeStyle = 'background: #fef3c7; color: #d97706;';
+            else if (aud.status === 'FINALIZADA') badgeStyle = 'background: #fee2e2; color: #991b1b;';
+            else badgeStyle = 'background: #dcfce7; color: #166534;'; // AJUSTADA
+
+            return `
+                <tr style="border-bottom: 1px solid var(--border);">
+                    <td style="padding: 10px; font-weight: bold; text-align: left;">${aud.codigo}</td>
+                    <td style="text-align: center; font-weight: 700; color: var(--blue); font-size: 11px;">${aud.setor}</td>
+                    <td style="text-align: center; color: var(--text-muted);">${dataStr}</td>
+                    <td style="text-align: center; font-weight: 800;">
+                        ${isEmAndamento ? `<span style="color:#d97706">Andamento</span>` : `${aud.acuracidade}%`}
+                    </td>
+                    <td style="text-align: center; padding: 8px 10px;">
+                        ${isEmAndamento 
+                            ? `<button class="btn-admin" onclick="window.retomarAuditoria('${aud.id}')" style="padding: 4px 10px; font-size: 11px; background:#d97706;">⚡ Retomar</button>` 
+                            : `<button class="btn-confirm" onclick="window.visualizarDetalhesAuditoria('${aud.id}')" style="padding: 4px 10px; font-size: 11px; background:var(--blue); border-color:var(--blue);">🔍 Detalhes</button>`
+                        }
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="5" class="text-center" style="padding: 20px; color: var(--red);">Erro ao buscar histórico.</td></tr>';
+    }
+};
+
+window.visualizarDetalhesAuditoria = async (id) => {
+    try {
+        const { data: audit, error } = await supabase.from('auditorias').select('*').eq('id', id).single();
+        if (error || !audit) {
+            alert('❌ Erro ao buscar auditoria: ' + error?.message);
+            return;
+        }
+
+        const { data: items } = await supabase.from('auditoria_itens').select('*').eq('auditoria_id', id);
+
+        activeAudit = audit;
+        activeAuditItems = {};
+        if (items) {
+            items.forEach(item => {
+                activeAuditItems[item.codigo] = {
+                    codigo: item.codigo,
+                    descricao: item.descricao,
+                    saldo_teorico: item.saldo_teorico,
+                    saldo_fisico: item.saldo_fisico,
+                    divergencia: item.divergencia,
+                    status_divergencia: item.status_divergencia
+                };
+            });
+        }
+
+        // Abrir painel
+        window.renderSummaryAudit();
+
+        document.getElementById('audit-panel-setup').style.display = 'none';
+        document.getElementById('audit-panel-active').style.display = 'none';
+        document.getElementById('audit-panel-summary').style.display = 'block';
+
+    } catch (e) {
+        alert('Erro ao carregar detalhes: ' + e.message);
+    }
+};
+
+window.fecharResumoAuditoria = () => {
+    activeAudit = null;
+    activeAuditItems = {};
+    document.getElementById('audit-panel-summary').style.display = 'none';
+    document.getElementById('audit-panel-active').style.display = 'none';
+    document.getElementById('audit-panel-setup').style.display = 'block';
+    window.renderHistoricoAuditorias();
+};
+
+window.openModalAjuste = () => {
+    document.getElementById('audit-ajuste-senha').value = '';
+    document.getElementById('audit-ajuste-err').textContent = '';
+    document.getElementById('modal-audit-ajuste').classList.add('open');
+};
+
+window.confirmarAjusteEstoque = async () => {
+    const password = document.getElementById('audit-ajuste-senha').value;
+    const errEl = document.getElementById('audit-ajuste-err');
+
+    if (password !== 'Selbetti30') {
+        errEl.textContent = '❌ Senha de auditoria incorreta!';
+        return;
+    }
+
+    const btn = document.querySelector('#modal-audit-ajuste .btn-confirm');
+    const originalText = btn?.textContent;
+    if (btn) { btn.disabled = true; btn.textContent = 'Sincronizando...'; }
+
+    try {
+        const sector = activeAudit.setor;
+        const stockTable = sector === 'REMANU' ? 'estoque_remanu' : (sector === '3D' ? 'estoque_3d' : 'estoque');
+        const historyTable = sector === 'REMANU' ? 'historico_remanu' : (sector === '3D' ? 'historico_3d' : 'historico');
+
+        const divergentItems = Object.values(activeAuditItems).filter(item => item.divergencia !== 0);
+
+        let adjustedCount = 0;
+        const promises = divergentItems.map(async (item) => {
+            // 1. Atualizar estoque teórico no banco para se igualar ao físico
+            await supabase.from(stockTable).upsert({
+                code: item.codigo,
+                qty: item.saldo_fisico
+            }, { onConflict: 'code' });
+
+            // 2. Registrar movimentação oficial no histórico (Traceability)
+            const diff = item.divergencia;
+            const diffAbs = Math.abs(diff);
+            const obsText = `AJUSTE AUTOMÁTICO INVENTÁRIO ${activeAudit.codigo}: ${item.status_divergencia} (Qtd: ${item.saldo_teorico} ➡️ ${item.saldo_fisico})`;
+
+            await supabase.from(historyTable).insert({
+                tipo: 'ajuste',
+                code: item.codigo,
+                qty: diffAbs,
+                vlr_unit: 0,
+                vlr_total: 0,
+                selb: 'AJUSTE',
+                descricao: obsText,
+                user_email: currentUser?.email || 'lucas.araujo@selbetti.com.br',
+                ts: new Date().toISOString()
+            });
+
+            adjustedCount++;
+        });
+
+        await Promise.all(promises);
+
+        // 3. Atualizar status da auditoria para AJUSTADA
+        await supabase.from('auditorias').update({
+            status: 'AJUSTADA'
+        }).eq('id', activeAudit.id);
+
+        activeAudit.status = 'AJUSTADA';
+        
+        // UI reset
+        document.getElementById('modal-audit-ajuste').classList.remove('open');
+        window.renderSummaryAudit();
+        await window.renderHistoricoAuditorias();
+
+        alert(`🎉 Estoque do sistema atualizado com sucesso!\n\n${adjustedCount} itens divergentes foram corrigidos e auditados no histórico.`);
+
+    } catch (e) {
+        alert('❌ Erro durante o processo de ajuste automático: ' + e.message);
+    } finally {
+        if (btn) { btn.disabled = false; btn.textContent = originalText; }
+    }
+};
+
+window.exportarPlanilhaAuditoria = () => {
+    if (!activeAudit) return;
+    try {
+        const rows = Object.values(activeAuditItems).map(item => ({
+            'Código Peça': item.codigo,
+            'Descrição': item.descricao,
+            'Saldo Sistema (Teórico)': item.saldo_teorico,
+            'Saldo Físico': item.saldo_fisico,
+            'Diferença': item.divergencia,
+            'Classificação': item.status_divergencia
+        }));
+
+        const ws = XLSX.utils.json_to_sheet(rows);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Conferência");
+        
+        // Baixar arquivo excel
+        XLSX.writeFile(wb, `Inventario_${activeAudit.codigo}_${activeAudit.setor}.xlsx`);
+    } catch (e) {
+        alert('Erro ao exportar planilha excel: ' + e.message);
+    }
+};
+
