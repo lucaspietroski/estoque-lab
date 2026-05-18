@@ -217,6 +217,14 @@ async function init() {
 
     document.getElementById('btn-do-login')?.addEventListener('click', doModalLogin);
 
+    // Tecla Enter para realizar Login
+    document.getElementById('login-pass')?.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') doLogin();
+    });
+    document.getElementById('modal-login-pass')?.addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') doModalLogin();
+    });
+
     // Bipador Auditoria Integrada
     document.getElementById('main-audit-bipador')?.addEventListener('keypress', async (e) => {
         if (e.key === 'Enter') {
@@ -231,23 +239,37 @@ async function init() {
 
 // --- AUTENTICAÇÃO ---
 async function doLogin() {
-    const email = document.getElementById('login-user').value.trim();
+    let email = document.getElementById('login-user').value.trim();
     const pass = document.getElementById('login-pass').value;
     if (!email || !pass) { loginErr.textContent = '❌ Preencha todos os campos'; return; }
+    
+    // Auto-completar domínio corporativo
+    if (!email.includes('@')) {
+        email += '@selbetti.com.br';
+    }
+
     loginErr.textContent = '⌛ Autenticando...';
     const { data, error } = await supabase.auth.signInWithPassword({ email, password: pass });
     if (error) loginErr.textContent = '❌ ' + error.message;
 }
 
 async function doModalLogin() {
-    const email = document.getElementById('modal-login-user').value;
+    let email = document.getElementById('modal-login-user').value.trim();
     const pass = document.getElementById('modal-login-pass').value;
     const err = document.getElementById('modal-login-err');
+    if (!email || !pass) { err.textContent = '❌ Preencha todos os campos'; return; }
+
+    // Auto-completar domínio corporativo
+    if (!email.includes('@')) {
+        email += '@selbetti.com.br';
+    }
+
     err.textContent = '⌛ Verificando...';
     const { error } = await supabase.auth.signInWithPassword({ email, password: pass });
     if (error) err.textContent = '❌ ' + error.message;
     else document.getElementById('modal-login-overlay').classList.remove('open');
 }
+
 
 function updateUIForAuth() {
     if (currentUser) {
