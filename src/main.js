@@ -1218,6 +1218,19 @@ window.processarXML = async (file) => {
             for (const code of keys) {
                 const { qty, vlrUnit } = itemsMap[code];
 
+                // Garante que a peça esteja cadastrada no catálogo 'parts' para evitar violação de chave estrangeira (FK)
+                const { data: pCheck } = await supabase.from('parts').select('code').eq('code', code).maybeSingle();
+                if (!pCheck) {
+                    const { error: pErr } = await supabase.from('parts').insert({
+                        code: code,
+                        descricao: `PEÇA IMPORTADA VIA XML (${code})`,
+                        marca: 'OUTROS'
+                    });
+                    if (pErr) {
+                        console.warn(`Aviso ao cadastrar peça ${code}:`, pErr.message);
+                    }
+                }
+
                 const { data: cur } = await supabase.from(tableEstoque).select('qty').eq('code', code).single();
                 const newQty = (cur?.qty || 0) + qty;
 
@@ -2072,7 +2085,15 @@ window.iniciarAuditoria = async () => {
             .select('codigo')
             .like('codigo', `AUD-${todayStr}-%`);
         
-        const nextSeq = String((todayAudits?.length || 0) + 1).padStart(3, '0');
+        let nextNum = 1;
+        if (todayAudits && todayAudits.length > 0) {
+            const nums = todayAudits.map(a => {
+                const parts = a.codigo.split('-');
+                return parseInt(parts[parts.length - 1], 10) || 0;
+            });
+            nextNum = Math.max(...nums) + 1;
+        }
+        const nextSeq = String(nextNum).padStart(3, '0');
         const auditCode = `AUD-${todayStr}-${nextSeq}`;
 
         // 3. Criar registro da sessão
