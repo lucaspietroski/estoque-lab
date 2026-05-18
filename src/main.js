@@ -328,8 +328,10 @@ function switchTab(tabId) {
             d2.value = today.toISOString().split('T')[0];
         }
         renderModeloCusto();
+    }
     if (tabId === 'auditoria') {
         if (activeAudit) {
+
             document.getElementById('audit-panel-setup').style.display = 'none';
             document.getElementById('audit-panel-summary').style.display = 'none';
             document.getElementById('audit-panel-active').style.display = 'block';
