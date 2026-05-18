@@ -1179,10 +1179,17 @@
         targetTs = new Date(new Date(oldestRecord[0].ts).getTime() - 3600000).toISOString();
       }
 
+      // Busca o custo unitário da peça na tabela custos para valorizar financeiramente a entrada/saída retroativa
+      const { data: costData } = await supabase.from('custos').select('last_cost').eq('code', code).maybeSingle();
+      const unitPrice = costData?.last_cost || 0;
+      const totalPrice = unitPrice * Math.abs(diff);
+
       const payload = {
         code: code,
         tipo: diff > 0 ? 'entrada' : 'saída',
         qty: Math.abs(diff),
+        vlr_unit: unitPrice,
+        vlr_total: totalPrice,
         descricao: diff > 0 
           ? 'Entrada de Ajuste por Conciliação de Histórico (Auditor)' 
           : 'Saída de Ajuste por Conciliação de Histórico (Auditor)',
