@@ -983,7 +983,7 @@ async function renderHistorico() {
             <td>${h.user_email?.split('@')[0] || ''}</td>
             <td style="font-size: 0.85rem;">
                 <strong>${h.selb || ''}</strong>
-                ${h.tipo === 'ajuste' ? `<div style="font-size: 0.7rem; color: var(--text-muted); line-height:1.2">${h.descricao}</div>` : ''}
+                ${h.descricao && h.descricao !== h.selb ? `<div style="font-size: 0.7rem; color: var(--text-muted); line-height:1.2">${h.descricao}</div>` : ''}
             </td>
             <td>
                 ${currentUser.email === 'lucas.araujo@selbetti.com.br' ? `<button class="btn-edit-hist" onclick="openAjusteHistorico('${h.id}')" title="Ajustar Registro">✏️</button>` : ''}

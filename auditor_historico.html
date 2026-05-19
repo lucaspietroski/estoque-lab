@@ -671,6 +671,7 @@
               <th style="text-align: center; background: rgba(99, 102, 241, 0.15); color: #fff;">SALDO ACUMULADO</th>
               <th>OPERADOR</th>
               <th>SELB / OBSERVAÇÃO</th>
+              <th style="text-align: center;">AÇÃO</th>
             </tr>
           </thead>
           <tbody id="timeline-tbody">
@@ -774,28 +775,60 @@
       const estoqueTable = currentSector === 'REMANU' ? 'estoque_remanu' : 'estoque';
       const historicoTable = currentSector === 'REMANU' ? 'historico_remanu' : 'historico';
 
-      // 1. Fetch Parts Catalog
-      const { data: pData, error: pErr } = await supabase.from('parts').select('code, descricao');
-      if (pErr) throw pErr;
-      partsList = pData || [];
+      // 1. Fetch Parts Catalog with pagination (bypass 1000 limit)
+      let allParts = [];
+      let pPage = 0;
+      const pPageSize = 1000;
+      while (true) {
+        const { data, error } = await supabase.from('parts')
+          .select('code, descricao')
+          .range(pPage * pPageSize, (pPage + 1) * pPageSize - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allParts = allParts.concat(data);
+        if (data.length < pPageSize) break;
+        pPage++;
+      }
+      partsList = allParts;
 
-      // 2. Fetch Stock balances
-      const { data: sData, error: sErr } = await supabase.from(estoqueTable).select('code, qty');
-      if (sErr) throw sErr;
+      // 2. Fetch Stock balances with pagination (bypass 1000 limit)
+      let allStock = [];
+      let sPage = 0;
+      const sPageSize = 1000;
+      while (true) {
+        const { data, error } = await supabase.from(estoqueTable)
+          .select('code, qty')
+          .range(sPage * sPageSize, (sPage + 1) * sPageSize - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allStock = allStock.concat(data);
+        if (data.length < sPageSize) break;
+        sPage++;
+      }
       
       stockMap = {};
-      (sData || []).forEach(item => {
+      allStock.forEach(item => {
         if (item.code) {
           stockMap[item.code.toUpperCase()] = item.qty || 0;
         }
       });
 
-      // 3. Fetch Full History
-      const { data: hData, error: hErr } = await supabase.from(historicoTable)
-        .select('code, tipo, qty, ts, user_email, selb, descricao')
-        .order('ts', { ascending: true }); // Get chronological order
-      if (hErr) throw hErr;
-      historyList = hData || [];
+      // 3. Fetch Full History with pagination (bypass 1000 limit)
+      let allHistory = [];
+      let hPage = 0;
+      const hPageSize = 1000;
+      while (true) {
+        const { data, error } = await supabase.from(historicoTable)
+          .select('code, tipo, qty, ts, user_email, selb, descricao')
+          .order('ts', { ascending: true })
+          .range(hPage * hPageSize, (hPage + 1) * hPageSize - 1);
+        if (error) throw error;
+        if (!data || data.length === 0) break;
+        allHistory = allHistory.concat(data);
+        if (data.length < hPageSize) break;
+        hPage++;
+      }
+      historyList = allHistory;
 
       // 4. Run calculations
       calculateAudit();
@@ -1130,14 +1163,33 @@
             <td style="text-align: center; font-weight: bold; font-family: var(--mono); background: rgba(255, 255, 255, 0.015);">${running}</td>
             <td style="font-weight: 500; color: #fff;">${operator}</td>
             <td style="font-size: 0.8rem; color: var(--text-muted); max-width: 320px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${obs}">${obs}</td>
+            <td style="text-align: center;">
+              <button class="btn-action" style="padding: 2px 6px; font-size: 0.75rem; background: var(--red); min-width: auto; height: auto; border: none; margin: 0; line-height: 1;" onclick="window.deleteHistoryRow('${h.id}', '${h.code}')" title="Excluir este lançamento de histórico permanentemente">🗑️</button>
+            </td>
           </tr>
         `;
       }).join('');
 
     } catch (e) {
-      tbody.innerHTML = `<tr><td colspan="6" class="empty-state" style="color:var(--red);">
+      tbody.innerHTML = `<tr><td colspan="7" class="empty-state" style="color:var(--red);">
         ❌ Erro ao buscar timeline: ${e.message}
       </td></tr>`;
+    }
+  };
+
+  // DELETE SINGLE HISTORY ROW FROM TIMELINE
+  window.deleteHistoryRow = async (id, code) => {
+    if (!confirm(`⚠️ ATENÇÃO: Exclusão de Histórico\n\nDeseja realmente excluir permanentemente este lançamento da base de dados?\nEsta ação recalculará instantaneamente os saldos cronológicos da peça ${code}.`)) return;
+    try {
+      const historicoTable = currentSector === 'REMANU' ? 'historico_remanu' : 'historico';
+      const { error } = await supabase.from(historicoTable).delete().eq('id', id);
+      if (error) throw error;
+      
+      alert("✅ Registro excluído com sucesso!");
+      await runGlobalAudit();
+      await traceTimeline(code);
+    } catch (e) {
+      alert("❌ Erro ao excluir registro: " + e.message);
     }
   };
 
