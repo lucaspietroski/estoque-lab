@@ -1209,14 +1209,30 @@
       const { data: { session } } = await supabase.auth.getSession();
       const userEmail = session?.user?.email || 'lucas.araujo@selbetti.com.br';
 
-      // Busca o registro mais antigo desta peça no histórico em memória (para evitar problemas de case/espaço no banco)
+      // Busca o histórico desta peça em memória (já ordenado por ts do banco)
       const partHistory = historyList.filter(h => h.code?.trim().toUpperCase() === code.toUpperCase());
-      const oldestRecord = partHistory.length > 0 ? partHistory[0] : null;
+      
+      // Encontra o ajuste manual mais recente na timeline
+      let latestAjuste = null;
+      for (let i = partHistory.length - 1; i >= 0; i--) {
+        if (String(partHistory[i].tipo || '').toLowerCase().trim() === 'ajuste') {
+          latestAjuste = partHistory[i];
+          break;
+        }
+      }
 
       let targetTs = new Date().toISOString();
-      if (oldestRecord && oldestRecord.ts) {
-        // Retroage em 1 hora antes da primeiríssima movimentação histórica para que o estoque nasça antes das saídas
-        targetTs = new Date(new Date(oldestRecord.ts).getTime() - 3600000).toISOString();
+      if (latestAjuste && latestAjuste.ts) {
+        // Se houver um ajuste manual no meio da timeline, ele zera/sobrepõe o saldo calculado para 'qty'.
+        // Assim, qualquer conciliação deve vir DEPOIS desse ajuste para não ser ignorada.
+        // Adicionamos 1 segundo ao timestamp do ajuste manual para garantir que ele fique ordenado logo após ele.
+        targetTs = new Date(new Date(latestAjuste.ts).getTime() + 1000).toISOString();
+      } else {
+        const oldestRecord = partHistory.length > 0 ? partHistory[0] : null;
+        if (oldestRecord && oldestRecord.ts) {
+          // Retroage em 1 hora antes da primeiríssima movimentação histórica para que o estoque nasça antes das saídas
+          targetTs = new Date(new Date(oldestRecord.ts).getTime() - 3600000).toISOString();
+        }
       }
 
       // Busca o custo unitário da peça na tabela custos para valorizar financeiramente a entrada/saída retroativa

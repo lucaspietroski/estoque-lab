@@ -6,11 +6,26 @@ const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYm
 const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
 async function check() {
-    const { data, error } = await supabase
+    console.log("--- Querying ESTOQUE ---");
+    const { data: stockData, error: stockErr } = await supabase
+        .from('estoque')
+        .select('*')
+        .eq('code', '302LV94270');
+    console.log('Stock:', stockData, stockErr);
+
+    console.log("--- Querying HISTORICO ---");
+    const { data: histData, error: histErr } = await supabase
         .from('historico')
         .select('*')
         .eq('code', '302LV94270')
-        .eq('tipo', 'ajuste');
-    console.log('QueryResult for 302LV94270:', data, error);
+        .order('ts', { ascending: true });
+    
+    if (histData) {
+        histData.forEach((row, i) => {
+            console.log(`[${i}] ID: ${row.id} | TS: ${row.ts} | Tipo: ${row.tipo} | Qty: ${row.qty} | Desc: ${row.descricao || row.selb}`);
+        });
+    } else {
+        console.log('Hist Error:', histErr);
+    }
 }
 check();
