@@ -1172,7 +1172,25 @@ window.processarXML = async (file) => {
 
             if (!rows.length) { alert('Nenhuma linha encontrada no XML.'); return; }
 
-            let colProduto = -1, colQtd = -1, colVlrUnit = -1;
+            // 1. Busca o número do pedido globalmente nas primeiras 15 linhas do XML
+            let globalPedido = '';
+            for (let ri = 0; ri < Math.min(rows.length, 15); ri++) {
+                const cells = rows[ri].querySelectorAll('Cell');
+                for (const cell of cells) {
+                    const txt = cell.querySelector('Data')?.textContent.trim() || '';
+                    const upperTxt = txt.toUpperCase();
+                    if (upperTxt.includes('PEDIDO') || upperTxt.includes('PED.COMPRA') || upperTxt.includes('PED. COMPRA')) {
+                        const match = txt.match(/(?:PEDIDO|PED\.COMPRA|PED\. COMPRA)(?:\s+(?:DE\s+COMPRA|Nº|NUM\.?|N\.?))?[\s.:#-]+([A-Z0-9]+)/i);
+                        if (match && match[1]) {
+                            globalPedido = match[1].trim();
+                            break;
+                        }
+                    }
+                }
+                if (globalPedido) break;
+            }
+
+            let colProduto = -1, colQtd = -1, colVlrUnit = -1, colPedido = -1;
             let dataStartIdx = -1;
 
             for (let ri = 0; ri < Math.min(rows.length, 100); ri++) {
@@ -1183,6 +1201,7 @@ window.processarXML = async (file) => {
                         if (t.includes('PRODUTO') && colProduto < 0) colProduto = i;
                         if ((t.includes('QUANTIDADE') || t === 'QTD') && colQtd < 0) colQtd = i;
                         if (t.includes('UNIT') && colVlrUnit < 0) colVlrUnit = i;
+                        if ((t.includes('PEDIDO') || t.includes('PED.COMPRA') || t.includes('PED. COMPRA') || t === 'PED') && colPedido < 0) colPedido = i;
                     });
                     dataStartIdx = ri + 1;
                     break;
@@ -1210,8 +1229,15 @@ window.processarXML = async (file) => {
 
                 const vlrUnit = parseFloat(getCell(colVlrUnit).replace(',', '.').replace(/[^0-9.]/g, '')) || 0;
 
-                if (!itemsMap[rawCode]) itemsMap[rawCode] = { qty: 0, vlrUnit: vlrUnit };
+                // Captura o número do pedido por linha (se existir a coluna) ou usa o global
+                const rowPedido = colPedido >= 0 ? getCell(colPedido).trim() : '';
+                const orderNum = rowPedido || globalPedido || '';
+
+                if (!itemsMap[rawCode]) itemsMap[rawCode] = { qty: 0, vlrUnit: vlrUnit, pedido: orderNum };
                 itemsMap[rawCode].qty += qty;
+                if (orderNum && !itemsMap[rawCode].pedido) {
+                    itemsMap[rawCode].pedido = orderNum;
+                }
             }
 
             const keys = Object.keys(itemsMap);
@@ -1225,7 +1251,7 @@ window.processarXML = async (file) => {
             const tableHist = targetSector === 'REMANU' ? 'historico_remanu' : 'historico';
 
             for (const code of keys) {
-                const { qty, vlrUnit } = itemsMap[code];
+                const { qty, vlrUnit, pedido } = itemsMap[code];
 
                 // Garante que a peça esteja cadastrada no catálogo 'parts' para evitar violação de chave estrangeira (FK)
                 const { data: pCheck } = await supabase.from('parts').select('code').eq('code', code).maybeSingle();
@@ -1252,8 +1278,9 @@ window.processarXML = async (file) => {
                 }
 
                 if (currentUser) {
+                    const descHist = pedido ? `Entrada Lote XML - Pedido ${pedido}` : 'Entrada Lote XML';
                     const { error: errHist } = await supabase.from(tableHist).insert({
-                        tipo: 'entrada', code, descricao: 'Entrada Lote XML', qty,
+                        tipo: 'entrada', code, descricao: descHist, qty,
                         user_email: currentUser.email, dt: new Date().toLocaleString('pt-BR'),
                         vlr_unit: vlrUnit, vlr_total: vlrUnit * qty
                     });

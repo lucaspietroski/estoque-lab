@@ -819,7 +819,7 @@
       const hPageSize = 1000;
       while (true) {
         const { data, error } = await supabase.from(historicoTable)
-          .select('code, tipo, qty, ts, user_email, selb, descricao')
+          .select('id, code, tipo, qty, ts, user_email, selb, descricao')
           .order('ts', { ascending: true })
           .range(hPage * hPageSize, (hPage + 1) * hPageSize - 1);
         if (error) throw error;
@@ -1113,15 +1113,8 @@
     overlay.classList.add('open');
 
     try {
-      const historicoTable = currentSector === 'REMANU' ? 'historico_remanu' : 'historico';
-      const { data: rawHist, error } = await supabase.from(historicoTable)
-        .select('*')
-        .eq('code', partCode)
-        .order('ts', { ascending: true }); // Oldest first for line timeline
-
-      if (error) throw error;
-
-      const history = rawHist || [];
+      // Filtra o histórico em memória (garante 100% de consistência com o cálculo e ignora diferenças de maiúsculas/minúsculas e espaços)
+      const history = historyList.filter(h => h.code?.trim().toUpperCase() === partCode.toUpperCase());
       if (history.length === 0) {
         tbody.innerHTML = `<tr><td colspan="6" class="empty-state">
           <h3>Nenhum registro de histórico encontrado</h3>
@@ -1216,19 +1209,14 @@
       const { data: { session } } = await supabase.auth.getSession();
       const userEmail = session?.user?.email || 'lucas.araujo@selbetti.com.br';
 
-      // Busca o registro mais antigo desta peça no histórico para retroagir o lançamento de ajuste
-      const { data: oldestRecord, error: oldestErr } = await supabase.from(historicoTable)
-        .select('ts')
-        .eq('code', code)
-        .order('ts', { ascending: true })
-        .limit(1);
-
-      if (oldestErr) throw oldestErr;
+      // Busca o registro mais antigo desta peça no histórico em memória (para evitar problemas de case/espaço no banco)
+      const partHistory = historyList.filter(h => h.code?.trim().toUpperCase() === code.toUpperCase());
+      const oldestRecord = partHistory.length > 0 ? partHistory[0] : null;
 
       let targetTs = new Date().toISOString();
-      if (oldestRecord && oldestRecord.length > 0 && oldestRecord[0].ts) {
+      if (oldestRecord && oldestRecord.ts) {
         // Retroage em 1 hora antes da primeiríssima movimentação histórica para que o estoque nasça antes das saídas
-        targetTs = new Date(new Date(oldestRecord[0].ts).getTime() - 3600000).toISOString();
+        targetTs = new Date(new Date(oldestRecord.ts).getTime() - 3600000).toISOString();
       }
 
       // Busca o custo unitário da peça na tabela custos para valorizar financeiramente a entrada/saída retroativa
