@@ -1822,7 +1822,7 @@ window.renderModeloCusto = async () => {
             const modelo = eqMap[selb] || 'MODELO NÃO IDENTIFICADO (' + selb + ')';
             if (query && !modelo.includes(query)) return;
 
-            if (!byModel[modelo]) byModel[modelo] = { atendimentos: 0, comPeca: new Set(), semPeca: new Set(), pecas: 0, custo: 0, vlrNovaRef: 0, vlrNovaRevs: new Set() };
+            if (!byModel[modelo]) byModel[modelo] = { atendimentos: 0, comPeca: new Set(), semPeca: new Set(), pecas: 0, custo: 0, vlrNovaRef: 0, vlrNovaRevs: new Set(), partsCount: {} };
             
             if (window.currentSector === 'REMANU' && s.revision_id) {
                 byModel[modelo].comPeca.add(s.revision_id);
@@ -1847,6 +1847,16 @@ window.renderModeloCusto = async () => {
             
             byModel[modelo].pecas += (s.qty || 1);
             byModel[modelo].custo += (s.vlr_total || 0);
+
+            // Rastrear frequência de peças
+            const pCode = (s.code || '').toUpperCase().trim();
+            if (pCode) {
+                if (!byModel[modelo].partsCount) byModel[modelo].partsCount = {};
+                if (!byModel[modelo].partsCount[pCode]) {
+                    byModel[modelo].partsCount[pCode] = { qty: 0, descricao: s.descricao || '' };
+                }
+                byModel[modelo].partsCount[pCode].qty += (s.qty || 1);
+            }
         });
 
         // Revisados (Sem Peça ou Complemento)
@@ -1857,7 +1867,7 @@ window.renderModeloCusto = async () => {
             const modelo = eqMap[selb] || 'MODELO NÃO IDENTIFICADO (' + selb + ')';
             if (query && !modelo.includes(query)) return;
 
-            if (!byModel[modelo]) byModel[modelo] = { atendimentos: 0, comPeca: new Set(), semPeca: new Set(), pecas: 0, custo: 0 };
+            if (!byModel[modelo]) byModel[modelo] = { atendimentos: 0, comPeca: new Set(), semPeca: new Set(), pecas: 0, custo: 0, partsCount: {} };
             if (!byModel[modelo].comPeca.has(selb)) {
                 byModel[modelo].semPeca.add(selb);
             }
@@ -1867,6 +1877,11 @@ window.renderModeloCusto = async () => {
             const totalAtend = d.comPeca.size + d.semPeca.size;
             const economiaReal = (d.vlrNovaRef || 0) - d.custo;
             const economiaPct = (d.vlrNovaRef || 0) > 0 ? (economiaReal / d.vlrNovaRef) * 100 : 0;
+            
+            // Valor unitário da fusão nova para este modelo
+            const linkedCode = remanuMap[modelo.toUpperCase().trim()];
+            const unitVlrNova = linkedCode ? (custosMap[linkedCode] || 0) : 0;
+
             return {
                 modelo,
                 atendimentos: totalAtend,
@@ -1877,9 +1892,13 @@ window.renderModeloCusto = async () => {
                 custoMedio: totalAtend > 0 ? d.custo / totalAtend : 0,
                 vlrNovaRef: d.vlrNovaRef || 0,
                 economiaReal: economiaReal,
-                economiaPct: economiaPct
+                economiaPct: economiaPct,
+                unitVlrNova: unitVlrNova,
+                partsCount: d.partsCount || {}
             };
         }).sort((a, b) => b.custo - a.custo);
+
+        window.currentModeloCustoRows = rows;
 
         const fmt = v => 'R$ ' + Number(window.adjC(v)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         const totalCusto = rows.reduce((s, r) => s + r.custo, 0);
@@ -1895,9 +1914,19 @@ window.renderModeloCusto = async () => {
             const modelosComEconomia = rows.filter(r => r.vlrNovaRef > 0).sort((a, b) => b.economiaPct - a.economiaPct);
             const melhorModelo = modelosComEconomia.length > 0 ? modelosComEconomia[0].modelo : '-';
 
+            const top = rows[0];
+            const bottom = rows.length > 1 ? rows.filter(r => r.custo > 0).pop() : (rows[0] || null);
+            window.topModelData = top;
+            window.bottomModelData = bottom;
+
             document.getElementById('remanu-kpi-economia').textContent = fmt(totalEconomia);
             document.getElementById('remanu-kpi-percentual').textContent = mediaEconomiaPct.toFixed(1) + '%';
             document.getElementById('remanu-kpi-melhor').textContent = melhorModelo.length > 25 ? melhorModelo.substring(0,25)+'...' : melhorModelo;
+
+            document.getElementById('remanu-kpi-top').textContent = top ? top.modelo : '—';
+            document.getElementById('remanu-kpi-top-val').textContent = top ? fmt(top.custo) : 'R$ 0,00';
+            document.getElementById('remanu-kpi-bottom').textContent = bottom ? bottom.modelo : '—';
+            document.getElementById('remanu-kpi-bottom-val').textContent = bottom ? fmt(bottom.custo) : 'R$ 0,00';
 
             // Render Table for Remanu
             document.getElementById('mod-thead-tr').innerHTML = `
@@ -1907,8 +1936,8 @@ window.renderModeloCusto = async () => {
                 <th style="text-align: right; padding: 12px;">Preço Nova (Ref)</th>
                 <th style="text-align: right; padding: 12px;">Economia Gerada</th>
             `;
-            document.getElementById('mod-tbody').innerHTML = rows.slice(0, 50).map(r => `
-                <tr style="cursor:default">
+            document.getElementById('mod-tbody').innerHTML = rows.slice(0, 50).map((r, idx) => `
+                <tr style="cursor: pointer;" onclick="window.openDetalheModelo(window.currentModeloCustoRows[${idx}])">
                     <td style="font-size: 13px; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><strong>${r.modelo}</strong></td>
                     <td class="text-center" style="font-family: var(--mono);">${r.atendimentos}</td>
                     <td style="text-align:right; font-family: var(--mono);">${fmt(r.custo)}</td>
@@ -1945,8 +1974,8 @@ window.renderModeloCusto = async () => {
                 <th class="text-center" style="padding: 12px;">Peças Usadas</th>
                 <th style="text-align: right; padding: 12px;">Custo Total</th>
             `;
-            document.getElementById('mod-tbody').innerHTML = rows.slice(0, 50).map(r => `
-                <tr>
+            document.getElementById('mod-tbody').innerHTML = rows.slice(0, 50).map((r, idx) => `
+                <tr style="cursor: pointer;" onclick="window.openDetalheModelo(window.currentModeloCustoRows[${idx}])">
                     <td style="font-size: 13px; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${r.modelo}</td>
                     <td style="text-align:center; font-family: var(--mono);">${r.atendimentos}</td>
                     <td style="text-align:center; font-family: var(--mono);">${r.pecas}</td>
@@ -1978,7 +2007,40 @@ window.renderModeloCusto = async () => {
                     options: {
                         indexAxis: 'y',
                         responsive: true,
-                        maintainAspectRatio: false
+                        maintainAspectRatio: false,
+                        onClick: (e, activeEls) => {
+                            if (activeEls && activeEls.length > 0) {
+                                const idx = activeEls[0].index;
+                                const model = topEconomia[idx];
+                                if (model) {
+                                    window.openDetalheModelo(model);
+                                }
+                            }
+                        },
+                        onHover: (e, activeEls) => {
+                            if (e.chart) {
+                                e.chart.canvas.style.cursor = activeEls.length > 0 ? 'pointer' : 'default';
+                            }
+                        },
+                        plugins: {
+                            legend: { display: false },
+                            tooltip: {
+                                callbacks: {
+                                    label: (ctx) => `Economia: ${fmt(ctx.raw)}`
+                                }
+                            }
+                        },
+                        scales: {
+                            x: { 
+                                beginAtZero: true, 
+                                grid: { display: false },
+                                ticks: { font: { size: 10 } }
+                            },
+                            y: { 
+                                grid: { display: false },
+                                ticks: { font: { size: 11, weight: '600' }, color: '#1e293b' }
+                            }
+                        }
                     }
                 });
             } else {
@@ -2102,17 +2164,56 @@ window.openDetalheModelo = (typeOrModel) => {
     const fmt = v => 'R$ ' + Number(window.adjC(v)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const fmtNum = v => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     
-    document.getElementById('detalhe-com-peca').textContent = model.comPeca;
-    document.getElementById('detalhe-sem-peca').textContent = model.semPeca > 0 ? model.semPeca : '—';
-    document.getElementById('detalhe-total-maquinas').textContent = model.atendimentos;
-    document.getElementById('detalhe-pecas').textContent = model.pecas;
-    document.getElementById('detalhe-custo-geral').textContent = fmt(model.custoMedio);
-    document.getElementById('detalhe-custo-com-peca').textContent = model.comPeca > 0 ? fmt(model.custo / model.comPeca) : 'R$ 0,00';
-    document.getElementById('detalhe-media-pecas').textContent = model.atendimentos > 0 ? fmtNum(model.pecas / model.atendimentos) : '0,00';
-    
-    const totalEl = document.getElementById('detalhe-custo-total');
-    totalEl.textContent = fmt(model.custo);
-    totalEl.style.color = type === 'expensive' ? '#e74c3c' : (type === 'cheap' ? '#27ae60' : '#f39c12');
+    if (window.currentSector === 'REMANU') {
+        document.getElementById('detalhe-body-lab').style.display = 'none';
+        document.getElementById('detalhe-body-remanu').style.display = 'grid';
+        
+        const recovered = model.comPeca || 0;
+        const totalInvested = model.custo || 0;
+        const avgCost = recovered > 0 ? totalInvested / recovered : 0;
+        const avgParts = recovered > 0 ? (model.pecas || 0) / recovered : 0;
+        
+        let topPartCode = '—';
+        let topPartDesc = 'Nenhuma peça consumida';
+        if (model.partsCount) {
+            const sortedParts = Object.entries(model.partsCount).sort((a, b) => b[1].qty - a[1].qty);
+            if (sortedParts.length > 0) {
+                const [code, info] = sortedParts[0];
+                topPartCode = `${code} (${info.qty} un.)`;
+                topPartDesc = `${code} - ${info.descricao} (${info.qty} un.)`;
+            }
+        }
+        
+        const unitVlrNova = model.unitVlrNova || 0;
+        const economiaTotal = model.economiaReal || 0;
+
+        document.getElementById('remanu-detalhe-recup').textContent = recovered;
+        document.getElementById('remanu-detalhe-custo-medio').textContent = fmt(avgCost);
+        document.getElementById('remanu-detalhe-media-pecas').textContent = fmtNum(avgParts);
+        
+        const pecaTopEl = document.getElementById('remanu-detalhe-peca-top');
+        pecaTopEl.textContent = topPartCode;
+        pecaTopEl.title = topPartDesc;
+
+        document.getElementById('remanu-detalhe-vlr-nova').textContent = fmt(unitVlrNova);
+        document.getElementById('remanu-detalhe-total-invest').textContent = fmt(totalInvested);
+        document.getElementById('remanu-detalhe-economia-gerada').textContent = fmt(economiaTotal);
+    } else {
+        document.getElementById('detalhe-body-lab').style.display = 'grid';
+        document.getElementById('detalhe-body-remanu').style.display = 'none';
+        
+        document.getElementById('detalhe-com-peca').textContent = model.comPeca;
+        document.getElementById('detalhe-sem-peca').textContent = model.semPeca > 0 ? model.semPeca : '—';
+        document.getElementById('detalhe-total-maquinas').textContent = model.atendimentos;
+        document.getElementById('detalhe-pecas').textContent = model.pecas;
+        document.getElementById('detalhe-custo-geral').textContent = fmt(model.custoMedio);
+        document.getElementById('detalhe-custo-com-peca').textContent = model.comPeca > 0 ? fmt(model.custo / model.comPeca) : 'R$ 0,00';
+        document.getElementById('detalhe-media-pecas').textContent = model.atendimentos > 0 ? fmtNum(model.pecas / model.atendimentos) : '0,00';
+        
+        const totalEl = document.getElementById('detalhe-custo-total');
+        totalEl.textContent = fmt(model.custo);
+        totalEl.style.color = type === 'expensive' ? '#e74c3c' : (type === 'cheap' ? '#27ae60' : '#f39c12');
+    }
 
     overlay.classList.add('open');
 };
