@@ -1766,17 +1766,37 @@ window.renderModeloCusto = async () => {
         const d2 = document.getElementById('mod-d2')?.value;
         const query = document.getElementById('mod-busca')?.value.trim().toUpperCase();
 
-        // Carregar Dados
-        const [hRes, rRes, eRes] = await Promise.all([
+        // Carregar Dados (incluindo tabelas de fusões e custos para resolver históricos retroativos)
+        const [hRes, rRes, eRes, remanuRes, custosRes] = await Promise.all([
             supabase.from(getHistoricoTable()).select('*').eq('tipo', 'saída'),
             supabase.from('revisados').select('*'),
-            supabase.from('equipamentos').select('selb, modelo')
+            supabase.from('equipamentos').select('selb, modelo'),
+            supabase.from('modelos_remanu').select('*'),
+            supabase.from('custos').select('*')
         ]);
 
         const saídas = hRes.data || [];
         // A Remanufatura não utiliza a tabela de revisados do Laboratório
         const revisados = window.currentSector === 'REMANU' ? [] : (rRes.data || []);
         const equipamentos = eRes.data || [];
+        const remanuVinculos = remanuRes?.data || [];
+        const custosLista = custosRes?.data || [];
+
+        // Mapear modelo -> codigo_nova
+        const remanuMap = {};
+        remanuVinculos.forEach(v => {
+            if (v.modelo && v.codigo_nova) {
+                remanuMap[v.modelo.toUpperCase().trim()] = v.codigo_nova.toUpperCase().trim();
+            }
+        });
+
+        // Mapear codigo_nova -> last_cost
+        const custosMap = {};
+        custosLista.forEach(c => {
+            if (c.code) {
+                custosMap[c.code.toUpperCase().trim()] = c.last_cost || 0;
+            }
+        });
 
         const eqMap = {};
         equipamentos.forEach(e => {
@@ -1806,9 +1826,19 @@ window.renderModeloCusto = async () => {
             
             if (window.currentSector === 'REMANU' && s.revision_id) {
                 byModel[modelo].comPeca.add(s.revision_id);
+                
+                // Determina o valor de custo de referência da peça nova
+                let vlrNova = s.vlr_nova_ref || 0;
+                if (!vlrNova) {
+                    const linkedCode = remanuMap[modelo.toUpperCase().trim()];
+                    if (linkedCode) {
+                        vlrNova = custosMap[linkedCode] || 0;
+                    }
+                }
+
                 // Acumula vlr_nova_ref uma vez por revision_id (não por peça)
-                if (s.vlr_nova_ref && !byModel[modelo].vlrNovaRevs.has(s.revision_id)) {
-                    byModel[modelo].vlrNovaRef += s.vlr_nova_ref;
+                if (vlrNova && !byModel[modelo].vlrNovaRevs.has(s.revision_id)) {
+                    byModel[modelo].vlrNovaRef += vlrNova;
                     byModel[modelo].vlrNovaRevs.add(s.revision_id);
                 }
             } else {
