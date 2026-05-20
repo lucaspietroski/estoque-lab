@@ -1149,6 +1149,96 @@ window.saveManualSELB = async () => {
     }
 };
 
+// --- CADASTRO DE PEÇA NOVA ---
+window.openCadastroPecaModal = () => {
+    if (!currentUser || currentUser.email !== 'lucas.araujo@selbetti.com.br') {
+        alert('❌ Permissão negada! Apenas o usuário lucas.araujo@selbetti.com.br pode cadastrar peças novas.');
+        return;
+    }
+    document.getElementById('cad-code').value = '';
+    document.getElementById('cad-desc').value = '';
+    document.getElementById('cad-marca').value = 'OUTROS';
+    document.getElementById('cad-custo').value = '';
+    document.getElementById('cadastro-peca-status').innerHTML = '';
+    
+    document.getElementById('modal-cadastro-peca').classList.add('open');
+};
+
+window.closeCadastroPecaModal = () => {
+    document.getElementById('modal-cadastro-peca').classList.remove('open');
+};
+
+window.saveCadastroPeca = async () => {
+    if (!currentUser || currentUser.email !== 'lucas.araujo@selbetti.com.br') {
+        alert('❌ Permissão negada! Apenas o usuário lucas.araujo@selbetti.com.br pode cadastrar peças novas.');
+        return;
+    }
+
+    const code = document.getElementById('cad-code').value.trim().toUpperCase();
+    const desc = document.getElementById('cad-desc').value.trim().toUpperCase();
+    const marca = document.getElementById('cad-marca').value.trim().toUpperCase() || 'OUTROS';
+    const custo = parseFloat(document.getElementById('cad-custo').value) || 0;
+    const status = document.getElementById('cadastro-peca-status');
+
+    if (!code || !desc || isNaN(custo) || custo <= 0) {
+        status.innerHTML = '<span style="color:var(--red)">⚠️ Código, descrição e valor (maior que zero) são obrigatórios!</span>';
+        return;
+    }
+
+    status.innerHTML = '⌛ Cadastrando peça no Supabase...';
+
+    try {
+        // 1. Verificar se a peça já existe
+        const { data: checkPart, error: checkErr } = await supabase
+            .from('parts')
+            .select('code')
+            .eq('code', code)
+            .maybeSingle();
+
+        if (checkErr) throw checkErr;
+        if (checkPart) {
+            status.innerHTML = '<span style="color:var(--red)">❌ Código de peça já cadastrado!</span>';
+            return;
+        }
+
+        // 2. Cadastrar na tabela parts
+        const { error: partErr } = await supabase.from('parts').insert({
+            code: code,
+            descricao: desc,
+            marca: marca
+        });
+        if (partErr) throw partErr;
+
+        // 3. Cadastrar na tabela custos
+        const { error: costErr } = await supabase.from('custos').upsert({
+            code: code,
+            last_cost: custo
+        });
+        if (costErr) throw costErr;
+
+        // 4. Inicializar saldos com 0 nas tabelas estoque e estoque_remanu
+        await supabase.from('estoque').upsert({ code: code, qty: 0 });
+        await supabase.from('estoque_remanu').upsert({ code: code, qty: 0 });
+
+        status.innerHTML = '<span style="color:var(--green)">✅ Peça cadastrada com sucesso!</span>';
+        setTimeout(() => {
+            document.getElementById('modal-cadastro-peca').classList.remove('open');
+            const menu = document.getElementById('admin-menu-overlay');
+            if (menu) menu.classList.remove('open');
+            
+            // Recarrega se estiver na aba de estoque
+            if (currentTab === 'estoque') {
+                renderChips();
+                renderEstoque();
+            }
+        }, 1500);
+
+    } catch (e) {
+        console.error(e);
+        status.innerHTML = `<span style="color:var(--red)">❌ Erro: ${e.message}</span>`;
+    }
+};
+
 // Facilitar navegação do menu admin
 window.openImportFromMenu = () => {
     document.getElementById('admin-menu-box').style.display = 'none';
