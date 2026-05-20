@@ -2130,23 +2130,89 @@ window.salvarVinculoRemanu = async () => {
     }
 
     btn.disabled = true;
-    btn.textContent = 'Salvando...';
+    btn.textContent = 'Verificando...';
 
-    const { error } = await supabase.from('modelos_remanu').upsert({
-        modelo: modelo,
-        codigo_nova: codNova,
-        codigo_rs: codRS
-    }, { onConflict: 'modelo' });
-    
-    btn.disabled = false;
-    btn.textContent = 'Salvar Vínculo';
+    try {
+        // 1. Validar Código Peça Nova
+        const { data: pNova, error: errPNova } = await supabase
+            .from('parts')
+            .select('code')
+            .eq('code', codNova)
+            .maybeSingle();
 
-    if (error) {
-        alert('Erro ao salvar: ' + error.message);
-    } else {
-        document.getElementById('vinc-nova').value = '';
-        document.getElementById('vinc-rs').value = '';
-        await carregarVinculosRemanu();
+        if (errPNova) throw new Error('Erro ao buscar peça nova: ' + errPNova.message);
+        if (!pNova) {
+            alert(`❌ O Código de Peça Nova "${codNova}" não existe cadastrado no sistema! Cadastre a peça no menu de engrenagem primeiro.`);
+            btn.disabled = false;
+            btn.textContent = 'Salvar Vínculo';
+            return;
+        }
+
+        const { data: cNova, error: errCNova } = await supabase
+            .from('custos')
+            .select('last_cost')
+            .eq('code', codNova)
+            .maybeSingle();
+
+        if (errCNova) throw new Error('Erro ao consultar custo da peça nova: ' + errCNova.message);
+        if (!cNova || !cNova.last_cost || cNova.last_cost <= 0) {
+            alert(`❌ A Peça Nova "${codNova}" está cadastrada, mas não possui valor de custo agregado (Custo: R$ 0,00 ou inexistente)!`);
+            btn.disabled = false;
+            btn.textContent = 'Salvar Vínculo';
+            return;
+        }
+
+        // 2. Validar Código Peça RS
+        const { data: pRS, error: errPRS } = await supabase
+            .from('parts')
+            .select('code')
+            .eq('code', codRS)
+            .maybeSingle();
+
+        if (errPRS) throw new Error('Erro ao buscar peça RS: ' + errPRS.message);
+        if (!pRS) {
+            alert(`❌ O Código de Peça RS "${codRS}" não existe cadastrado no sistema! Cadastre a peça no menu de engrenagem primeiro.`);
+            btn.disabled = false;
+            btn.textContent = 'Salvar Vínculo';
+            return;
+        }
+
+        const { data: cRS, error: errCRS } = await supabase
+            .from('custos')
+            .select('last_cost')
+            .eq('code', codRS)
+            .maybeSingle();
+
+        if (errCRS) throw new Error('Erro ao consultar custo da peça RS: ' + errCRS.message);
+        if (!cRS || !cRS.last_cost || cRS.last_cost <= 0) {
+            alert(`❌ A Peça RS "${codRS}" está cadastrada, mas não possui valor de custo agregado (Custo: R$ 0,00 ou inexistente)!`);
+            btn.disabled = false;
+            btn.textContent = 'Salvar Vínculo';
+            return;
+        }
+
+        // 3. Salvar Vínculo após todas as validações com sucesso
+        btn.textContent = 'Salvando...';
+        const { error } = await supabase.from('modelos_remanu').upsert({
+            modelo: modelo,
+            codigo_nova: codNova,
+            codigo_rs: codRS
+        }, { onConflict: 'modelo' });
+
+        if (error) {
+            alert('Erro ao salvar: ' + error.message);
+        } else {
+            document.getElementById('vinc-nova').value = '';
+            document.getElementById('vinc-rs').value = '';
+            await carregarVinculosRemanu();
+        }
+
+    } catch (e) {
+        console.error(e);
+        alert('❌ Ocorreu um erro ao validar os códigos: ' + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Salvar Vínculo';
     }
 };
 
