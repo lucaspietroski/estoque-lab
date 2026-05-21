@@ -10,8 +10,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Fira+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.min.js"></script>
-  <script type="module" crossorigin src="/assets/index-BIv2TJ9m.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-qXoeobou.css">
+  <script type="module" crossorigin src="/assets/index-DzYtx4Uz.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-BNdQemi1.css">
 </head>
 <body>
 
@@ -22,7 +22,7 @@
       <div class="auth-title">Estoque Laboratório</div>
       <div class="auth-copy">Entre com sua conta para visualizar estoque, histórico e custos. Os dados do sistema ficam bloqueados até a autenticação.</div>
     </div>
-    <div class="auth-form">
+    <div class="auth-form" id="login-form">
       <div class="auth-row">
         <div class="modal-label">Usuário ou e-mail</div>
         <input type="text" class="modal-input" id="login-user" placeholder="pcp ou usuario@empresa.com" autocomplete="username" autocorrect="off" spellcheck="false">
@@ -30,6 +30,9 @@
       <div class="auth-row">
         <div class="modal-label">Senha</div>
         <input type="password" class="modal-input" id="login-pass" placeholder="senha" autocomplete="current-password">
+      </div>
+      <div style="text-align: right; margin-top: -5px; margin-bottom: 15px;">
+        <a href="#" id="link-forgot-pass" style="font-size: 12px; color: var(--blue); text-decoration: none; font-weight: 600; transition: color 0.15s;">Esqueci minha senha</a>
       </div>
       <label class="auth-check" for="remember-login">
         <input type="checkbox" id="remember-login" checked>
@@ -41,6 +44,38 @@
       <div class="auth-lgpd" style="font-size: 10px; color: var(--text-muted); text-align: center; margin-top: 15px; line-height: 1.4; opacity: 0.85; border-top: 1px solid var(--border); padding-top: 12px;">
         🔒 <strong>Aviso de Privacidade (LGPD):</strong> Ao fazer login, coletamos seu e-mail corporativo para fins estritos de auditoria de movimentação do estoque e controle interno, em conformidade com as políticas de segurança da informação da empresa.
       </div>
+    </div>
+
+    <!-- TELA DE RECUPERAÇÃO DE SENHA (FORGOT PASSWORD) -->
+    <div class="auth-form" id="forgot-pass-form" style="display: none;">
+      <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5; text-align: center;">
+        Insira seu e-mail corporativo cadastrado para receber um link de redefinição de senha no seu e-mail.
+      </div>
+      <div class="auth-row" style="margin-bottom: 15px;">
+        <div class="modal-label">E-mail corporativo</div>
+        <input type="email" class="modal-input" id="forgot-email" placeholder="usuario@selbetti.com.br" autocomplete="email" style="margin-bottom: 0;">
+      </div>
+      <div class="modal-err" id="forgot-err" style="min-height: 1.2rem; text-align: center; font-weight: 600;"></div>
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 5px;">
+        <button class="btn-admin auth-submit" id="forgot-submit" style="width: 100%; justify-content: center;">Enviar E-mail de Recuperação</button>
+        <button class="btn-cancel" id="forgot-back" style="width: 100%; font-size: 13px; justify-content: center;">Voltar para o Login</button>
+      </div>
+    </div>
+    </div>
+  </div>
+</div>
+
+<!-- OVERLAY DE SELEÇÃO DE AMBIENTE -->
+<div id="env-selector-overlay" class="modal-overlay" style="display:none; align-items: center; justify-content: center; z-index: 9999; backdrop-filter: blur(20px); background: rgba(15, 23, 42, 0.9);">
+  <div class="modal-box" style="width: 760px; background: var(--surface); border: 1px solid var(--border); border-radius: 24px; padding: 40px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
+    <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; color: var(--blue); margin-bottom: 8px;">Bem-vindo ao Sistema</div>
+    <h2 style="font-size: 28px; font-weight: 800; margin-bottom: 12px; color: var(--text);">Escolha o Ambiente Operacional</h2>
+    <p style="color: var(--text-muted); font-size: 15px; margin-bottom: 35px; max-width: 500px; margin-left: auto; margin-right: auto;">
+      Selecione um contexto operacional abaixo para carregar as abas, dashboards e configurações adequadas para suas tarefas.
+    </p>
+    
+    <div id="env-cards-grid" class="env-grid">
+      <!-- Cards gerados dinamicamente via JS -->
     </div>
   </div>
 </div>
@@ -806,13 +841,13 @@
     <div id="admin-menu-box">
       <h3 style="margin-bottom: 20px;">⚙️ Administrativo</h3>
       <div style="display: flex; flex-direction: column; gap: 10px;">
-        <button class="btn-admin" style="width: 100%; justify-content: center;" onclick="openImportFromMenu()">📥 Importar Dados (XML Protheus)</button>
-        <button class="btn-admin" style="width: 100%; justify-content: center;" onclick="window.switchTab('modelo-custo'); closeAdminMenu();">📊 Custo por Modelo (Financeiro)</button>
-        <button class="btn-admin" style="width: 100%; justify-content: center;" onclick="window.switchTab('bi-equipamentos'); closeAdminMenu();">📁 Importar Base BI (WMS)</button>
-        <button class="btn-admin" style="width: 100%; justify-content: center;" onclick="window.switchTab('revisados'); closeAdminMenu();">🛠️ Registrar SELBs Revisados</button>
-        <button class="btn-admin" style="width: 100%; justify-content: center; background: #0ea5e9; color: white;" onclick="openManualSELBModal()">🔗 Vincular SELB Manualmente</button>
-        <button class="btn-admin" style="width: 100%; justify-content: center; background: #10b981; color: white;" onclick="openCadastroPecaModal()">➕ Cadastrar Peça Nova</button>
-        <button class="btn-admin" style="width: 100%; justify-content: center; background: #8b5cf6;" onclick="gerarBackupCompleto()">📦 Gerar Backup Completo (JSON)</button>
+        <button id="admin-btn-import-xml" class="btn-admin" style="width: 100%; justify-content: center;" onclick="openImportFromMenu()">📥 Importar Dados (XML Protheus)</button>
+        <button id="admin-btn-modelo-custo" class="btn-admin" style="width: 100%; justify-content: center;" onclick="window.switchTab('modelo-custo'); closeAdminMenu();">📊 Custo por Modelo (Financeiro)</button>
+        <button id="admin-btn-import-wms" class="btn-admin" style="width: 100%; justify-content: center;" onclick="window.switchTab('bi-equipamentos'); closeAdminMenu();">📁 Importar Base BI (WMS)</button>
+        <button id="admin-btn-revisados" class="btn-admin" style="width: 100%; justify-content: center;" onclick="window.switchTab('revisados'); closeAdminMenu();">🛠️ Registrar SELBs Revisados</button>
+        <button id="admin-btn-vinculo-selb" class="btn-admin" style="width: 100%; justify-content: center; background: #0ea5e9; color: white;" onclick="openManualSELBModal()">🔗 Vincular SELB Manualmente</button>
+        <button id="admin-btn-cadastro-peca" class="btn-admin" style="width: 100%; justify-content: center; background: #10b981; color: white;" onclick="openCadastroPecaModal()">➕ Cadastrar Peça Nova</button>
+        <button id="admin-btn-backup" class="btn-admin" style="width: 100%; justify-content: center; background: #8b5cf6;" onclick="gerarBackupCompleto()">📦 Gerar Backup Completo (JSON)</button>
         <button id="btn-toggle-custo" class="btn-admin" style="width: 100%; justify-content: center; background: var(--bg-hover); color: var(--text);" onclick="window.toggleModeCusto()">💲 Modo Custo Real (DESATIVADO)</button>
         <button class="btn-cancel" onclick="closeAdminMenu()" style="margin-top: 20px; width: 100%;">Fechar Menu</button>
       </div>
@@ -1148,6 +1183,31 @@
     <div class="modal-actions" style="margin-top: 25px; display: flex; gap: 10px;">
       <button class="btn-cancel" onclick="document.getElementById('modal-audit-ajuste').classList.remove('open')" style="flex: 1; border-radius: 8px; height: 40px;">Cancelar</button>
       <button class="btn-confirm" onclick="window.confirmarAjusteEstoque()" style="flex: 1; border-radius: 8px; height: 40px; background: var(--orange);">Confirmar Ajuste</button>
+    </div>
+  </div>
+</div>
+
+<!-- OVERLAY DE REPETIÇÃO/REDEFINIÇÃO DE SENHA -->
+<div id="modal-reset-password" class="modal-overlay" style="display:none; align-items: center; justify-content: center; z-index: 10000; backdrop-filter: blur(15px); background: rgba(15, 23, 42, 0.85);">
+  <div class="modal-box" style="width: 400px; background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 30px; text-align: left; box-shadow: 0 20px 40px rgba(0,0,0,0.3);">
+    <h3 style="font-size: 18px; font-weight: 800; margin-bottom: 10px; color: var(--text); display: flex; align-items: center; gap: 8px;">🔒 Redefinir Senha</h3>
+    <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 20px; line-height: 1.4;">
+      Digite e confirme a sua nova senha de acesso ao sistema.
+    </p>
+    
+    <div style="margin-bottom: 15px;">
+      <div class="modal-label">Nova Senha</div>
+      <input type="password" class="modal-input" id="reset-new-pass" placeholder="Mínimo 6 caracteres" style="margin-bottom: 0;">
+    </div>
+    <div style="margin-bottom: 15px;">
+      <div class="modal-label">Confirmar Nova Senha</div>
+      <input type="password" class="modal-input" id="reset-confirm-pass" placeholder="Confirme sua nova senha" style="margin-bottom: 0;">
+    </div>
+    
+    <div class="modal-err" id="reset-pass-err" style="min-height: 1.2rem; font-weight: 600; text-align: center;"></div>
+    
+    <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 15px;">
+      <button class="btn-confirm" id="btn-reset-pass-confirm">Atualizar Senha</button>
     </div>
   </div>
 </div>

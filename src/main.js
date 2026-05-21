@@ -1,39 +1,199 @@
 import { supabase } from './supabase.js'
 
+// --- ARQUITETURA DE AMBIENTES OPERACIONAIS ---
+const ENVIRONMENTS_CONFIG = {
+    LAB: {
+        name: 'Laboratório',
+        icon: '🔬',
+        tabs: ['dashboard', 'estoque', 'historico', 'movimentacoes', 'modelo-custo'],
+        defaultTab: 'dashboard'
+    },
+    REMANU: {
+        name: 'Remanufatura',
+        icon: '⚙️',
+        tabs: ['dashboard', 'estoque', 'historico', 'movimentacoes', 'modelo-custo'],
+        defaultTab: 'dashboard'
+    },
+    '3D': {
+        name: 'Impressão 3D',
+        icon: '📦',
+        tabs: ['dashboard', 'estoque', 'historico', 'movimentacoes'],
+        defaultTab: 'dashboard'
+    },
+    ADMIN: {
+        name: 'Administrativo',
+        icon: '🔒',
+        tabs: ['dashboard', 'historico', 'movimentacoes', 'auditoria', 'modelo-custo', 'bi-equipamentos'],
+        defaultTab: 'dashboard'
+    }
+};
+
+const remanuOnlyUsers = [
+    'andrio.rockenbach@selbetti.com.br',
+    'bernardo.voit@selbetti.com.br',
+    'carlos.nogueira@selbetti.com.br'
+];
+
 // --- ESTADO GLOBAL ---
 let currentUser = null;
+let currentUserProfile = null;
 let currentTab = 'dashboard';
 let searchTimeout = null;
 let saidaItems = []; // Carrinho de saída SELB
-window.currentSector = 'LAB'; // Setor atual (LAB ou REMANU)
+window.currentSector = 'LAB'; // Ambiente/Setor atual
 let activeAudit = null;
 let activeAuditItems = {};
 
-window.changeSector = (sector) => {
-    window.currentSector = sector;
+// --- ESTRUTURA DE PERMISSÕES ---
+window.hasPermission = (action) => {
+    if (!currentUserProfile) return false;
+    if (currentUserProfile.is_admin || currentUserProfile.role === 'ADMIN') return true;
     
-    // Atualiza botões
-    const btnLab = document.getElementById('btn-sector-lab');
-    const btnRemanu = document.getElementById('btn-sector-remanu');
-    if (btnLab) btnLab.classList.toggle('active', sector === 'LAB');
-    if (btnRemanu) btnRemanu.classList.toggle('active', sector === 'REMANU');
+    const rolePermissions = {
+        'manual_adjustments': ['ADMIN'],
+        'create_parts': ['ADMIN'],
+        'view_costs': ['ADMIN', 'MANAGER'],
+        'import_xml': ['ADMIN', 'MANAGER'],
+        'run_audit': ['ADMIN', 'AUDITOR'],
+        'link_selb': ['ADMIN', 'MANAGER'],
+        'register_revisados': ['ADMIN', 'MANAGER', 'OPERATOR']
+    };
     
-    const btnVinculos = document.getElementById('btn-remanu-vinculos');
-    if (btnVinculos) btnVinculos.style.display = sector === 'REMANU' ? 'inline-block' : 'none';
+    const allowedRoles = rolePermissions[action] || [];
+    return allowedRoles.includes(currentUserProfile.role);
+};
 
-    // Limpa pesquisa
+// --- FALLBACK RESILIENTE DE PERFIL (Garantia de Zero Downtime) ---
+function getFallbackProfile(user) {
+    const email = user.email || '';
+    const isLucas = email === 'lucas.araujo@selbetti.com.br';
+    
+    if (isLucas) {
+        return {
+            email,
+            role: 'ADMIN',
+            allowed_sectors: ['LAB', 'REMANU', '3D', 'ADMIN'],
+            default_sector: 'LAB',
+            is_admin: true,
+            active: true
+        };
+    }
+    
+    if (remanuOnlyUsers.includes(email)) {
+        return {
+            email,
+            role: 'OPERATOR',
+            allowed_sectors: ['REMANU'],
+            default_sector: 'REMANU',
+            is_admin: false,
+            active: true
+        };
+    }
+    
+    return {
+        email,
+        role: 'OPERATOR',
+        allowed_sectors: ['LAB'],
+        default_sector: 'LAB',
+        is_admin: false,
+        active: true
+    };
+}
+
+// --- BUSCA DE PERFIL DO SUPABASE ---
+async function loadUserProfile(user) {
+    if (!user) {
+        currentUserProfile = null;
+        return;
+    }
+    try {
+        const { data, error } = await supabase
+            .from('user_profiles')
+            .select('*')
+            .eq('id', user.id)
+            .maybeSingle();
+            
+        if (error) throw error;
+        
+        if (data) {
+            currentUserProfile = data;
+        } else {
+            currentUserProfile = getFallbackProfile(user);
+        }
+    } catch (e) {
+        console.warn('⚠️ Erro ao ler user_profiles, usando fallback local:', e.message);
+        currentUserProfile = getFallbackProfile(user);
+    }
+}
+
+// --- FUNÇÃO PARA SELECIONAR AMBIENTE ---
+window.selectEnvironment = (env) => {
+    window.currentSector = env;
+    localStorage.setItem('last_selected_env', env);
+    
+    const config = ENVIRONMENTS_CONFIG[env];
+    if (!config) return;
+    
+    // Redesenhar abas permitidas (Carregamento Modular)
+    const tabBar = document.querySelector('.tab-bar');
+    if (tabBar) {
+        tabBar.innerHTML = config.tabs.map(tab => {
+            const tabNames = {
+                dashboard: '📊 Dashboard',
+                estoque: '📦 Estoque',
+                historico: '📋 Histórico',
+                movimentacoes: '📈 Movimentações',
+                'modelo-custo': '💰 Custo/Modelo',
+                auditoria: '🔍 Auditoria',
+                'bi-equipamentos': '📁 Base BI (WMS)'
+            };
+            return `<button class="tab-btn" data-tab="${tab}">${tabNames[tab] || tab}</button>`;
+        }).join('');
+        
+        // Re-vincular eventos de clique
+        tabBar.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => switchTab(btn.dataset.tab));
+        });
+    }
+    
+    // Fechar overlay de seleção se aberto
+    const overlay = document.getElementById('env-selector-overlay');
+    if (overlay) overlay.style.display = 'none';
+    
+    // Atualizar classes do switcher superior se visível
+    if (currentUserProfile && currentUserProfile.allowed_sectors) {
+        currentUserProfile.allowed_sectors.forEach(sec => {
+            const btn = document.getElementById(`btn-sector-${sec.toLowerCase()}`);
+            if (btn) btn.classList.toggle('active', sec === env);
+        });
+    }
+    
+    // Exibir botão vínculos se for REMANU
+    const btnVinculos = document.getElementById('btn-remanu-vinculos');
+    if (btnVinculos) btnVinculos.style.display = env === 'REMANU' ? 'inline-block' : 'none';
+    
+    // Limpar pesquisa
     const searchInp = document.getElementById('search-main');
     if (searchInp) searchInp.value = '';
     
-    // Recarrega aba atual
-    if (currentTab === 'dashboard') updateDashboard();
-    else if (currentTab === 'estoque') { renderChips(); renderEstoque(); }
-    else if (currentTab === 'historico') renderHistorico();
-    else if (currentTab === 'movimentacoes') renderMovDashboard();
+    // Carregar aba padrão do ambiente
+    switchTab(config.defaultTab || 'dashboard');
 };
 
-const getEstoqueTable = () => window.currentSector === 'REMANU' ? 'estoque_remanu' : 'estoque';
-const getHistoricoTable = () => window.currentSector === 'REMANU' ? 'historico_remanu' : 'historico';
+// Aliases para compatibilidade legada
+window.changeSector = (sector) => window.selectEnvironment(sector);
+
+const getEstoqueTable = () => {
+    if (window.currentSector === 'REMANU') return 'estoque_remanu';
+    if (window.currentSector === '3D') return 'estoque_3d';
+    return 'estoque';
+};
+
+const getHistoricoTable = () => {
+    if (window.currentSector === 'REMANU') return 'historico_remanu';
+    if (window.currentSector === '3D') return 'historico_3d';
+    return 'historico';
+};
 
 // --- HELPER DE BUSCA ---
 window.formatSearchQuery = (val) => {
@@ -97,24 +257,232 @@ const adminBadge = document.getElementById('admin-badge');
 // --- INICIALIZAÇÃO ---
 async function init() {
     console.log('🚀 Inicializando sistema...');
-    renderChips();
-    window.updateModeCustoBtn();
-
-    const { data: { session } } = await supabase.auth.getSession();
-    currentUser = session?.user || null;
-    updateUIForAuth();
-
-    if (currentUser) {
-        loadInitialData();
+    
+    try {
+        renderChips();
+    } catch (err) {
+        console.error('⚠️ Erro ao renderizar chips na inicialização:', err);
     }
 
-    supabase.auth.onAuthStateChange((event, session) => {
+    try {
+        window.updateModeCustoBtn();
+    } catch (err) {
+        console.error('⚠️ Erro ao atualizar botão de custo na inicialização:', err);
+    }
+
+    try {
+        const { data: { session } } = await supabase.auth.getSession();
         currentUser = session?.user || null;
-        updateUIForAuth();
-        if (currentUser && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
-            loadInitialData();
+        
+        if (currentUser) {
+            await loadUserProfile(currentUser);
         }
+        updateUIForAuth();
+
+        if (currentUser) {
+            handleLoginContext();
+        }
+    } catch (err) {
+        console.error('⚠️ Erro ao carregar sessão ou perfil do usuário na inicialização:', err);
+        // Garante que a tela de login apareça caso ocorra um erro de rede/sessão
+        updateUIForAuth();
+    }
+
+    try {
+        supabase.auth.onAuthStateChange(async (event, session) => {
+            console.log('🔄 Estado de autenticação alterado:', event);
+            currentUser = session?.user || null;
+            
+            if (event === 'PASSWORD_RECOVERY') {
+                const modal = document.getElementById('modal-reset-password');
+                if (modal) {
+                    modal.style.display = 'flex';
+                    const errEl = document.getElementById('reset-pass-err');
+                    if (errEl) errEl.textContent = '';
+                    const newPass = document.getElementById('reset-new-pass');
+                    if (newPass) newPass.value = '';
+                    const confirmPass = document.getElementById('reset-confirm-pass');
+                    if (confirmPass) confirmPass.value = '';
+                }
+                return;
+            }
+
+            if (currentUser) {
+                await loadUserProfile(currentUser);
+            } else {
+                currentUserProfile = null;
+            }
+            updateUIForAuth();
+            if (currentUser && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
+                handleLoginContext();
+            }
+        });
+    } catch (err) {
+        console.error('⚠️ Erro ao registrar onAuthStateChange:', err);
+    }
+
+    // --- FLUXO DE RECUPERAÇÃO DE SENHA (EVENT LISTENERS RESILIENTES) ---
+    const linkForgot = document.getElementById('link-forgot-pass');
+    const btnForgotBack = document.getElementById('forgot-back');
+    const formLogin = document.getElementById('login-form');
+    const formForgot = document.getElementById('forgot-pass-form');
+
+    console.log('🔍 Elementos de recuperação de senha:', {
+        linkForgot: !!linkForgot,
+        btnForgotBack: !!btnForgotBack,
+        formLogin: !!formLogin,
+        formForgot: !!formForgot
     });
+
+    if (linkForgot) {
+        linkForgot.addEventListener('click', (e) => {
+            e.preventDefault();
+            console.log('👆 Clique detectado no link "Esqueci minha senha"');
+            
+            if (formLogin) {
+                formLogin.style.display = 'none';
+            } else {
+                console.warn('⚠️ Elemento #login-form não encontrado para esconder.');
+            }
+            
+            if (formForgot) {
+                formForgot.style.display = 'block';
+                console.log('🔓 Formulário de recuperação de senha exibido com sucesso');
+                const forgotEmail = document.getElementById('forgot-email');
+                if (forgotEmail) forgotEmail.value = '';
+                const forgotErr = document.getElementById('forgot-err');
+                if (forgotErr) forgotErr.textContent = '';
+            } else {
+                console.error('❌ Elemento #forgot-pass-form não encontrado para exibir!');
+            }
+        });
+    } else {
+        console.error('❌ Elemento #link-forgot-pass (Esqueci minha senha) não encontrado no DOM!');
+    }
+
+    if (btnForgotBack) {
+        btnForgotBack.addEventListener('click', (e) => {
+            e.preventDefault();
+            console.log('👆 Clique detectado no botão "Voltar para o Login"');
+            
+            if (formForgot) {
+                formForgot.style.display = 'none';
+            } else {
+                console.warn('⚠️ Elemento #forgot-pass-form não encontrado para esconder.');
+            }
+            
+            if (formLogin) {
+                formLogin.style.display = 'block';
+                const loginErrEl = document.getElementById('login-err');
+                if (loginErrEl) loginErrEl.textContent = '';
+            } else {
+                console.error('❌ Elemento #login-form não encontrado para exibir!');
+            }
+        });
+    } else {
+        console.warn('⚠️ Elemento #forgot-back não encontrado no DOM!');
+    }
+
+    const btnForgotSubmit = document.getElementById('forgot-submit');
+    if (btnForgotSubmit) {
+        btnForgotSubmit.addEventListener('click', async () => {
+            const email = document.getElementById('forgot-email').value.trim();
+            const errEl = document.getElementById('forgot-err');
+            
+            if (!email) {
+                errEl.style.color = 'var(--red)';
+                errEl.textContent = '⚠️ Informe o seu e-mail corporativo.';
+                return;
+            }
+
+            btnForgotSubmit.disabled = true;
+            btnForgotSubmit.textContent = 'Enviando...';
+            errEl.style.color = 'var(--text-muted)';
+            errEl.textContent = '⌛ Solicitando link de redefinição...';
+
+            try {
+                const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                    redirectTo: window.location.origin + window.location.pathname
+                });
+
+                if (error) throw error;
+
+                errEl.style.color = 'var(--green)';
+                errEl.textContent = '✅ Link enviado com sucesso! Verifique seu e-mail.';
+                
+                setTimeout(() => {
+                    formForgot.style.display = 'none';
+                    formLogin.style.display = 'block';
+                    document.getElementById('login-err').style.color = 'var(--green)';
+                    document.getElementById('login-err').textContent = '✅ Link enviado! Verifique seu e-mail corporativo.';
+                }, 3000);
+
+            } catch (err) {
+                console.error(err);
+                errEl.style.color = 'var(--red)';
+                errEl.textContent = '❌ Erro: ' + (err.message || 'Falha ao enviar link de redefinição.');
+            } finally {
+                btnForgotSubmit.disabled = false;
+                btnForgotSubmit.textContent = 'Enviar E-mail de Recuperação';
+            }
+        });
+    }
+
+    const btnResetConfirm = document.getElementById('btn-reset-pass-confirm');
+    if (btnResetConfirm) {
+        btnResetConfirm.addEventListener('click', async () => {
+            const newPass = document.getElementById('reset-new-pass').value;
+            const confirmPass = document.getElementById('reset-confirm-pass').value;
+            const errEl = document.getElementById('reset-pass-err');
+
+            if (!newPass || newPass.length < 6) {
+                errEl.style.color = 'var(--red)';
+                errEl.textContent = '⚠️ A senha deve conter pelo menos 6 caracteres.';
+                return;
+            }
+
+            if (newPass !== confirmPass) {
+                errEl.style.color = 'var(--red)';
+                errEl.textContent = '⚠️ As senhas digitadas não coincidem.';
+                return;
+            }
+
+            btnResetConfirm.disabled = true;
+            btnResetConfirm.textContent = 'Atualizando...';
+            errEl.style.color = 'var(--text-muted)';
+            errEl.textContent = '⌛ Atualizando senha no Supabase...';
+
+            try {
+                const { error } = await supabase.auth.updateUser({ password: newPass });
+                if (error) throw error;
+
+                errEl.style.color = 'var(--green)';
+                errEl.textContent = '✅ Senha atualizada com sucesso!';
+
+                setTimeout(async () => {
+                    document.getElementById('modal-reset-password').style.display = 'none';
+                    // Recarregar os dados do usuário para forçar o login
+                    const { data: { session } } = await supabase.auth.getSession();
+                    currentUser = session?.user || null;
+                    if (currentUser) {
+                        await loadUserProfile(currentUser);
+                    }
+                    updateUIForAuth();
+                    if (currentUser) {
+                        handleLoginContext();
+                    }
+                }, 2000);
+
+            } catch (err) {
+                console.error(err);
+                errEl.style.color = 'var(--red)';
+                errEl.textContent = '❌ Erro: ' + (err.message || 'Não foi possível redefinir a senha.');
+            } finally {
+                btnResetConfirm.disabled = false;
+                btnResetConfirm.textContent = 'Atualizar Senha';
+            }
+        });
+    }
 
     // Eventos de Tab
     document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -272,31 +640,146 @@ async function doModalLogin() {
 
 
 function updateUIForAuth() {
+    const elAuthScreen = document.getElementById('auth-screen') || authScreen;
+    const elAppShell = document.getElementById('app-shell') || appShell;
+    const elBtnLogout = document.getElementById('btn-logout') || btnLogout;
+    const elBtnLoginArea = document.getElementById('btn-login') || btnLoginArea;
+
     if (currentUser) {
-        authScreen.style.display = 'none';
-        appShell.style.display = 'flex';
-        btnLogout.style.display = 'inline-flex';
-        btnLoginArea.style.display = 'none';
-        if (currentUser.email.endsWith('@selbetti.com.br')) adminBadge.style.display = 'inline-flex';
+        if (elAuthScreen) elAuthScreen.style.display = 'none';
+        if (elAppShell) elAppShell.style.display = 'flex';
+        if (elBtnLogout) elBtnLogout.style.display = 'inline-flex';
+        if (elBtnLoginArea) elBtnLoginArea.style.display = 'none';
         
-        const isLucas = currentUser.email === 'lucas.araujo@selbetti.com.br';
-        const ss = document.getElementById('sector-switcher');
-        if (ss) ss.style.display = isLucas ? 'inline-flex' : 'none';
+        // Exibir selo admin/operador adequado com base nas permissões
+        const badge = document.getElementById('admin-badge');
+        if (badge) {
+            badge.style.display = 'inline-flex';
+            if (currentUserProfile) {
+                if (currentUserProfile.role === 'ADMIN') {
+                    badge.textContent = '🔒 Admin';
+                    badge.style.background = '#ef4444';
+                } else if (currentUserProfile.role === 'MANAGER') {
+                    badge.textContent = '💼 Gestor';
+                    badge.style.background = '#f59e0b';
+                } else if (currentUserProfile.role === 'AUDITOR') {
+                    badge.textContent = '🔍 Auditor';
+                    badge.style.background = '#8b5cf6';
+                } else {
+                    badge.textContent = '⚙️ Operador';
+                    badge.style.background = '#3b82f6';
+                }
+            } else {
+                badge.textContent = '⚙️ Operador';
+                badge.style.background = '#3b82f6';
+            }
+        }
         
-        const tabAudit = document.getElementById('tab-btn-auditoria');
-        if (tabAudit) tabAudit.style.display = isLucas ? 'inline-flex' : 'none';
+        // Exibir engrenagem admin se tiver qualquer permissão de controle
+        const gearBtn = document.getElementById('btn-reset-gear');
+        if (gearBtn) {
+            const canSeeGear = hasPermission('view_costs') || hasPermission('import_xml') || hasPermission('link_selb') || hasPermission('create_parts');
+            gearBtn.style.display = canSeeGear ? 'inline-flex' : 'none';
+        }
     } else {
-        authScreen.style.display = 'flex';
-        appShell.style.display = 'none';
-        btnLogout.style.display = 'none';
-        btnLoginArea.style.display = 'inline-flex';
-        adminBadge.style.display = 'none';
+        if (elAuthScreen) elAuthScreen.style.display = 'flex';
+        if (elAppShell) elAppShell.style.display = 'none';
+        if (elBtnLogout) elBtnLogout.style.display = 'none';
+        if (elBtnLoginArea) elBtnLoginArea.style.display = 'inline-flex';
         
+        const badge = document.getElementById('admin-badge');
+        if (badge) badge.style.display = 'none';
+        
+        const ss = document.getElementById('sector-switcher');
+        if (ss) { ss.style.display = 'none'; ss.innerHTML = ''; }
+        
+        const overlay = document.getElementById('env-selector-overlay');
+        if (overlay) overlay.style.display = 'none';
+    }
+}
+
+// --- FLUXO DE LOGIN CONTEXTUAL (Escolha de Ambiente) ---
+function handleLoginContext() {
+    if (!currentUserProfile) return;
+    
+    const allowed = currentUserProfile.allowed_sectors || ['LAB'];
+    
+    // Se o usuário tiver apenas 1 ambiente permitido
+    if (allowed.length === 1) {
+        // Esconder switcher e modal de seleção
         const ss = document.getElementById('sector-switcher');
         if (ss) ss.style.display = 'none';
         
-        const tabAudit = document.getElementById('tab-btn-auditoria');
-        if (tabAudit) tabAudit.style.display = 'none';
+        const overlay = document.getElementById('env-selector-overlay');
+        if (overlay) overlay.style.display = 'none';
+        
+        window.selectEnvironment(allowed[0]);
+    } else if (allowed.length > 1) {
+        // Seletor superior (switcher)
+        const ss = document.getElementById('sector-switcher');
+        if (ss) {
+            ss.style.display = 'inline-flex';
+            ss.innerHTML = allowed.map(sec => {
+                const cfg = ENVIRONMENTS_CONFIG[sec];
+                if (!cfg) return '';
+                // Mostrar apenas a primeira palavra no botão do cabeçalho
+                const shortName = cfg.name.split(' ')[0];
+                return `<button id="btn-sector-${sec.toLowerCase()}" class="sector-btn" onclick="window.selectEnvironment('${sec}')">${cfg.icon} ${shortName}</button>`;
+            }).join('');
+        }
+        
+        // Renderizar os cards de ambiente no modal
+        const cardsGrid = document.getElementById('env-cards-grid');
+        if (cardsGrid) {
+            cardsGrid.innerHTML = allowed.map(sec => {
+                const cfg = ENVIRONMENTS_CONFIG[sec];
+                if (!cfg) return '';
+                
+                let desc = '';
+                if (sec === 'LAB') desc = 'Estoque de placas, chips e componentes eletrônicos do laboratório.';
+                if (sec === 'REMANU') desc = 'Setor de recuperação de cilindros, fusões, cartuchos e fuso.';
+                if (sec === '3D') desc = 'Mapeamento de filamentos, bicos, extrusores e insumos de impressão.';
+                if (sec === 'ADMIN') desc = 'Painel global do administrador, auditorias integradas e relatórios.';
+                
+                return `
+                    <div class="env-card env-${sec.toLowerCase()}" onclick="window.selectEnvironment('${sec}')">
+                        <div class="env-card-icon-wrapper">
+                            <span class="env-card-icon">${cfg.icon}</span>
+                            <span class="env-card-badge">${cfg.name.split(' ')[0]}</span>
+                        </div>
+                        <div>
+                            <h4 class="env-card-title">${cfg.name}</h4>
+                            <p class="env-card-desc">${desc}</p>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+        
+        // Ajustar o importador XML: se não tiver permissão para o Lab, desativar e esconder o rádio correspondente
+        const xmlRadioLab = document.querySelector('input[name="xml-sector"][value="LAB"]');
+        const xmlRadioRemanu = document.querySelector('input[name="xml-sector"][value="REMANU"]');
+        if (xmlRadioLab) {
+            if (!allowed.includes('LAB')) {
+                xmlRadioLab.disabled = true;
+                xmlRadioLab.checked = false;
+                xmlRadioLab.parentElement.style.display = 'none';
+                if (xmlRadioRemanu) xmlRadioRemanu.checked = true;
+            } else {
+                xmlRadioLab.disabled = false;
+                xmlRadioLab.parentElement.style.display = 'flex';
+            }
+        }
+        
+        // Se já tiver uma escolha prévia ativa nesta máquina e autorizada, carregar ela
+        const lastEnv = localStorage.getItem('last_selected_env');
+        if (lastEnv && allowed.includes(lastEnv)) {
+            window.selectEnvironment(lastEnv);
+        } else {
+            // Mostrar overlay de seleção
+            const overlay = document.getElementById('env-selector-overlay');
+            if (overlay) overlay.style.display = 'flex';
+        }
     }
 }
 
@@ -571,7 +1054,7 @@ async function renderEstoque(query = '') {
                     <td class="td-stock ${qty <= 5 ? 'stock-low' : 'stock-ok'}">${qty}</td>
                     <td style="text-align:right">R$ ${Number(window.adjC(cost)).toFixed(2)}</td>
                     <td class="td-actions">
-                        <button class="btn-sm btn-set" onclick="openEditModal('${p.code}', '${p.descricao.replace(/'/g, "\\'")}')">✏</button>
+                        ${hasPermission('manual_adjustments') ? `<button class="btn-sm btn-set" onclick="openEditModal('${p.code}', '${p.descricao.replace(/'/g, "\\'")}')">✏</button>` : ''}
                         <button class="btn-sm btn-minus" onclick="openSaidaModal('${p.code}')">➖</button>
                     </td>
                 </tr>
@@ -841,8 +1324,8 @@ function openEditModal(code, desc) {
 }
 
 async function savePriceModal() {
-    if (!currentUser || currentUser.email !== 'lucas.araujo@selbetti.com.br') {
-        alert('❌ Permissão negada! Apenas o usuário lucas.araujo@selbetti.com.br pode realizar ajustes manuais.');
+    if (!hasPermission('manual_adjustments')) {
+        alert('❌ Permissão negada! Seu perfil não tem permissão para realizar ajustes manuais.');
         return;
     }
 
@@ -986,7 +1469,7 @@ async function renderHistorico() {
                 ${h.descricao && h.descricao !== h.selb ? `<div style="font-size: 0.7rem; color: var(--text-muted); line-height:1.2">${h.descricao}</div>` : ''}
             </td>
             <td>
-                ${currentUser.email === 'lucas.araujo@selbetti.com.br' ? `<button class="btn-edit-hist" onclick="openAjusteHistorico('${h.id}')" title="Ajustar Registro">✏️</button>` : ''}
+                ${hasPermission('manual_adjustments') ? `<button class="btn-edit-hist" onclick="openAjusteHistorico('${h.id}')" title="Ajustar Registro">✏️</button>` : ''}
             </td>
         </tr>`;
     }).join('');
@@ -994,6 +1477,10 @@ async function renderHistorico() {
 
 // --- AJUSTE DE HISTÓRICO (SOMENTE LUCAS) ---
 window.openAjusteHistorico = async (id) => {
+    if (!hasPermission('manual_adjustments')) {
+        alert('❌ Permissão negada! Seu perfil não tem permissão para realizar ajustes manuais.');
+        return;
+    }
     const { data } = await supabase.from(getHistoricoTable()).select('*').eq('id', id).single();
     if (!data) return;
 
@@ -1009,6 +1496,10 @@ window.openAjusteHistorico = async (id) => {
 window.closeAjusteHistorico = () => document.getElementById('modal-ajuste-historico').classList.remove('open');
 
 window.saveAjusteHistorico = async () => {
+    if (!hasPermission('manual_adjustments')) {
+        alert('❌ Permissão negada! Seu perfil não tem permissão para realizar ajustes manuais.');
+        return;
+    }
     const id = document.getElementById('ajuste-id').value;
     const newSelb = document.getElementById('ajuste-selb').value.trim().toUpperCase();
     const newCode = document.getElementById('ajuste-code').value.trim().toUpperCase();
@@ -1086,7 +1577,28 @@ window.processarEntrada = processarEntrada;
 // Função para abrir o menu de engrenagem
 window.openAdminMenu = () => {
     const menu = document.getElementById('admin-menu-overlay');
-    if (menu) menu.classList.add('open');
+    if (menu) {
+        // Controlar visibilidade de cada opção administrativa baseado nas permissões do usuário
+        const btnImportXml = document.getElementById('admin-btn-import-xml');
+        const btnCustoModelo = document.getElementById('admin-btn-modelo-custo');
+        const btnImportWms = document.getElementById('admin-btn-import-wms');
+        const btnRevisados = document.getElementById('admin-btn-revisados');
+        const btnVinculoSelb = document.getElementById('admin-btn-vinculo-selb');
+        const btnCadastroPeca = document.getElementById('admin-btn-cadastro-peca');
+        const btnBackup = document.getElementById('admin-btn-backup');
+        const btnToggleCusto = document.getElementById('btn-toggle-custo');
+
+        if (btnImportXml) btnImportXml.style.display = hasPermission('import_xml') ? 'block' : 'none';
+        if (btnCustoModelo) btnCustoModelo.style.display = hasPermission('view_costs') ? 'block' : 'none';
+        if (btnImportWms) btnImportWms.style.display = hasPermission('import_xml') ? 'block' : 'none';
+        if (btnRevisados) btnRevisados.style.display = hasPermission('register_revisados') ? 'block' : 'none';
+        if (btnVinculoSelb) btnVinculoSelb.style.display = hasPermission('link_selb') ? 'block' : 'none';
+        if (btnCadastroPeca) btnCadastroPeca.style.display = hasPermission('create_parts') ? 'block' : 'none';
+        if (btnBackup) btnBackup.style.display = hasPermission('manual_adjustments') ? 'block' : 'none';
+        if (btnToggleCusto) btnToggleCusto.style.display = hasPermission('view_costs') ? 'block' : 'none';
+
+        menu.classList.add('open');
+    }
 };
 window.closeAdminMenu = () => {
     const menu = document.getElementById('admin-menu-overlay');
@@ -1151,8 +1663,8 @@ window.saveManualSELB = async () => {
 
 // --- CADASTRO DE PEÇA NOVA ---
 window.openCadastroPecaModal = () => {
-    if (!currentUser || currentUser.email !== 'lucas.araujo@selbetti.com.br') {
-        alert('❌ Permissão negada! Apenas o usuário lucas.araujo@selbetti.com.br pode cadastrar peças novas.');
+    if (!hasPermission('create_parts')) {
+        alert('❌ Permissão negada! Seu perfil não possui autorização para cadastrar peças novas.');
         return;
     }
     document.getElementById('cad-code').value = '';
@@ -1169,8 +1681,8 @@ window.closeCadastroPecaModal = () => {
 };
 
 window.saveCadastroPeca = async () => {
-    if (!currentUser || currentUser.email !== 'lucas.araujo@selbetti.com.br') {
-        alert('❌ Permissão negada! Apenas o usuário lucas.araujo@selbetti.com.br pode cadastrar peças novas.');
+    if (!hasPermission('create_parts')) {
+        alert('❌ Permissão negada! Seu perfil não possui autorização para cadastrar peças novas.');
         return;
     }
 
