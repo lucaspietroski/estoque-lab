@@ -1803,9 +1803,19 @@ window.renderModeloCusto = async () => {
             const modelosComEconomia = rows.filter(r => r.vlrNovaRef > 0).sort((a, b) => b.economiaPct - a.economiaPct);
             const melhorModelo = modelosComEconomia.length > 0 ? modelosComEconomia[0].modelo : '-';
 
+            const top = rows[0];
+            const bottom = rows.length > 1 ? rows.filter(r => r.custo > 0).pop() : (rows[0] || null);
+            window.topModelData = top;
+            window.bottomModelData = bottom;
+
             document.getElementById('remanu-kpi-economia').textContent = fmt(totalEconomia);
             document.getElementById('remanu-kpi-percentual').textContent = mediaEconomiaPct.toFixed(1) + '%';
             document.getElementById('remanu-kpi-melhor').textContent = melhorModelo.length > 25 ? melhorModelo.substring(0,25)+'...' : melhorModelo;
+            
+            document.getElementById('remanu-kpi-top').textContent = top ? top.modelo : '—';
+            document.getElementById('remanu-kpi-top-val').textContent = top ? fmt(top.custo) : 'R$ 0,00';
+            document.getElementById('remanu-kpi-bottom').textContent = bottom ? bottom.modelo : '—';
+            document.getElementById('remanu-kpi-bottom-val').textContent = bottom ? fmt(bottom.custo) : 'R$ 0,00';
 
             // Render Table for Remanu
             document.getElementById('mod-thead-tr').innerHTML = `
