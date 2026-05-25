@@ -1936,15 +1936,20 @@ window.renderModeloCusto = async () => {
 
 window.exportarRelatorioModelo = () => {
     const tbody = document.getElementById('mod-tbody');
+    const thead = document.getElementById('mod-thead-tr');
     if (!tbody || !tbody.rows.length) { alert('Gere o relatório primeiro.'); return; }
-    const rows = Array.from(tbody.rows).map(tr => ({
-        'Modelo': tr.cells[0].innerText,
-        'Atendimentos': tr.cells[1].innerText,
-        'Sem Peça': tr.cells[2].innerText,
-        'Qtd Peças': tr.cells[3].innerText,
-        'Custo Médio': tr.cells[4].innerText,
-        'Custo Total': tr.cells[5].innerText
-    }));
+    
+    const headers = Array.from(thead.cells).map(th => th.innerText);
+    const rows = Array.from(tbody.rows).map(tr => {
+        let rowObj = {};
+        Array.from(tr.cells).forEach((td, index) => {
+            if (headers[index]) {
+                rowObj[headers[index]] = td.innerText;
+            }
+        });
+        return rowObj;
+    });
+    
     const ws = XLSX.utils.json_to_sheet(rows);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Custo por Modelo");
