@@ -66,7 +66,43 @@ window.getDisplayValue = (item, valKey) => {
 
 // Retrocompatibilidade temporária para código que passava apenas o número
 window.adjC = (val) => {
-    return Number(val) / 1.90;
+    if (window.priceDisplayMode === 'REAL_COST') {
+        return Number(val) / 1.90;
+    }
+    return Number(val);
+};
+
+window.toggleModeCusto = () => {
+    window.priceDisplayMode = window.priceDisplayMode === 'REAL_COST' ? 'SALE_VALUE' : 'REAL_COST';
+    window.updateModeCustoBtn();
+
+    // Recarregar a tela atual que exibe custos
+    if (currentTab === 'dashboard') updateDashboard();
+    if (currentTab === 'modelo-custo') renderModeloCusto();
+    if (currentTab === 'movimentacoes') renderMovDashboard();
+    if (currentTab === 'historico') renderHistorico();
+    if (currentTab === 'estoque') renderEstoque();
+};
+
+window.updateModeCustoBtn = () => {
+    const btn = document.getElementById('btn-toggle-custo');
+    const badge = document.getElementById('custo-real-badge');
+    const active = window.priceDisplayMode === 'REAL_COST';
+
+    // Badge no header
+    if (badge) badge.style.display = active ? 'inline-flex' : 'none';
+
+    // Botão no menu admin
+    if (!btn) return;
+    if (active) {
+        btn.style.background = '#10b981';
+        btn.style.color = '#ffffff';
+        btn.textContent = '💲 Modo Custo Real (ATIVADO)';
+    } else {
+        btn.style.background = 'var(--bg-hover)';
+        btn.style.color = 'var(--text)';
+        btn.textContent = '💲 Modo Custo Real (DESATIVADO)';
+    }
 };
 
 // --- ELEMENTOS DOM ---
@@ -82,6 +118,7 @@ const adminBadge = document.getElementById('admin-badge');
 async function init() {
     console.log('🚀 Inicializando sistema...');
     renderChips();
+    window.updateModeCustoBtn();
 
     const { data: { session } } = await supabase.auth.getSession();
     currentUser = session?.user || null;
