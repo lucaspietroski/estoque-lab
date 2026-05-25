@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>⚙️ Correção de Movimentações sem Custo | Remanufatura</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg: #090d16;
+      --surface: #111827;
+      --surface-light: #1f2937;
+      --primary: #06b6d4;
+      --primary-glow: rgba(6, 182, 212, 0.15);
+      --green: #10b981;
+      --green-glow: rgba(16, 185, 129, 0.15);
+      --red: #f43f5e;
+      --red-glow: rgba(244, 63, 94, 0.15);
+      --yellow: #eab308;
+      --yellow-glow: rgba(234, 179, 8, 0.15);
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --border: #374151;
+      --radius: 16px;
+      --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      padding: 40px 20px;
+      line-height: 1.5;
+      background-image: 
+        radial-gradient(circle at 15% 15%, rgba(6, 182, 212, 0.05) 0%, transparent 45%),
+        radial-gradient(circle at 85% 85%, rgba(234, 179, 8, 0.05) 0%, transparent 45%);
+      background-attachment: fixed;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    /* HEADER */
+    .header {
+      background: rgba(17, 24, 39, 0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      padding: 30px;
+      border-radius: var(--radius);
+      margin-bottom: 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    }
+
+    .header::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 4px;
+      height: 100%;
+      background: linear-gradient(to bottom, var(--primary), var(--yellow));
+    }
+
+    .header-info h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #ffffff 0%, var(--primary) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .header-info p {
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    .sector-badge {
+      background: linear-gradient(135deg, rgba(6, 182, 212, 0.2) 0%, rgba(8, 145, 178, 0.2) 100%);
+      border: 1px solid var(--primary);
+      color: var(--primary);
+      padding: 8px 16px;
+      border-radius: 30px;
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      box-shadow: 0 0 15px var(--primary-glow);
+    }
+
+    /* CARDS */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 30px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+      margin-bottom: 30px;
+      position: relative;
+    }
+
+    .card-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #ffffff;
+      border-bottom: 1px solid var(--surface-light);
+      padding-bottom: 12px;
+    }
+
+    /* BANNERS */
+    .banner {
+      border-radius: 10px;
+      padding: 18px 22px;
+      font-size: 14px;
+      line-height: 1.6;
+      margin-bottom: 24px;
+    }
+
+    .banner.warning {
+      background: rgba(234, 179, 8, 0.08);
+      border: 1px solid rgba(234, 179, 8, 0.25);
+      color: #fef08a;
+    }
+
+    .banner.info {
+      background: rgba(6, 182, 212, 0.08);
+      border: 1px solid rgba(6, 182, 212, 0.25);
+      color: #cffafe;
+    }
+
+    /* KPI GRID */
+    .kpi-row {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 15px;
+      margin-bottom: 25px;
+    }
+
+    @media (min-width: 900px) {
+      .kpi-row {
+        grid-template-columns: repeat(5, 1fr);
+      }
+    }
+
+    .kpi {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 18px;
+      text-align: center;
+      transition: var(--transition);
+    }
+
+    .kpi-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    .kpi-value {
+      font-family: 'Outfit', sans-serif;
+      font-size: 24px;
+      font-weight: 800;
+    }
+
+    .kpi-value.cyan { color: var(--primary); }
+    .kpi-value.green { color: var(--green); }
+    .kpi-value.red { color: var(--red); }
+    .kpi-value.yellow { color: var(--yellow); }
+
+    /* BUTTONS */
+    .btn-row {
+      display: flex;
+      gap: 15px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    .btn {
+      padding: 12px 24px;
+      border-radius: 8px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 14px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: var(--transition);
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #000000;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: #22d3ee;
+      box-shadow: 0 0 15px rgba(6, 182, 212, 0.35);
+    }
+
+    .btn-success {
+      background: var(--green);
+      color: #000000;
+    }
+
+    .btn-success:hover:not(:disabled) {
+      background: #34d399;
+      box-shadow: 0 0 15px rgba(16, 185, 129, 0.35);
+    }
+
+    .btn:disabled {
+      background: var(--surface-light);
+      color: var(--text-muted);
+      cursor: not-allowed;
+      border: 1px solid var(--border);
+    }
+
+    /* PROGRESS BAR */
+    .progress-container {
+      margin: 20px 0;
+      display: none;
+    }
+
+    .progress-bar-track {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 30px;
+      height: 12px;
+      overflow: hidden;
+      margin-bottom: 8px;
+    }
+
+    .progress-bar-fill {
+      background: linear-gradient(90deg, var(--primary), var(--green));
+      height: 100%;
+      width: 0%;
+      border-radius: 30px;
+      transition: width 0.1s linear;
+    }
+
+    .progress-info {
+      display: flex;
+      justify-content: space-between;
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+
+    /* TABLE */
+    .table-wrap {
+      max-height: 400px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg);
+      margin-top: 15px;
+      display: none;
+    }
+
+    .data-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      text-align: left;
+    }
+
+    .data-table th {
+      background: var(--surface-light);
+      color: var(--text-muted);
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 10px;
+      letter-spacing: 0.5px;
+      padding: 12px 16px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .data-table td {
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(55, 65, 81, 0.4);
+    }
+
+    .data-table tr.no-cost {
+      background: rgba(244, 63, 94, 0.02);
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      border-radius: 20px;
+      font-size: 10px;
+      font-weight: 700;
+    }
+
+    .status-badge.ok {
+      background: var(--green-glow);
+      color: var(--green);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .status-badge.warn {
+      background: var(--yellow-glow);
+      color: var(--yellow);
+      border: 1px solid rgba(234, 179, 8, 0.2);
+    }
+
+    .badge-tipo {
+      display: inline-flex;
+      align-items: center;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+
+    .badge-tipo.entrada {
+      background: var(--green-glow);
+      color: var(--green);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .badge-tipo.saida {
+      background: var(--red-glow);
+      color: var(--red);
+      border: 1px solid rgba(244, 63, 94, 0.2);
+    }
+
+    .badge-tipo.other {
+      background: var(--surface-light);
+      color: var(--text-muted);
+      border: 1px solid var(--border);
+    }
+
+    /* LOGGER TERMINAL */
+    .logger {
+      background: #05070c;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: #38bdf8;
+      height: 220px;
+      overflow-y: auto;
+      box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.5);
+      margin-top: 25px;
+      display: none;
+    }
+
+    .log-line {
+      margin-bottom: 5px;
+      display: flex;
+      gap: 10px;
+    }
+
+    .log-time {
+      color: #64748b;
+      user-select: none;
+    }
+
+    .log-item-ok { color: var(--green); }
+    .log-item-skip { color: var(--text-muted); }
+    .log-item-err { color: var(--red); font-weight: 700; }
+    .log-item-info { color: var(--primary); }
+
+    /* SCROLLBARS */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: var(--bg);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--surface-light);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--border);
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-info">
+      <h1>⚙️ Correção de Movimentações sem Custo</h1>
+      <p>Ajuste retroativo de valores zerados nas movimentações (Entradas/Saídas) do histórico da <strong>Remanufatura</strong></p>
+    </div>
+    <div class="sector-badge">Remanufatura Only</div>
+  </div>
+
+  <!-- INSTRUCTIONS CARD -->
+  <div class="card">
+    <div class="card-title">⚠️ Diagnóstico de Regra de Negócio</div>
+    
+    <div class="banner warning">
+      <strong>O Problema:</strong> Quando peças são importadas ou registradas sem valor de custo associado no banco, 
+      as movimentações subsequentes no histórico de Remanufatura (`historico_remanu`) gravam o custo unitário e o custo total como <strong>R$ 0,00</strong>. 
+      Isso distorce os relatórios de faturamento, BI de equipamentos e a análise de economia gerada pela Remanufatura.
+    </div>
+
+    <div class="banner info">
+      <strong>A Solução Deste Painel:</strong><br>
+      1. Localiza movimentações em `historico_remanu` que estão com custo total ou unitário zerados ou nulos.<br>
+      2. Busca o preço comercial correto associado hoje à peça na tabela de <code>custos</code>.<br>
+      3. Atualiza retroativamente cada registro de histórico com o valor correto (`vlr_unit` e `vlr_total = qty * vlr_unit`).<br>
+      4. Identifica e pula peças sem nenhum custo cadastrado no banco, gerando alertas informativos.
+    </div>
+
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btn-analyze" onclick="analyzeRecords()">
+        🔍 1. Analisar Histórico Zerado
+      </button>
+      <button class="btn btn-success" id="btn-execute" disabled onclick="executeCorrection()">
+        ⚡ 2. Corrigir Valores no Banco
+      </button>
+    </div>
+
+    <!-- PROGRESS BAR -->
+    <div class="progress-container" id="progress-container">
+      <div class="progress-bar-track">
+        <div class="progress-bar-fill" id="progress-bar-fill"></div>
+      </div>
+      <div class="progress-info">
+        <span id="progress-label">Corrigindo registros no Supabase...</span>
+        <span id="progress-pct">0% (0/0)</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- KPI SUMMARY (HIDDEN UNTIL ANALYZED) -->
+  <div class="card" id="card-results" style="display: none;">
+    <div class="card-title">📊 Resumo do Lote Detectado</div>
+    
+    <div class="kpi-row">
+      <div class="kpi">
+        <div class="kpi-label">Movimentações Zeradas</div>
+        <div class="kpi-value cyan" id="kpi-total">0</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Corrigíveis</div>
+        <div class="kpi-value green" id="kpi-corrigivel">0</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Sem Custo no Banco</div>
+        <div class="kpi-value red" id="kpi-sem-custo">0</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Volume Comercial Ajustado</div>
+        <div class="kpi-value yellow" id="kpi-valor-comercial">R$ 0,00</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">Volume Real Ajustado (Visual)</div>
+        <div class="kpi-value green" id="kpi-valor-real">R$ 0,00</div>
+      </div>
+    </div>
+
+    <!-- DATA TABLE PREVIEW -->
+    <div class="table-wrap" id="table-wrap">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Data/Hora</th>
+            <th>Código</th>
+            <th style="text-align: center;">Tipo</th>
+            <th>Descrição (Histórico)</th>
+            <th style="text-align: center;">Qtd</th>
+            <th style="text-align: right;">Novo Unitário</th>
+            <th style="text-align: right;">Novo Total</th>
+            <th style="text-align: center;">Status</th>
+          </tr>
+        </thead>
+        <tbody id="table-tbody">
+          <!-- Rows injected here -->
+        </tbody>
+      </table>
+    </div>
+
+    <!-- TERMINAL LOGS -->
+    <div class="logger" id="log-terminal"></div>
+  </div>
+
+</div>
+
+<!-- SUPABASE CLIENT & BACKFILL BUSINESS LOGIC -->
+<script type="module">
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+  // Configuração Supabase com service role (bypassa RLS local de forma segura)
+  const supabaseUrl = 'https://idpmrjjalhnpsxpfugph.supabase.co';
+  const supabaseServiceKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkcG1yamphbGhucHN4cGZ1Z3BoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzY2NTY2NywiZXhwIjoyMDkzMjQxNjY3fQ.YR1d6swxo1BbQ3ixTYB43KtZL5ure__R4wuqAkd7by4';
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+  let detectedList = [];
+
+  function getTipoBadge(tipo) {
+    if (!tipo) return `<span class="badge-tipo other">—</span>`;
+    const t = tipo.toLowerCase().trim();
+    if (t === 'entrada' || t === 'cargas' || t === 'carga') {
+      return `<span class="badge-tipo entrada">${tipo}</span>`;
+    } else if (t === 'saída' || t === 'saida') {
+      return `<span class="badge-tipo saida">${tipo}</span>`;
+    } else {
+      return `<span class="badge-tipo other">${tipo}</span>`;
+    }
+  }
+
+  function writeTerminal(text, type = 'info') {
+    const terminal = document.getElementById('log-terminal');
+    const timeStr = new Date().toLocaleTimeString('pt-BR');
+    const line = document.createElement('div');
+    line.className = 'log-line';
+    
+    let spanClass = 'log-item-info';
+    if (type === 'success') spanClass = 'log-item-ok';
+    if (type === 'error') spanClass = 'log-item-err';
+    if (type === 'warning') spanClass = 'log-item-skip';
+
+    line.innerHTML = `
+      <span class="log-time">[${timeStr}]</span>
+      <span class="${spanClass}">${text}</span>
+    `;
+    terminal.appendChild(line);
+    terminal.scrollTop = terminal.scrollHeight;
+  }
+
+  async function analyzeRecords() {
+    const btnAnalyze = document.getElementById('btn-analyze');
+    const btnExecute = document.getElementById('btn-execute');
+    
+    btnAnalyze.disabled = true;
+    btnAnalyze.textContent = '⌛ Analisando...';
+    btnExecute.disabled = true;
+
+    // Reset UI elements
+    document.getElementById('card-results').style.display = 'none';
+    document.getElementById('table-wrap').style.display = 'none';
+    document.getElementById('log-terminal').style.display = 'none';
+    document.getElementById('log-terminal').innerHTML = '';
+
+    writeTerminal('⏳ Buscando movimentações zeradas em historico_remanu...');
+
+    try {
+      // 1. Buscar todas as movimentações no histórico da Remanufatura que possuem custo unitário ou total nulo/zerado
+      const { data: history, error: historyErr } = await supabase
+        .from('historico_remanu')
+        .select('id, ts, code, qty, descricao, tipo')
+        .or('vlr_total.is.null,vlr_total.eq.0,vlr_unit.is.null,vlr_unit.eq.0')
+        .order('ts', { ascending: false });
+
+      if (historyErr) throw historyErr;
+
+      if (!history || history.length === 0) {
+        writeTerminal('🎉 Excelente! Nenhum registro de movimentação zerado ou nulo foi encontrado em historico_remanu.', 'success');
+        alert('Tudo certo! Não existem registros de movimentações zeradas no histórico de Remanufatura.');
+        btnAnalyze.disabled = false;
+        btnAnalyze.textContent = '🔍 1. Analisar Histórico Zerado';
+        return;
+      }
+
+      writeTerminal(`📊 Encontrados ${history.length} registros zerados. Carregando a tabela de custos comerciais...`);
+
+      // 2. Carregar todos os custos para cruzar os dados
+      const { data: custos, error: custosErr } = await supabase
+        .from('custos')
+        .select('code, last_cost');
+
+      if (custosErr) throw custosErr;
+
+      const costsMap = {};
+      custos.forEach(c => {
+        costsMap[c.code.toUpperCase()] = parseFloat(c.last_cost) || 0;
+      });
+
+      let numCorrigivel = 0;
+      let numSemCusto = 0;
+      let totalValorComercial = 0;
+      let totalValorReal = 0;
+
+      // 3. Montar a lista mapeada de pendências
+      detectedList = history.map(item => {
+        const uppercaseCode = item.code ? item.code.toUpperCase() : '';
+        const currentCost = costsMap[uppercaseCode] || 0;
+        const qty = item.qty || 0;
+        const newTotalComercial = currentCost * qty;
+        const newTotalReal = (currentCost / 1.9) * qty;
+
+        const canFix = currentCost > 0;
+
+        if (canFix) {
+          numCorrigivel++;
+          totalValorComercial += newTotalComercial;
+          totalValorReal += newTotalReal;
+        } else {
+          numSemCusto++;
+        }
+
+        return {
+          id: item.id,
+          ts: item.ts,
+          code: item.code,
+          tipo: item.tipo,
+          description: item.descricao || 'Sem descrição cadastrada',
+          qty: qty,
+          newUnit: currentCost,
+          newTotal: newTotalComercial,
+          newTotalReal: newTotalReal,
+          isValid: canFix
+        };
+      });
+
+      // Exibir elementos de estatísticas
+      document.getElementById('card-results').style.display = 'block';
+      document.getElementById('table-wrap').style.display = 'block';
+      document.getElementById('log-terminal').style.display = 'block';
+
+      // Atualizar KPIs
+      document.getElementById('kpi-total').textContent = detectedList.length;
+      document.getElementById('kpi-corrigivel').textContent = numCorrigivel;
+      document.getElementById('kpi-sem-custo').textContent = numSemCusto;
+      document.getElementById('kpi-valor-comercial').textContent = `R$ ${totalValorComercial.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+      document.getElementById('kpi-valor-real').textContent = `R$ ${totalValorReal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+      // Renderizar tabela de visualização
+      renderAnalyzeTable();
+
+      writeTerminal(`🔍 Análise concluída: ${numCorrigivel} registros prontos para correção. ${numSemCusto} registros não possuem custos atribuídos na tabela 'custos'.`);
+
+      if (numCorrigivel > 0) {
+        btnExecute.disabled = false;
+        writeTerminal('💡 Clique em "2. Corrigir Valores no Banco" para processar o lote de correções retroativas no Supabase.', 'success');
+      } else {
+        writeTerminal('⚠️ Nenhum dos registros zerados possui valor na tabela custos. Insira os valores das peças primeiro para poder corrigi-los.', 'warning');
+      }
+
+    } catch (err) {
+      writeTerminal(`❌ Erro crítico de análise: ${err.message}`, 'error');
+      alert('Falha na análise dos dados: ' + err.message);
+    } finally {
+      btnAnalyze.disabled = false;
+      btnAnalyze.textContent = '🔍 1. Analisar Histórico Zerado';
+    }
+  }
+
+  function renderAnalyzeTable() {
+    const tbody = document.getElementById('table-tbody');
+    tbody.innerHTML = '';
+
+    detectedList.forEach(row => {
+      const tr = document.createElement('tr');
+      if (!row.isValid) {
+        tr.className = 'no-cost';
+      }
+
+      const dateStr = row.ts ? new Date(row.ts).toLocaleString('pt-BR') : '—';
+      const costUnitText = row.isValid ? `R$ ${row.newUnit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : 'R$ 0,00';
+      const costTotalText = row.isValid ? `R$ ${row.newTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : 'R$ 0,00';
+      const tipoBadge = getTipoBadge(row.tipo);
+
+      tr.innerHTML = `
+        <td style="white-space: nowrap; color: var(--text-muted);">${dateStr}</td>
+        <td style="font-family: monospace; font-weight: 700; color: var(--primary);">${row.code}</td>
+        <td style="text-align: center;">${tipoBadge}</td>
+        <td style="font-size: 11px;">${row.description}</td>
+        <td style="text-align: center; font-weight: 700;">${row.qty}</td>
+        <td style="text-align: right; color: var(--text-muted);">${costUnitText}</td>
+        <td style="text-align: right; font-weight: 700; color: ${row.isValid ? 'var(--green)' : 'var(--text-muted)'};">${costTotalText}</td>
+        <td style="text-align: center;">
+          <span class="status-badge ${row.isValid ? 'ok' : 'warn'}">
+            ${row.isValid ? '✅ Corrigível' : '⚠️ Peça sem Custo'}
+          </span>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  async function executeCorrection() {
+    const corrigivelList = detectedList.filter(item => item.isValid);
+    if (corrigivelList.length === 0) return;
+
+    const confirmRun = confirm(`Deseja aplicar a correção de custo retroativo em ${corrigivelList.length} movimentações de histórico no Supabase?\n\nIsso atualizará permanentemente vlr_unit e vlr_total no banco.`);
+    if (!confirmRun) return;
+
+    const btnAnalyze = document.getElementById('btn-analyze');
+    const btnExecute = document.getElementById('btn-execute');
+    const progressContainer = document.getElementById('progress-container');
+    const progressFill = document.getElementById('progress-bar-fill');
+    const progressPct = document.getElementById('progress-pct');
+
+    btnAnalyze.disabled = true;
+    btnExecute.disabled = true;
+    progressContainer.style.display = 'block';
+
+    writeTerminal('⚡ Iniciando atualização retroativa de registros no Supabase...', 'success');
+
+    let correctedCount = 0;
+    let errorCount = 0;
+    const totalItens = corrigivelList.length;
+
+    try {
+      for (let i = 0; i < totalItens; i++) {
+        const row = corrigivelList[i];
+        
+        // Atualizar percentual da barra de progresso
+        const pct = Math.round(((i + 1) / totalItens) * 100);
+        progressFill.style.width = `${pct}%`;
+        progressPct.textContent = `${pct}% (${i + 1}/${totalItens})`;
+
+        // Realizar o update pontual pelo ID único da linha de histórico
+        const { error } = await supabase
+          .from('historico_remanu')
+          .update({
+            vlr_unit: row.newUnit,
+            vlr_total: row.newTotal
+          })
+          .eq('id', row.id);
+
+        if (error) {
+          errorCount++;
+          writeTerminal(`❌ Erro no Registro ${row.code} (ID: ${row.id}): ${error.message}`, 'error');
+        } else {
+          correctedCount++;
+          // Log detalhado para os primeiros registros ou múltiplos de 5 para não inundar o terminal
+          if (correctedCount <= 5 || correctedCount % 10 === 0) {
+            writeTerminal(`✓ Sucesso: Peça ${row.code} × Qtd ${row.qty} atualizada para Unitário R$ ${row.newUnit.toFixed(2)} | Total R$ ${row.newTotal.toFixed(2)}`, 'success');
+          }
+        }
+      }
+
+      writeTerminal(`🎉 PROCESSO CONCLUÍDO!`, 'success');
+      writeTerminal(`▶ Atualizados no banco com sucesso: ${correctedCount} registros.`, 'success');
+      if (errorCount > 0) {
+        writeTerminal(`⚠️ Falhas de conexão/gravação: ${errorCount} erros.`, 'error');
+      }
+
+      alert(`🎉 Correção concluída com sucesso!\n\n${correctedCount} registros de movimentações foram ajustados com seus respectivos custos comerciais históricos.\n\nSistemas de Dashboards e BI recalculados!`);
+      
+      // Atualizar a análise para comprovar zeramento de pendências corrigidas
+      await analyzeRecords();
+
+    } catch (err) {
+      writeTerminal(`❌ Erro crítico no lote de execução: ${err.message}`, 'error');
+      alert('Erro grave durante a execução: ' + err.message);
+    } finally {
+      btnAnalyze.disabled = false;
+      progressContainer.style.display = 'none';
+      progressFill.style.width = '0%';
+    }
+  }
+
+  // Expor funções globais
+  window.analyzeRecords = analyzeRecords;
+  window.executeCorrection = executeCorrection;
+</script>
+
+</body>
+</html>

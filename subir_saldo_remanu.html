@@ -1,0 +1,847 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>⚙️ Carga de Saldo Oficial | Remanufatura</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Outfit:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+  
+  <style>
+    :root {
+      --bg: #090d16;
+      --surface: #111827;
+      --surface-light: #1f2937;
+      --primary: #06b6d4;
+      --primary-glow: rgba(6, 182, 212, 0.15);
+      --green: #10b981;
+      --green-glow: rgba(16, 185, 129, 0.15);
+      --red: #f43f5e;
+      --red-glow: rgba(244, 63, 94, 0.15);
+      --yellow: #eab308;
+      --text: #f3f4f6;
+      --text-muted: #9ca3af;
+      --border: #374151;
+      --radius: 16px;
+      --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      font-family: 'Inter', sans-serif;
+      min-height: 100vh;
+      padding: 40px 20px;
+      line-height: 1.5;
+      background-image: 
+        radial-gradient(circle at 10% 20%, rgba(6, 182, 212, 0.05) 0%, transparent 40%),
+        radial-gradient(circle at 90% 80%, rgba(16, 185, 129, 0.05) 0%, transparent 40%);
+      background-attachment: fixed;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    /* HEADER */
+    .header {
+      background: rgba(17, 24, 39, 0.7);
+      backdrop-filter: blur(12px);
+      border: 1px solid var(--border);
+      padding: 30px;
+      border-radius: var(--radius);
+      margin-bottom: 30px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+    }
+
+    .header::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 4px;
+      height: 100%;
+      background: linear-gradient(to bottom, var(--primary), var(--green));
+    }
+
+    .header-info h1 {
+      font-family: 'Outfit', sans-serif;
+      font-size: 28px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      background: linear-gradient(135deg, #ffffff 0%, var(--primary) 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 6px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .header-info p {
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    .sector-badge {
+      background: linear-gradient(135deg, rgba(6, 182, 212, 0.2) 0%, rgba(8, 145, 178, 0.2) 100%);
+      border: 1px solid var(--primary);
+      color: var(--primary);
+      padding: 8px 16px;
+      border-radius: 30px;
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      box-shadow: 0 0 15px var(--primary-glow);
+    }
+
+    /* MAIN GRID */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 30px;
+    }
+
+    @media (min-gradient-width: 900px) {
+      .grid {
+        grid-template-columns: 1fr 1fr;
+      }
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 30px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+      position: relative;
+    }
+
+    .card-title {
+      font-family: 'Outfit', sans-serif;
+      font-size: 18px;
+      font-weight: 700;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #ffffff;
+      border-bottom: 1px solid var(--surface-light);
+      padding-bottom: 12px;
+    }
+
+    /* INPUT CONTROLS */
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+    }
+
+    .form-control-input {
+      width: 100%;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: #ffffff;
+      padding: 12px 16px;
+      font-size: 15px;
+      outline: none;
+      transition: var(--transition);
+    }
+
+    .form-control-input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 8px var(--primary-glow);
+    }
+
+    .textarea-container {
+      position: relative;
+    }
+
+    .excel-textarea {
+      width: 100%;
+      height: 240px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: #ffffff;
+      padding: 16px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 13px;
+      line-height: 1.6;
+      resize: vertical;
+      outline: none;
+      transition: var(--transition);
+    }
+
+    .excel-textarea:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 12px var(--primary-glow);
+    }
+
+    .textarea-placeholder-hint {
+      position: absolute;
+      bottom: 12px;
+      right: 16px;
+      font-size: 11px;
+      color: var(--text-muted);
+      pointer-events: none;
+    }
+
+    /* STATS ROW */
+    .stats-bar {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 15px;
+      margin-bottom: 20px;
+    }
+
+    @media (min-width: 600px) {
+      .stats-bar {
+        grid-template-columns: repeat(4, 1fr);
+      }
+    }
+
+    .stat-box {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 15px;
+      text-align: center;
+      transition: var(--transition);
+    }
+
+    .stat-box.success {
+      border-color: rgba(16, 185, 129, 0.4);
+      background: rgba(16, 185, 129, 0.02);
+    }
+
+    .stat-box.danger {
+      border-color: rgba(244, 63, 94, 0.4);
+      background: rgba(244, 63, 94, 0.02);
+    }
+
+    .stat-label {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 5px;
+    }
+
+    .stat-value {
+      font-family: 'Outfit', sans-serif;
+      font-size: 22px;
+      font-weight: 800;
+    }
+
+    /* BUTTONS */
+    .btn-group {
+      display: flex;
+      gap: 15px;
+      margin-top: 15px;
+    }
+
+    .btn {
+      flex: 1;
+      padding: 14px 24px;
+      border-radius: 10px;
+      font-family: 'Outfit', sans-serif;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: var(--transition);
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #000000;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background: #22d3ee;
+      box-shadow: 0 0 20px rgba(6, 182, 212, 0.4);
+      transform: translateY(-1px);
+    }
+
+    .btn-success {
+      background: var(--green);
+      color: #000000;
+    }
+
+    .btn-success:hover:not(:disabled) {
+      background: #34d399;
+      box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
+      transform: translateY(-1px);
+    }
+
+    .btn:disabled {
+      background: var(--surface-light);
+      color: var(--text-muted);
+      cursor: not-allowed;
+      border: 1px solid var(--border);
+    }
+
+    /* PREVIEW TABLE */
+    .preview-container {
+      max-height: 480px;
+      overflow-y: auto;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--bg);
+    }
+
+    .preview-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+      text-align: left;
+    }
+
+    .preview-table th {
+      background: var(--surface-light);
+      color: var(--text-muted);
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 10px;
+      letter-spacing: 0.5px;
+      padding: 12px 16px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .preview-table td {
+      padding: 12px 16px;
+      border-bottom: 1px solid rgba(55, 65, 81, 0.5);
+    }
+
+    .preview-table tr:last-child td {
+      border-bottom: none;
+    }
+
+    .preview-table tr.invalid-row {
+      background: rgba(244, 63, 94, 0.04);
+    }
+
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .status-badge.ok {
+      background: var(--green-glow);
+      color: var(--green);
+      border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+
+    .status-badge.err {
+      background: var(--red-glow);
+      color: var(--red);
+      border: 1px solid rgba(244, 63, 94, 0.2);
+    }
+
+    /* LIVE LOGGER */
+    .log-panel {
+      background: #05070c;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 12px;
+      color: #38bdf8;
+      height: 180px;
+      overflow-y: auto;
+      box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.5);
+      margin-top: 30px;
+    }
+
+    .log-line {
+      margin-bottom: 6px;
+      display: flex;
+      gap: 10px;
+    }
+
+    .log-time {
+      color: #64748b;
+      user-select: none;
+    }
+
+    .log-info { color: #38bdf8; }
+    .log-success { color: var(--green); }
+    .log-error { color: var(--red); font-weight: 700; }
+    .log-warning { color: var(--yellow); }
+
+    /* CUSTOM SCROLLBARS */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: var(--bg);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--surface-light);
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--border);
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  
+  <!-- HEADER -->
+  <div class="header">
+    <div class="header-info">
+      <h1>⚙️ Carga de Saldo Oficial</h1>
+      <p>Importação de saldos físicos diretamente para o estoque da <strong>Remanufatura</strong></p>
+    </div>
+    <div class="sector-badge">Remanufatura Only</div>
+  </div>
+
+  <div class="grid">
+    
+    <!-- CARD DE INPUT -->
+    <div class="card">
+      <div class="card-title">📝 1. Entrada de Dados (Excel / Planilha)</div>
+      
+      <div class="form-group">
+        <label for="user-email">👤 Operador Responsável</label>
+        <input type="text" id="user-email" class="form-control-input" value="lucas.araujo@selbetti.com.br" readonly>
+        <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Identificado conforme solicitado para o histórico.</span>
+      </div>
+
+      <div class="form-group">
+        <label for="excel-raw">📊 Copiar e colar dados do Excel</label>
+        <div class="textarea-container">
+          <textarea id="excel-raw" class="excel-textarea" placeholder="Cole as colunas do Excel aqui...
+Exemplo:
+Jc66-02846a	16
+Jc66-01663a	7
+Jc66-01664a	12"></textarea>
+          <div class="textarea-placeholder-hint">Suporta colunas Código e Qtd copiadas do Excel (separadas por TAB)</div>
+        </div>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-primary" id="btn-parse" onclick="parseAndValidate()">
+          🔍 Analisar & Validar Peças
+        </button>
+      </div>
+    </div>
+
+    <!-- CARD DE PREVIEW & OPERAÇÃO -->
+    <div class="card">
+      <div class="card-title">🔎 2. Validação & Resultado da Carga</div>
+
+      <div class="stats-bar">
+        <div class="stat-box">
+          <div class="stat-label">Total Lidos</div>
+          <div class="stat-value" id="stat-total">0</div>
+        </div>
+        <div class="stat-box success">
+          <div class="stat-label">Válidos</div>
+          <div class="stat-value" id="stat-valid" style="color: var(--green);">0</div>
+        </div>
+        <div class="stat-box danger">
+          <div class="stat-label">Não Cadastrados</div>
+          <div class="stat-value" id="stat-invalid" style="color: var(--red);">0</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Total Qtd</div>
+          <div class="stat-value" id="stat-qty">0</div>
+        </div>
+      </div>
+
+      <div class="preview-container">
+        <table class="preview-table">
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Descrição (Sistema)</th>
+              <th style="text-align: center;">Qtd</th>
+              <th style="text-align: right;">Custo Unit.</th>
+              <th style="text-align: right;">Total Real</th>
+              <th style="text-align: center;">Status</th>
+            </tr>
+          </thead>
+          <tbody id="preview-tbody">
+            <tr>
+              <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 40px;">
+                Cole os dados do Excel e clique em "Analisar & Validar Peças".
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="btn-group">
+        <button class="btn btn-success" id="btn-submit" disabled onclick="executeCarga()">
+          🚀 Processar Carga no Supabase
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- LIVE LOGGER TERMINAL -->
+  <div class="log-panel" id="log-panel">
+    <div class="log-line">
+      <span class="log-time">[16:10:43]</span>
+      <span class="log-info">Console de Diagnóstico Inicializado. Pronto para analisar dados.</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- SUPABASE CLIENTE E PROCESSAMENTO -->
+<script type="module">
+  import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm';
+
+  // Configurações do Supabase (Bypassing RLS usando service role para segurança e eficácia das tabelas isoladas)
+  const supabaseUrl = 'https://idpmrjjalhnpsxpfugph.supabase.co';
+  const supabaseServiceKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkcG1yamphbGhucHN4cGZ1Z3BoIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NzY2NTY2NywiZXhwIjoyMDkzMjQxNjY3fQ.YR1d6swxo1BbQ3ixTYB43KtZL5ure__R4wuqAkd7by4';
+  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+
+  let verifiedData = [];
+  let userEmail = 'lucas.araujo@selbetti.com.br';
+
+  // Função para escrever Logs no Terminal Virtual
+  function writeLog(text, type = 'info') {
+    const logPanel = document.getElementById('log-panel');
+    const timeStr = new Date().toLocaleTimeString('pt-BR');
+    
+    const line = document.createElement('div');
+    line.className = 'log-line';
+    
+    let spanClass = 'log-info';
+    if (type === 'success') spanClass = 'log-success';
+    if (type === 'error') spanClass = 'log-error';
+    if (type === 'warning') spanClass = 'log-warning';
+    
+    line.innerHTML = `
+      <span class="log-time">[${timeStr}]</span>
+      <span class="${spanClass}">${text}</span>
+    `;
+    logPanel.appendChild(line);
+    logPanel.scrollTop = logPanel.scrollHeight;
+  }
+
+  // Função principal de Parsing e Validação
+  async function parseAndValidate() {
+    const rawText = document.getElementById('excel-raw').value.trim();
+    if (!rawText) {
+      alert('Por favor, cole os dados copiados do Excel primeiro.');
+      return;
+    }
+
+    writeLog('⏳ Iniciando interpretação do texto copiado do Excel...');
+    
+    const lines = rawText.split(/\r?\n/);
+    const parsedMap = {};
+    let ignoredLines = 0;
+
+    for (let rawLine of lines) {
+      rawLine = rawLine.trim();
+      if (!rawLine) continue;
+
+      // Dividir por Tabulação (Excel padrão) ou espaços múltiplos
+      const cols = rawLine.split(/\t/);
+      if (cols.length < 2) {
+        ignoredLines++;
+        continue;
+      }
+
+      // Ignorar cabeçalhos
+      const col0Lower = cols[0].toLowerCase();
+      if (col0Lower.includes('código') || col0Lower.includes('codigo') || col0Lower.includes('code') || col0Lower.includes('descri')) {
+        writeLog(`⚠️ Linha de cabeçalho ignorada: "${rawLine}"`, 'warning');
+        continue;
+      }
+
+      const code = cols[0].trim().toUpperCase();
+      
+      // Encontrar a quantidade (normalmente é o último elemento numérico)
+      const lastCol = cols[cols.length - 1].trim();
+      const qty = parseInt(lastCol.replace(/\./g, '').replace(/,/g, ''), 10);
+
+      if (!code || isNaN(qty)) {
+        ignoredLines++;
+        continue;
+      }
+
+      // Se houver códigos duplicados no mesmo lote de carga, somamos as quantidades!
+      if (parsedMap[code]) {
+        parsedMap[code].qty += qty;
+        writeLog(`ℹ️ Código duplicado detectado: ${code}. Quantidades unificadas para ${parsedMap[code].qty} un.`, 'warning');
+      } else {
+        parsedMap[code] = {
+          code: code,
+          qty: qty
+        };
+      }
+    }
+
+    const parsedList = Object.values(parsedMap);
+    
+    if (parsedList.length === 0) {
+      writeLog('❌ Nenhuma linha válida pôde ser interpretada. Verifique se o formato tem código e quantidade.', 'error');
+      alert('Nenhum dado válido interpretado. Verifique os dados inseridos.');
+      return;
+    }
+
+    writeLog(`📋 Interpretação concluída: ${parsedList.length} peças encontradas. Buscando dados cadastrais no Supabase...`);
+    
+    const codesToFetch = parsedList.map(item => item.code);
+
+    try {
+      // 1. Consultar a tabela 'parts' para validar cadastro e obter a descrição
+      const { data: parts, error: partsErr } = await supabase
+        .from('parts')
+        .select('code, descricao')
+        .in('code', codesToFetch);
+
+      if (partsErr) throw partsErr;
+
+      // 2. Consultar a tabela 'custos' para obter o custo unitário (Custo Comercial)
+      const { data: custos, error: custosErr } = await supabase
+        .from('custos')
+        .select('code, last_cost')
+        .in('code', codesToFetch);
+
+      if (custosErr) throw custosErr;
+
+      // Criar dicionários rápidos de busca
+      const partsMap = {};
+      parts.forEach(p => { partsMap[p.code.toUpperCase()] = p.descricao; });
+
+      const custosMap = {};
+      custos.forEach(c => { custosMap[c.code.toUpperCase()] = parseFloat(c.last_cost) || 0; });
+
+      let countValid = 0;
+      let countInvalid = 0;
+      let sumQty = 0;
+
+      // Montar dados verificados
+      verifiedData = parsedList.map(item => {
+        const dbDesc = partsMap[item.code];
+        const isRegistered = !!dbDesc;
+        const lastCost = custosMap[item.code] || 0;
+        
+        // Custo Real (divido pelo multiplicador visual de 1.90, respeitando o padrão arquitetural do sistema)
+        const custoRealUnit = lastCost / 1.9;
+        const custoRealTotal = custoRealUnit * item.qty;
+
+        if (isRegistered) {
+          countValid++;
+          sumQty += item.qty;
+        } else {
+          countInvalid++;
+        }
+
+        return {
+          code: item.code,
+          qty: item.qty,
+          description: dbDesc || '🚫 PEÇA NÃO CADASTRADA NO BANCO!',
+          lastCost: lastCost,
+          custoRealUnit: custoRealUnit,
+          custoRealTotal: custoRealTotal,
+          isValid: isRegistered
+        };
+      });
+
+      // Atualizar estatísticas na tela
+      document.getElementById('stat-total').textContent = verifiedData.length;
+      document.getElementById('stat-valid').textContent = countValid;
+      document.getElementById('stat-invalid').textContent = countInvalid;
+      document.getElementById('stat-qty').textContent = sumQty;
+
+      // Renderizar Tabela de Preview
+      renderPreviewTable();
+
+      // Habilitar ou desabilitar o botão de envio
+      const submitBtn = document.getElementById('btn-submit');
+      if (countInvalid > 0) {
+        writeLog(`⚠️ Atenção: Há ${countInvalid} peça(s) não cadastrada(s) no banco de dados. A carga foi bloqueada até que sejam removidas da lista ou cadastradas no sistema.`, 'error');
+        submitBtn.disabled = true;
+      } else {
+        writeLog(`✅ Validação concluída com sucesso! Todas as peças estão cadastradas e prontas para carga de estoque.`, 'success');
+        submitBtn.disabled = false;
+      }
+
+    } catch (err) {
+      writeLog(`❌ Falha na validação de banco: ${err.message}`, 'error');
+      console.error(err);
+      alert('Erro ao validar dados no Supabase: ' + err.message);
+    }
+  }
+
+  // Renderizar a tabela de visualização
+  function renderPreviewTable() {
+    const tbody = document.getElementById('preview-tbody');
+    tbody.innerHTML = '';
+
+    verifiedData.forEach(row => {
+      const tr = document.createElement('tr');
+      if (!row.isValid) {
+        tr.className = 'invalid-row';
+      }
+
+      const costText = row.isValid 
+        ? `R$ ${row.lastCost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
+        : '—';
+
+      const totalRealText = row.isValid 
+        ? `R$ ${row.custoRealTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` 
+        : '—';
+
+      tr.innerHTML = `
+        <td style="font-weight: 700;">${row.code}</td>
+        <td style="color: ${row.isValid ? 'var(--text)' : 'var(--red)'}; font-size: 12px;">${row.description}</td>
+        <td style="text-align: center; font-weight: 700; font-size: 14px;">${row.qty}</td>
+        <td style="text-align: right; color: var(--text-muted);">${costText}</td>
+        <td style="text-align: right; color: var(--primary); font-weight: 700;">${totalRealText}</td>
+        <td style="text-align: center;">
+          <span class="status-badge ${row.isValid ? 'ok' : 'err'}">
+            ${row.isValid ? '✅ Pronto' : '❌ Não Cadastrada'}
+          </span>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  // Executar carga no banco de dados
+  async function executeCarga() {
+    if (verifiedData.length === 0) return;
+    
+    const invalidCount = verifiedData.filter(r => !r.isValid).length;
+    if (invalidCount > 0) {
+      alert('Não é possível realizar a carga enquanto houver peças não cadastradas na lista.');
+      return;
+    }
+
+    const confirmRun = confirm(`Deseja realmente subir este saldo oficial de ${verifiedData.length} itens para o setor Remanufatura? \n\nIsso irá sobrescrever os saldos atuais dessas peças no estoque.`);
+    if (!confirmRun) return;
+
+    const submitBtn = document.getElementById('btn-submit');
+    const parseBtn = document.getElementById('btn-parse');
+    submitBtn.disabled = true;
+    parseBtn.disabled = true;
+
+    writeLog('🚀 Iniciando processamento da carga de saldo no Supabase...', 'success');
+
+    try {
+      let countSuccess = 0;
+      const timestamp = new Date().toISOString();
+
+      for (const row of verifiedData) {
+        writeLog(`⚙️ Processando peça: ${row.code}...`);
+
+        // 1. Atualizar o saldo de estoque físico em 'estoque_remanu' (upsert por chave 'code')
+        const { error: errorStock } = await supabase
+          .from('estoque_remanu')
+          .upsert({
+            code: row.code,
+            qty: row.qty
+          }, { onConflict: 'code' });
+
+        if (errorStock) {
+          writeLog(`❌ Erro ao atualizar estoque da peça ${row.code}: ${errorStock.message}`, 'error');
+          throw errorStock;
+        }
+
+        // 2. Gravar o log de movimentação no histórico de Remanufatura ('historico_remanu')
+        const { error: errorHistory } = await supabase
+          .from('historico_remanu')
+          .insert({
+            tipo: 'entrada',
+            code: row.code,
+            qty: row.qty,
+            vlr_unit: row.lastCost, // Persiste sempre o valor comercial original no banco
+            vlr_total: row.lastCost * row.qty,
+            selb: 'CARGA',
+            descricao: 'Carga de Saldo Inicial Oficial (Zeramento)',
+            user_email: userEmail, // Atribuído a lucas.araujo@selbetti.com.br
+            ts: timestamp
+          });
+
+        if (errorHistory) {
+          writeLog(`❌ Erro ao registrar histórico para a peça ${row.code}: ${errorHistory.message}`, 'error');
+          throw errorHistory;
+        }
+
+        countSuccess++;
+        writeLog(`✅ Peça ${row.code} carregada com sucesso! (Estoque definido para ${row.qty} un.)`, 'success');
+      }
+
+      writeLog(`🎉 CARGA CONCLUÍDA COM SUCESSO! ${countSuccess} de ${verifiedData.length} peças atualizadas.`, 'success');
+      alert(`🎉 Carga concluída com sucesso!\n\n${countSuccess} peças cadastradas e saldo inicial definido no estoque da Remanufatura.`);
+      
+      // Limpar campos de entrada
+      document.getElementById('excel-raw').value = '';
+      verifiedData = [];
+      document.getElementById('stat-total').textContent = '0';
+      document.getElementById('stat-valid').textContent = '0';
+      document.getElementById('stat-invalid').textContent = '0';
+      document.getElementById('stat-qty').textContent = '0';
+      document.getElementById('preview-tbody').innerHTML = `
+        <tr>
+          <td colspan="6" style="text-align: center; color: var(--text-muted); padding: 40px;">
+            Dados processados com sucesso. Prontos para novo lote.
+          </td>
+        </tr>
+      `;
+
+    } catch (err) {
+      writeLog(`❌ Falha crítica no processamento: ${err.message}`, 'error');
+      alert('Erro grave ao processar carga. O lote foi interrompido: ' + err.message);
+    } finally {
+      parseBtn.disabled = false;
+    }
+  }
+
+  // Expor funções ao escopo window
+  window.parseAndValidate = parseAndValidate;
+  window.executeCarga = executeCarga;
+</script>
+
+</body>
+</html>
