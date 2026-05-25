@@ -45,44 +45,28 @@ window.formatSearchQuery = (val) => {
     return safeVal;
 };
 
-// --- MODO CUSTO REAL ---
-window.adjC = (val) => {
-    const active = localStorage.getItem('mode_custo_ativo') === '1';
-    return active ? Number(val) / 1.90 : Number(val);
-};
+// --- MODO CUSTO REAL PERMANENTE ---
+window.priceDisplayMode = 'REAL_COST';
 
-window.toggleModeCusto = () => {
-    const active = localStorage.getItem('mode_custo_ativo') === '1';
-    localStorage.setItem('mode_custo_ativo', active ? '0' : '1');
-    window.updateModeCustoBtn();
-
-    // Recarregar a tela atual que exibe custos
-    if (currentTab === 'dashboard') updateDashboard();
-    if (currentTab === 'modelo-custo') renderModeloCusto();
-    if (currentTab === 'movimentacoes') renderMovDashboard();
-    if (currentTab === 'historico') renderHistorico();
-    if (currentTab === 'estoque') renderEstoque();
-};
-
-window.updateModeCustoBtn = () => {
-    const btn = document.getElementById('btn-toggle-custo');
-    const badge = document.getElementById('custo-real-badge');
-    const active = localStorage.getItem('mode_custo_ativo') === '1';
-
-    // Badge no header
-    if (badge) badge.style.display = active ? 'inline-flex' : 'none';
-
-    // Botão no menu admin
-    if (!btn) return;
-    if (active) {
-        btn.style.background = '#10b981';
-        btn.style.color = '#ffffff';
-        btn.textContent = '💲 Modo Custo Real (ATIVADO)';
-    } else {
-        btn.style.background = 'var(--bg-hover)';
-        btn.style.color = 'var(--text)';
-        btn.textContent = '💲 Modo Custo Real (DESATIVADO)';
+window.getDisplayValue = (item, valKey) => {
+    if (!item) return 0;
+    const rawVal = Number(item[valKey]) || 0;
+    
+    if (window.priceDisplayMode === 'REAL_COST') {
+        // Usa custo_real se existir na entidade, senão usa o fallback (simulação legado)
+        // Se a entidade não foi passada corretamente e só veio o valor bruto, aplicamos a simulação.
+        if (item.custo_real !== undefined && item.custo_real !== null) {
+            return Number(item.custo_real);
+        }
+        return rawVal / 1.90;
     }
+    
+    return rawVal;
+};
+
+// Retrocompatibilidade temporária para código que passava apenas o número
+window.adjC = (val) => {
+    return Number(val) / 1.90;
 };
 
 // --- ELEMENTOS DOM ---
@@ -98,7 +82,6 @@ const adminBadge = document.getElementById('admin-badge');
 async function init() {
     console.log('🚀 Inicializando sistema...');
     renderChips();
-    window.updateModeCustoBtn();
 
     const { data: { session } } = await supabase.auth.getSession();
     currentUser = session?.user || null;
