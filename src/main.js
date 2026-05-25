@@ -280,11 +280,19 @@ function updateUIForAuth() {
         if (currentUser.email.endsWith('@selbetti.com.br')) adminBadge.style.display = 'inline-flex';
         
         const isLucas = currentUser.email === 'lucas.araujo@selbetti.com.br';
+        const remanuOnlyUsers = ['carlos.nogueira@selbetti.com.br', 'andrio.rockenbach@selbetti.com.br', 'bernardo.voit@selbetti.com.br'];
+        const isRemanuOnly = remanuOnlyUsers.includes(currentUser.email);
+
         const ss = document.getElementById('sector-switcher');
         if (ss) ss.style.display = isLucas ? 'inline-flex' : 'none';
         
         const tabAudit = document.getElementById('tab-btn-auditoria');
         if (tabAudit) tabAudit.style.display = isLucas ? 'inline-flex' : 'none';
+
+        if (isRemanuOnly) {
+            window.changeSector('REMANU');
+            if (adminBadge) adminBadge.style.display = 'none'; // Bloqueia configs globais
+        }
     } else {
         authScreen.style.display = 'flex';
         appShell.style.display = 'none';
