@@ -597,7 +597,7 @@ async function renderEstoque(query = '') {
                     <td class="td-code">${p.code}</td>
                     <td class="td-desc">${p.descricao} ${p.marca ? `<small>(${p.marca})</small>` : ''}</td>
                     <td class="td-stock ${qty <= 5 ? 'stock-low' : 'stock-ok'}">${qty}</td>
-                    <td style="text-align:right">R$ ${Number(window.getDisplayValue(part, 'valor')).toFixed(2)}</td>
+                    <td style="text-align:right">R$ ${Number(window.getDisplayValue({ valor: cost, custo_real: p.custo_real }, 'valor')).toFixed(2)}</td>
                     <td class="td-actions">
                         <button class="btn-sm btn-set" onclick="openEditModal('${p.code}', '${p.descricao.replace(/'/g, "\\'")}')">✏</button>
                         <button class="btn-sm btn-minus" onclick="openSaidaModal('${p.code}')">➖</button>
