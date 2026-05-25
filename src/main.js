@@ -560,7 +560,7 @@ async function renderEstoque(query = '') {
                     <td class="td-code">${p.code}</td>
                     <td class="td-desc">${p.descricao} ${p.marca ? `<small>(${p.marca})</small>` : ''}</td>
                     <td class="td-stock ${qty <= 5 ? 'stock-low' : 'stock-ok'}">${qty}</td>
-                    <td style="text-align:right">R$ ${Number(window.adjC(cost)).toFixed(2)}</td>
+                    <td style="text-align:right">R$ ${Number(window.getDisplayValue(part, 'valor')).toFixed(2)}</td>
                     <td class="td-actions">
                         <button class="btn-sm btn-set" onclick="openEditModal('${p.code}', '${p.descricao.replace(/'/g, "\\'")}')">✏</button>
                         <button class="btn-sm btn-minus" onclick="openSaidaModal('${p.code}')">➖</button>
@@ -805,8 +805,8 @@ async function addSaidaItem() {
 function renderSaidaItems() {
     const tbody = document.getElementById('saida-tbody');
     document.getElementById('saida-count').textContent = saidaItems.reduce((s, i) => s + i.qty, 0);
-    document.getElementById('saida-total').textContent = 'R$ ' + window.adjC(saidaItems.reduce((s, i) => s + i.vlrTotal, 0)).toFixed(2);
-    tbody.innerHTML = saidaItems.map((item, idx) => `<tr><td>${item.code}</td><td>${item.descricao}</td><td class="text-center">${item.qty}</td><td class="text-right">R$ ${window.adjC(item.vlrTotal).toFixed(2)}</td><td><button onclick="window.removeSaidaItem(${idx})">❌</button></td></tr>`).join('');
+    document.getElementById('saida-total').textContent = 'R$ ' + saidaItems.reduce((s, i) => s + window.getDisplayValue(i, 'vlrTotal'), 0).toFixed(2);
+    tbody.innerHTML = saidaItems.map((item, idx) => `<tr><td>${item.code}</td><td>${item.descricao}</td><td class="text-center">${item.qty}</td><td class="text-right">R$ ${window.getDisplayValue(item, 'vlrTotal').toFixed(2)}</td><td><button onclick="window.removeSaidaItem(${idx})">❌</button></td></tr>`).join('');
 }
 
 // --- AJUSTE MANUAL ---
@@ -943,14 +943,14 @@ async function renderHistorico() {
                 </td>
                 <td class="text-center">${h.items.length} itens</td>
                 <td style="text-align:right; color: var(--text-muted)">-</td>
-                <td style="text-align:right; font-weight: bold;">${h.vlr_total ? 'R$ ' + window.adjC(h.vlr_total).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-'}</td>
+                <td style="text-align:right; font-weight: bold;">${h.vlr_total ? 'R$ ' + window.getDisplayValue(h, 'vlr_total').toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-'}</td>
                 <td>${h.user_email?.split('@')[0] || ''}</td>
                 <td style="font-size: 0.85rem;">
                     <strong>${h.selb || ''}</strong>
                     <details style="margin-top: 5px; cursor: pointer;">
                         <summary style="color: var(--primary); font-weight: 500; font-size: 0.75rem;">Ver Peças (${h.items.length})</summary>
                         <ul style="margin: 5px 0; padding-left: 15px; font-size: 0.7rem; color: var(--text-muted);">
-                            ${h.items.map(i => `<li>${i.code} (Qtd: ${i.qty}) - R$ ${window.adjC(i.vlr_total).toLocaleString('pt-BR', {minimumFractionDigits: 2})}</li>`).join('')}
+                            ${h.items.map(i => `<li>${i.code} (Qtd: ${i.qty}) - R$ ${window.getDisplayValue(i, 'vlr_total').toLocaleString('pt-BR', {minimumFractionDigits: 2})}</li>`).join('')}
                         </ul>
                     </details>
                 </td>
@@ -969,8 +969,8 @@ async function renderHistorico() {
                 </span>
             </td>
             <td class="text-center">${h.qty}</td>
-            <td style="text-align:right; color: var(--text-muted)">${h.vlr_unit ? 'R$ ' + window.adjC(h.vlr_unit).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-'}</td>
-            <td style="text-align:right; font-weight: bold;">${h.vlr_total ? 'R$ ' + window.adjC(h.vlr_total).toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-'}</td>
+            <td style="text-align:right; color: var(--text-muted)">${h.vlr_unit ? 'R$ ' + window.getDisplayValue(h, 'vlr_unit').toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-'}</td>
+            <td style="text-align:right; font-weight: bold;">${h.vlr_total ? 'R$ ' + window.getDisplayValue(h, 'vlr_total').toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2}) : '-'}</td>
             <td>${h.user_email?.split('@')[0] || ''}</td>
             <td style="font-size: 0.85rem;">
                 <strong>${h.selb || ''}</strong>
@@ -1351,7 +1351,7 @@ window.renderMovDashboard = async () => {
     });
 
     // Atualizar KPIs
-    const fmt = v => 'R$ ' + Number(window.adjC(v)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fmt = v => 'R$ ' + Number(window.getDisplayValue({v}, 'v')).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     document.getElementById('mov-kpi-entrada').textContent = totIn.toLocaleString('pt-BR');
     document.getElementById('mov-kpi-saida').textContent = totOut.toLocaleString('pt-BR');
     document.getElementById('mov-kpi-entrada-val').textContent = fmt(vlrIn);
@@ -1752,7 +1752,7 @@ window.renderModeloCusto = async () => {
             };
         }).sort((a, b) => b.custo - a.custo);
 
-        const fmt = v => 'R$ ' + Number(window.adjC(v)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const fmt = v => 'R$ ' + Number(window.getDisplayValue({v}, 'v')).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         const totalCusto = rows.reduce((s, r) => s + r.custo, 0);
         const totalAtend = rows.reduce((s, r) => s + r.atendimentos, 0);
 
@@ -1975,7 +1975,7 @@ window.openDetalheModelo = (typeOrModel) => {
     }
     title.textContent = model.modelo;
     
-    const fmt = v => 'R$ ' + Number(window.adjC(v)).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    const fmt = v => 'R$ ' + Number(window.getDisplayValue({v}, 'v')).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     const fmtNum = v => Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     
     document.getElementById('detalhe-com-peca').textContent = model.comPeca;
