@@ -1,0 +1,1223 @@
+﻿<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Estoque Laborat├│rio - Supabase</title>
+  <link rel="stylesheet" href="style.css" />
+  <!-- Google Fonts: Inter e Fira Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.min.js"></script>
+</head>
+<body>
+
+<div id="auth-screen" class="auth-screen">
+  <div class="auth-card">
+    <div class="auth-hero">
+      <div class="auth-kicker">Acesso protegido</div>
+      <div class="auth-title">Estoque Laborat├│rio</div>
+      <div class="auth-copy">Entre com sua conta para visualizar estoque, hist├│rico e custos. Os dados do sistema ficam bloqueados at├® a autentica├º├úo.</div>
+    </div>
+    <div class="auth-form" id="login-form">
+      <div class="auth-row">
+        <div class="modal-label">Usu├írio ou e-mail</div>
+        <input type="text" class="modal-input" id="login-user" placeholder="pcp ou usuario@empresa.com" autocomplete="username" autocorrect="off" spellcheck="false">
+      </div>
+      <div class="auth-row">
+        <div class="modal-label">Senha</div>
+        <input type="password" class="modal-input" id="login-pass" placeholder="senha" autocomplete="current-password">
+      </div>
+      <div style="text-align: right; margin-top: -5px; margin-bottom: 15px;">
+        <a href="#" id="link-forgot-pass" style="font-size: 12px; color: var(--blue); text-decoration: none; font-weight: 600; transition: color 0.15s;">Esqueci minha senha</a>
+      </div>
+      <label class="auth-check" for="remember-login">
+        <input type="checkbox" id="remember-login" checked>
+        <span>Manter meu acesso neste navegador</span>
+      </label>
+      <div class="modal-err" id="login-err"></div>
+      <button class="btn-admin auth-submit" id="auth-submit">Entrar</button>
+      <div class="auth-hint">Utilize sua conta @selbetti.com.br para acesso administrativo completo.</div>
+      <div class="auth-lgpd" style="font-size: 10px; color: var(--text-muted); text-align: center; margin-top: 15px; line-height: 1.4; opacity: 0.85; border-top: 1px solid var(--border); padding-top: 12px;">
+        ­ƒöÆ <strong>Aviso de Privacidade (LGPD):</strong> Ao fazer login, coletamos seu e-mail corporativo para fins estritos de auditoria de movimenta├º├úo do estoque e controle interno, em conformidade com as pol├¡ticas de seguran├ºa da informa├º├úo da empresa.
+      </div>
+    </div>
+
+    <!-- TELA DE RECUPERA├ç├âO DE SENHA (FORGOT PASSWORD) -->
+    <div class="auth-form" id="forgot-pass-form" style="display: none;">
+      <div style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.5; text-align: center;">
+        Insira seu e-mail corporativo cadastrado para receber um link de redefini├º├úo de senha no seu e-mail.
+      </div>
+      <div class="auth-row" style="margin-bottom: 15px;">
+        <div class="modal-label">E-mail corporativo</div>
+        <input type="email" class="modal-input" id="forgot-email" placeholder="usuario@selbetti.com.br" autocomplete="email" style="margin-bottom: 0;">
+      </div>
+      <div class="modal-err" id="forgot-err" style="min-height: 1.2rem; text-align: center; font-weight: 600;"></div>
+      <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 5px;">
+        <button class="btn-admin auth-submit" id="forgot-submit" style="width: 100%; justify-content: center;">Enviar E-mail de Recupera├º├úo</button>
+        <button class="btn-cancel" id="forgot-back" style="width: 100%; font-size: 13px; justify-content: center;">Voltar para o Login</button>
+      </div>
+    </div>
+    </div>
+  </div>
+</div>
+
+<!-- OVERLAY DE SELE├ç├âO DE AMBIENTE -->
+<div id="env-selector-overlay" class="modal-overlay" style="display:none; align-items: center; justify-content: center; z-index: 9999; backdrop-filter: blur(20px); background: rgba(15, 23, 42, 0.9);">
+  <div class="modal-box" style="width: 760px; background: var(--surface); border: 1px solid var(--border); border-radius: 24px; padding: 40px; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5);">
+    <div style="font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 2px; color: var(--blue); margin-bottom: 8px;">Bem-vindo ao Sistema</div>
+    <h2 style="font-size: 28px; font-weight: 800; margin-bottom: 12px; color: var(--text);">Escolha o Ambiente Operacional</h2>
+    <p style="color: var(--text-muted); font-size: 15px; margin-bottom: 35px; max-width: 500px; margin-left: auto; margin-right: auto;">
+      Selecione um contexto operacional abaixo para carregar as abas, dashboards e configura├º├Áes adequadas para suas tarefas.
+    </p>
+    
+    <div id="env-cards-grid" class="env-grid">
+      <!-- Cards gerados dinamicamente via JS -->
+    </div>
+  </div>
+</div>
+
+<div id="app-shell">
+
+  <!-- HEADER -->
+  <div class="header-bar">
+    <div class="logo-selbetti">selbetti</div>
+    <div class="header-center">
+      <div class="header-title">CONSULTA DE <span>PE├çAS</span></div>
+      <div class="header-subtitle">Consulte o estoque e registre entradas e sa├¡das de componentes</div>
+    </div>
+    <div class="header-right">
+      <div id="sector-switcher" style="display:none; align-items: center; background: var(--surface2); border: 1px solid var(--border); border-radius: 99px; padding: 3px; gap: 2px;">
+        <button id="btn-sector-lab" class="sector-btn active" onclick="window.changeSector('LAB')">­ƒö¼ Lab</button>
+        <button id="btn-sector-remanu" class="sector-btn" onclick="window.changeSector('REMANU')">ÔÜÖ´©Å Remanufatura</button>
+      </div>
+      <div id="admin-badge" class="badge-admin-pill" style="display:none">­ƒöÆ Admin</div>
+      <div id="custo-real-badge" style="display:none; align-items:center; gap:6px; background:#10b981; color:#fff; font-size:11px; font-weight:700; padding:4px 10px; border-radius:999px; letter-spacing:0.5px; animation: pulse-badge 2s infinite;">­ƒÆ▓ CUSTO REAL</div>
+      <div class="stat-pill"><span class="dot"></span><span id="stat-in-stock">0</span> em estoque</div>
+      <div class="stat-pill"><span class="dot red"></span><span id="stat-zero">0</span> zeradas</div>
+      <button id="btn-login" class="btn-admin">+ ├ürea Admin</button>
+      <button id="btn-reset-gear" class="btn-gear" title="Menu Administrativo" onclick="openAdminMenu()">ÔÜÖ´©Å</button>
+      <button id="btn-logout" class="btn-admin logout" style="display:none">Ôå® Sair</button>
+    </div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tab-bar">
+    <button class="tab-btn active" data-tab="dashboard">­ƒôè Dashboard</button>
+    <button class="tab-btn" data-tab="estoque">­ƒôª Estoque</button>
+    <button class="tab-btn" data-tab="historico">­ƒôï Hist├│rico</button>
+    <button class="tab-btn" data-tab="movimentacoes">­ƒôê Movimenta├º├Áes</button>
+    <button class="tab-btn" data-tab="modelo-custo">­ƒÆ░ Custo/Modelo</button>
+    <button class="tab-btn" data-tab="auditoria" id="tab-btn-auditoria" style="display:none">­ƒöì Auditoria</button>
+  </div>
+
+  <!-- VIEWS -->
+  <div id="view-dashboard" class="view active">
+    <div class="dash-scroll">
+      <div class="dash-cards">
+        <div class="dash-card c-total">
+          <div class="dash-card-label">TOTAL DE CADASTROS</div>
+          <div class="dash-card-value" id="dash-total">0</div>
+          <div class="dash-card-sub">modelos no sistema</div>
+        </div>
+        <div class="dash-card c-stock">
+          <div class="dash-card-label">MODELOS EM ESTOQUE</div>
+          <div class="dash-card-value" id="dash-instock">0</div>
+          <div class="dash-card-sub">com saldo positivo</div>
+        </div>
+        <div class="dash-card c-zero">
+          <div class="dash-card-label">VOLUME TOTAL (F├ìSICO)</div>
+          <div class="dash-card-value" id="dash-vol-total">0</div>
+          <div class="dash-card-sub">unidades no laborat├│rio</div>
+        </div>
+        <div class="dash-card c-low" id="card-low-stock" style="cursor:pointer; transition: transform 0.2s;" onclick="toggleLowStockFilter()">
+          <div class="dash-card-label">ESTOQUE CR├ìTICO</div>
+          <div class="dash-card-value" id="dash-low-count" style="color:var(--red)">0</div>
+          <div class="dash-card-sub">menos de 5 unidades</div>
+        </div>
+      </div>
+      <div class="dash-section-title">Itens com Saldo em Estoque</div>
+      <div class="table-wrap">
+        <table class="dash-table">
+          <thead>
+            <tr>
+              <th>Pe├ºa</th>
+              <th>C├│digo</th>
+              <th style="text-align:center">Quantidade</th>
+              <th>Situa├º├úo</th>
+            </tr>
+          </thead>
+          <tbody id="dash-tbody"></tbody>
+        </table>
+      </div>
+      <div id="dash-empty" style="display:none" class="hist-empty">Nenhum item com saldo em estoque.</div>
+    </div>
+  </div>
+
+  <div id="view-estoque" class="view">
+    <div class="search-area">
+      <div class="search-row">
+        <input type="text" class="search-input" id="search-main" placeholder="­ƒöì  Buscar por descri├º├úo, c├│digo ou use % para busca m├║ltipla..." autocomplete="off">
+      </div>
+      <div class="search-tip" id="search-tip"></div>
+    </div>
+    <div class="filter-bar" id="filter-bar-container">
+      <span class="filter-bar-label">FILTROS:</span>
+      <span id="brand-chips"></span>
+    </div>
+    <div class="result-info">
+      <span id="result-count">0</span> resultado(s)
+      <button class="btn-saida-lote" id="btn-baixa-selb" onclick="openSaidaModal()">Baixa por SELB</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>C├│digo</th>
+            <th>Descri├º├úo</th>
+            <th style="text-align:center">Estoque</th>
+            <th style="text-align:right">Valor Unit.</th>
+            <th>A├º├Áes</th>
+          </tr>
+        </thead>
+        <tbody id="result-body"></tbody>
+      </table>
+      <div class="empty-state" id="empty-state">Nenhum resultado encontrado.</div>
+    </div>
+  </div>
+
+  <!-- Outras views simplificadas por enquanto -->
+  <div id="view-historico" class="view">
+    <div class="hist-toolbar" style="margin-bottom: 1.2rem; border-radius: 12px; border: 1px solid var(--border); position: relative;">
+      <input type="text" class="hist-search" id="hist-search" placeholder="­ƒöì Buscar c├│digo, obs..." autocomplete="off">
+      <select class="hist-filter" id="hist-tipo">
+        <option value="">Todos os tipos</option>
+        <option value="entrada">Entrada</option>
+        <option value="sa├¡da">Sa├¡da</option>
+      </select>
+      <input type="date" class="hist-filter" id="hist-d1" title="Data inicial" style="cursor:pointer">
+      <span style="font-size:0.72rem;color:var(--text-muted);flex-shrink:0">at├®</span>
+      <input type="date" class="hist-filter" id="hist-d2" title="Data final" style="cursor:pointer">
+      <button class="btn-cancel" onclick="document.getElementById('hist-search').value=''; document.getElementById('hist-tipo').value=''; document.getElementById('hist-d1').value=''; document.getElementById('hist-d2').value=''; renderHistorico()" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Limpar</button>
+      <span class="hist-count" id="hist-count" style="margin-left: auto;">0 registros</span>
+    </div>
+    <div class="hist-table-wrap">
+      <table class="hist-table">
+        <thead>
+          <tr>
+            <th>Data/Hora</th>
+            <th>C├│digo</th>
+            <th>Tipo</th>
+            <th style="text-align:center">Qtd</th>
+            <th style="text-align:right">Vlr. Unit.</th>
+            <th style="text-align:right">Vlr. Total</th>
+            <th>Usu├írio</th>
+            <th>SELB / Obs</th>
+          </tr>
+        </thead>
+        <tbody id="hist-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- VIEW MOVIMENTA├ç├òES -->
+  <div id="view-movimentacoes" class="view">
+    <div class="mov-container">
+      <div class="mov-header">
+        <h2>­ƒôê Dashboard de Movimenta├º├úo</h2>
+      </div>
+      <!-- Filtros -->
+      <div class="hist-toolbar" style="margin-bottom: 1.2rem; border-radius: 12px; border: 1px solid var(--border); position: relative;">
+        <input type="text" class="hist-search" id="mov-prod" placeholder="­ƒöì Filtrar c├│digo ou modelo..." autocomplete="off">
+        <select class="hist-filter" id="mov-tipo">
+          <option value="">Todos os tipos</option>
+          <option value="entrada">Entrada</option>
+          <option value="sa├¡da">Sa├¡da</option>
+        </select>
+        <input type="date" class="hist-filter" id="mov-d1" title="Data inicial" style="cursor:pointer">
+        <span style="font-size:0.72rem;color:var(--text-muted);flex-shrink:0">at├®</span>
+        <input type="date" class="hist-filter" id="mov-d2" title="Data final" style="cursor:pointer">
+        <button class="btn-cancel" onclick="document.getElementById('mov-prod').value=''; document.getElementById('mov-tipo').value=''; document.getElementById('mov-d1').value=''; document.getElementById('mov-d2').value=''; renderMovDashboard()" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">Limpar</button>
+      </div>
+      
+      <!-- Cards KPI -->
+      <div class="dash-cards" style="margin-bottom: 20px;">
+        <div class="dash-card c-total">
+          <div class="dash-card-label">Total Entradas</div>
+          <div class="dash-card-value" id="mov-kpi-entrada">0</div>
+          <div class="dash-card-sub" id="mov-kpi-entrada-val">R$ 0,00</div>
+        </div>
+        <div class="dash-card c-zero">
+          <div class="dash-card-label">Total Sa├¡das</div>
+          <div class="dash-card-value" style="color:var(--red)" id="mov-kpi-saida">0</div>
+          <div class="dash-card-sub" id="mov-kpi-saida-val">R$ 0,00</div>
+        </div>
+        <div class="dash-card c-stock">
+          <div class="dash-card-label">Saldo L├¡quido</div>
+          <div class="dash-card-value" id="mov-kpi-saldo">0</div>
+          <div class="dash-card-sub">entradas ÔêÆ sa├¡das</div>
+        </div>
+        <div class="dash-card c-low">
+          <div class="dash-card-label">VALOR TOTAL EM ESTOQUE</div>
+          <div class="dash-card-value" style="color:var(--blue)" id="mov-kpi-total-vol">0</div>
+          <div class="dash-card-sub" id="mov-kpi-total-val">R$ 0,00</div>
+        </div>
+      </div>
+
+      <!-- ├ürea dos Gr├íficos -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px;">
+        <div class="card" style="background: white; padding: 20px; border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+          <h4 style="margin: 0 0 15px 0; font-size: 14px; color: #64748b; display: flex; align-items: center; gap: 8px;">­ƒôë ENTRADA VS. SA├ìDA POR DIA</h4>
+          <canvas id="chart-daily" height="180"></canvas>
+        </div>
+        <div class="card" style="background: white; padding: 20px; border-radius: 16px; border: 1px solid var(--border); box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05);">
+          <h4 style="margin: 0 0 15px 0; font-size: 14px; color: #64748b; display: flex; align-items: center; gap: 8px;">­ƒôè VOLUME POR SEMANA</h4>
+          <canvas id="chart-weekly" height="180"></canvas>
+        </div>
+      </div>
+
+      <!-- Tabela Detalhada por Data -->
+      <div class="table-wrap">
+        <table class="dash-table">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th style="text-align:center">Entrada (Qtd)</th>
+              <th style="text-align:center">Sa├¡da (Qtd)</th>
+              <th style="text-align:center">Saldo</th>
+              <th style="text-align:right">R$ Entradas</th>
+              <th style="text-align:right">R$ Sa├¡das</th>
+              <th style="text-align:right">Total (R$)</th>
+            </tr>
+          </thead>
+          <tbody id="mov-tbody"></tbody>
+        </table>
+        <div class="empty-state" id="mov-empty" style="display:none">Nenhuma movimenta├º├úo para este filtro.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VIEW REVISADOS -->
+  <div id="view-revisados" class="view">
+    <div class="mov-container">
+      <div class="mov-header">
+        <h2>­ƒøá´©Å Registro de SELBs Revisados</h2>
+      </div>
+
+      <div class="card" style="background: white; padding: 25px; border-radius: 12px; border: 1px solid var(--border);">
+        <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 15px;">
+          ­ƒöº <strong>SELBs Revisados sem Troca de Pe├ºa</strong> (um por linha ou separado por v├¡rgula)
+        </p>
+        
+        <textarea id="revisados-textarea" 
+                  placeholder="Ex: A001&#10;B012&#10;C034" 
+                  style="width: 100%; height: 150px; padding: 15px; border-radius: 8px; border: 1px solid var(--border); font-family: var(--mono); font-size: 14px; margin-bottom: 15px; resize: vertical;"></textarea>
+        
+        <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 15px;">
+          <div style="display: flex; flex-direction: column; gap: 4px;">
+            <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase;">Data da Sa├¡da</label>
+            <input type="date" id="revisados-data" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); font-size: 13px;">
+          </div>
+          <div style="align-self: flex-end;">
+            <button class="btn-admin" onclick="processarRevisados()" style="padding: 10px 25px;">Ô£ö´©Å Confirmar SELBs</button>
+          </div>
+          <div id="revisados-status" style="font-size: 13px; font-weight: 600; align-self: flex-end; margin-bottom: 8px;"></div>
+        </div>
+      </div>
+
+      <div class="card" style="margin-top: 20px; background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border);">
+        <h4 style="margin: 0 0 15px 0;">­ƒôï ├Ültimos Registros</h4>
+        <div class="table-wrap" style="max-height: 300px; overflow-y: auto;">
+          <table class="dash-table">
+            <thead>
+              <tr>
+                <th>Data/Hora</th>
+                <th>SELB</th>
+                <th>Registrado por</th>
+              </tr>
+            </thead>
+            <tbody id="revisados-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VIEW CUSTO/MODELO (RELAT├ôRIO FINANCEIRO PREMIUM) -->
+  <div id="view-modelo-custo" class="view">
+    <div class="mov-container">
+      <!-- Filtros Estilo BI -->
+      <div class="hist-toolbar" style="margin-bottom: 25px; border-radius: 12px; border: 1px solid var(--border); padding: 12px 20px; display: flex; align-items: center; gap: 15px; background: white;">
+        <div style="position: relative; flex: 1;">
+          <input type="text" id="mod-busca" placeholder="­ƒöì Filtrar modelo..." style="width: 100%; padding: 10px 15px; border-radius: 20px; border: 1px solid var(--border); background: var(--bg-hover); font-size: 14px;">
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <input type="date" id="mod-d1" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); font-size: 13px;">
+          <span style="font-size: 12px; color: var(--text-muted);">at├®</span>
+          <input type="date" id="mod-d2" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); font-size: 13px;">
+        </div>
+        <button class="btn-cancel" onclick="clearModFilters()" style="padding: 8px 15px; border-radius: 8px; font-size: 16px;">Ô£ò</button>
+        <button class="btn-cancel" id="btn-remanu-vinculos" onclick="openVinculosRemanu()" style="display:none; padding: 10px 15px; border-radius: 8px; font-size: 13px; font-weight: bold;">­ƒöù Vincular Fus├Áes</button>
+        <button class="btn-confirm" onclick="renderModeloCusto()" style="padding: 10px 25px; border-radius: 8px;">Gerar Relat├│rio</button>
+      </div>
+
+      <!-- Grid de Conte├║do -->
+      <div style="display: grid; grid-template-columns: 1fr 1.5fr; gap: 25px;">
+        
+        <!-- Coluna da Esquerda: Cards KPI -->
+        <div class="mod-kpi-list" id="kpi-container-lab">
+          <div class="mod-kpi-item c-atend">
+            <div class="mod-kpi-icon">­ƒôá</div>
+            <div class="mod-kpi-content">
+              <div class="mod-kpi-label" id="mod-kpi-modelos-label">MODELOS ATENDIDOS (0 M├üQUINAS)</div>
+              <div class="mod-kpi-value" id="mod-kpi-modelos">0</div>
+              <div class="mod-kpi-sub">equipamentos distintos</div>
+            </div>
+          </div>
+
+          <div class="mod-kpi-item c-invest">
+            <div class="mod-kpi-icon">­ƒÆ░</div>
+            <div class="mod-kpi-content">
+              <div class="mod-kpi-label">TOTAL INVESTIDO</div>
+              <div class="mod-kpi-value" id="mod-kpi-total" style="color: #f97316;">R$ 0,00</div>
+              <div class="mod-kpi-sub">custo de pe├ºas em sa├¡das</div>
+            </div>
+          </div>
+
+          <div class="mod-kpi-item c-expensive" style="cursor: pointer;" onclick="window.openDetalheModelo('expensive')">
+            <div class="mod-kpi-icon">ÔÜá´©Å</div>
+            <div class="mod-kpi-content">
+              <div class="mod-kpi-label">MODELO MAIS CARO ­ƒöì</div>
+              <div class="mod-kpi-value" id="mod-kpi-top" style="font-size: 15px; color: #1e293b;">ÔÇö</div>
+              <div class="mod-kpi-sub" id="mod-kpi-top-val" style="font-weight: 700;">R$ 0,00</div>
+            </div>
+          </div>
+
+          <div class="mod-kpi-item c-cheap" style="cursor: pointer;" onclick="window.openDetalheModelo('cheap')">
+            <div class="mod-kpi-icon">Ô£à</div>
+            <div class="mod-kpi-content">
+              <div class="mod-kpi-label">MODELO MAIS BARATO ­ƒöì</div>
+              <div class="mod-kpi-value" id="mod-kpi-bottom" style="font-size: 15px; color: #1e293b;">ÔÇö</div>
+              <div class="mod-kpi-sub" id="mod-kpi-bottom-val" style="font-weight: 700;">R$ 0,00</div>
+            </div>
+          </div>
+
+          <div class="mod-kpi-item c-avg">
+            <div class="mod-kpi-icon">­ƒôè</div>
+            <div class="mod-kpi-content">
+              <div class="mod-kpi-label">CUSTO M├ëDIO/ATEND.</div>
+              <div class="mod-kpi-value" id="mod-kpi-medio" style="color: #1e293b;">R$ 0,00</div>
+              <div class="mod-kpi-sub">m├®dia geral</div>
+            </div>
+          </div>
+
+          <button class="btn-saida-lote" onclick="exportarRelatorioModelo()" style="margin-top: 10px; width: 100%; justify-content: center;">­ƒôÑ Exportar Relat├│rio Excel</button>
+        </div>
+
+        <div class="mod-kpi-list" id="kpi-container-remanu" style="display:none;">
+          <div class="mod-kpi-item c-atend" style="border-left-color: #10b981;">
+            <div class="mod-kpi-icon" style="color:#10b981;">­ƒÆ░</div>
+            <div class="mod-kpi-content">
+              <div class="mod-kpi-label">ECONOMIA GERADA TOTAL</div>
+              <div class="mod-kpi-value" id="remanu-kpi-economia" style="color:#10b981">R$ 0,00</div>
+              <div class="mod-kpi-sub">margem real de lucro</div>
+            </div>
+          </div>
+          <div class="mod-kpi-item c-pecas" style="border-left-color: #3b82f6;">
+            <div class="mod-kpi-icon" style="color:#3b82f6;">­ƒôê</div>
+            <div class="mod-kpi-content">
+              <div class="mod-kpi-label">MARGEM M├ëDIA DE ECONOMIA</div>
+              <div class="mod-kpi-value" id="remanu-kpi-percentual" style="color:#3b82f6">0%</div>
+              <div class="mod-kpi-sub">economia vs nova</div>
+            </div>
+          </div>
+          <div class="mod-kpi-item c-custo" style="border-left-color: #f59e0b;">
+            <div class="mod-kpi-icon" style="color:#f59e0b;">­ƒÅå</div>
+            <div class="mod-kpi-content">
+              <div class="mod-kpi-label">MODELO MAIS ECON├öMICO</div>
+              <div class="mod-kpi-value" id="remanu-kpi-melhor" style="font-size: 1.2rem; line-height: 1.3">-</div>
+              <div class="mod-kpi-sub">maior % de margem</div>
+            </div>
+          </div>
+          <div class="mod-kpi-item c-expensive" style="cursor: pointer;" onclick="window.openDetalheModelo('expensive')">
+            <div class="mod-kpi-icon">ÔÜá´©Å</div>
+            <div class="mod-kpi-content">
+              <div class="mod-kpi-label">MODELO MAIS CARO ­ƒöì</div>
+              <div class="mod-kpi-value" id="remanu-kpi-top" style="font-size: 15px; color: #1e293b;">ÔÇö</div>
+              <div class="mod-kpi-sub" id="remanu-kpi-top-val" style="font-weight: 700;">R$ 0,00</div>
+            </div>
+          </div>
+          <div class="mod-kpi-item c-cheap" style="cursor: pointer;" onclick="window.openDetalheModelo('cheap')">
+            <div class="mod-kpi-icon">Ô£à</div>
+            <div class="mod-kpi-content">
+              <div class="mod-kpi-label">MODELO MAIS BARATO ­ƒöì</div>
+              <div class="mod-kpi-value" id="remanu-kpi-bottom" style="font-size: 15px; color: #1e293b;">ÔÇö</div>
+              <div class="mod-kpi-sub" id="remanu-kpi-bottom-val" style="font-weight: 700;">R$ 0,00</div>
+            </div>
+          </div>
+          <button class="btn-saida-lote" onclick="exportarRelatorioModelo()" style="margin-top: 10px; width: 100%; justify-content: center;">­ƒôÑ Exportar Relat├│rio Excel</button>
+        </div>
+
+        <!-- Coluna da Direita: Gr├ífico e Tabela -->
+        <div>
+          <div class="chart-container-premium">
+            <div class="chart-header">­ƒÆ░ TOP 10 MODELOS POR CUSTO M├ëDIO POR REVIS├âO (GERAL)</div>
+            <div style="height: 400px; position: relative;">
+              <canvas id="chart-modelo"></canvas>
+            </div>
+          </div>
+
+          <!-- Tabela Compacta Abaixo -->
+          <div class="card" style="margin-top: 25px; background: white; border-radius: 12px; border: 1px solid var(--border); overflow: hidden;">
+            <div class="table-wrap" style="max-height: 400px; overflow-y: auto;">
+              <table class="dash-table">
+                <thead>
+                  <tr id="mod-thead-tr">
+                    <th style="text-align: left; padding: 12px;">Modelo</th>
+                    <th class="text-center" style="padding: 12px;">Atendimentos</th>
+                    <th class="text-center" style="padding: 12px;">Pe├ºas Usadas</th>
+                    <th style="text-align: right; padding: 12px;">Custo Total</th>
+                    <th style="text-align: right; padding: 12px;">M├®dia p/ Atend.</th>
+                  </tr>
+                </thead>
+                <tbody id="mod-tbody"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- VIEW EQUIPAMENTOS (ADMIN) -->
+  <div id="view-bi-equipamentos" class="view">
+    <div class="mov-container">
+      <div class="mov-header">
+        <h2>­ƒôï Base de Equipamentos (BI)</h2>
+      </div>
+
+      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 20px;">
+        <div class="card" style="background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border);">
+          <h4 style="margin: 0 0 10px 0;">­ƒôé Importar Base BI</h4>
+          <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 20px;">Col. A: SELB | Col. C: Modelo | Col. D: Descri├º├úo</p>
+          <div id="bi-drop-area" style="border: 2px dashed var(--border); padding: 30px; text-align: center; border-radius: 8px; cursor: pointer;" onclick="document.getElementById('bi-file-input').click()">
+            <span style="font-size: 40px;">­ƒôü</span>
+            <p style="font-size: 13px; margin-top: 10px; font-weight: 600;">Clique para selecionar .xlsx do BI</p>
+            <input type="file" id="bi-file-input" accept=".xlsx, .xls" style="display:none" onchange="processarBI(this.files[0])">
+          </div>
+          <div id="bi-status" style="margin-top: 15px; font-size: 12px; font-weight: bold; text-align: center;"></div>
+        </div>
+
+        <div class="card" style="background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h4 style="margin: 0;">Equipamentos Cadastrados <span id="equip-total-count" style="color:var(--text-muted); font-size: 0.85rem; font-weight: normal;">(0)</span></h4>
+            <input type="text" id="equip-search-input" placeholder="­ƒöì Buscar SELB ou Modelo..." style="padding: 8px; border-radius: 6px; border: 1px solid var(--border); width: 200px;" oninput="renderBIList()">
+          </div>
+          <div class="table-wrap" style="max-height: 400px; overflow-y: auto;">
+            <table class="dash-table">
+              <thead>
+                <tr>
+                  <th>SELB</th>
+                  <th>Modelo</th>
+                  <th>Descri├º├úo</th>
+                </tr>
+              </thead>
+              <tbody id="equip-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- VIEW AUDITORIA (EXCLUSIVO LUCAS.ARAUJO) -->
+  <div id="view-auditoria" class="view">
+    <div class="mov-container" style="max-height: 100%; overflow-y: auto; padding: 25px;">
+      
+      <!-- ================= PAINEL 1: SETUP E HIST├ôRICO ================= -->
+      <div id="audit-panel-setup" class="audit-panel">
+        <div class="mov-header" style="margin-bottom: 25px;">
+          <h2 style="font-size: 24px; color: var(--text);">ÔÜÖ´©Å Invent├írio C├¡clico e Auditoria</h2>
+          <p style="color: var(--text-muted); font-size: 13px; margin-top: 5px;">Configure um novo ciclo ou consulte o hist├│rico de auditorias salvas.</p>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1.2fr 2fr; gap: 25px; align-items: start;">
+          <!-- CARD DE CONFIGURA├ç├âO DE NOVA AUDITORIA -->
+          <div class="card" style="background: white; padding: 25px; border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow-sm);">
+            <h3 style="margin-top: 0; margin-bottom: 15px; font-size: 16px; border-bottom: 1px solid var(--border); padding-bottom: 10px; color: var(--text);">­ƒÜÇ Novo Invent├írio</h3>
+            
+            <!-- Escolha do Setor -->
+            <div class="form-group" style="margin-bottom: 20px;">
+              <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; display: block; margin-bottom: 8px;">1. Selecione o Setor</label>
+              <div style="display: grid; grid-template-columns: 1fr; gap: 8px;" id="audit-sector-selection">
+                <label class="sector-option" style="display: flex; align-items: center; gap: 10px; padding: 12px 15px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; transition: all 0.2s; background: var(--bg-hover); font-weight: 600;">
+                  <input type="radio" name="audit-sector" value="LAB" checked style="accent-color: var(--green);"> ­ƒö¼ Laborat├│rio (LAB)
+                </label>
+                <label class="sector-option" style="display: flex; align-items: center; gap: 10px; padding: 12px 15px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; transition: all 0.2s; background: var(--white); font-weight: 600;">
+                  <input type="radio" name="audit-sector" value="REMANU" style="accent-color: var(--green);"> ÔÜÖ´©Å Remanufatura (REMANU)
+                </label>
+                <label class="sector-option" style="display: flex; align-items: center; gap: 10px; padding: 12px 15px; border: 1px solid var(--border); border-radius: 8px; cursor: pointer; transition: all 0.2s; background: var(--white); font-weight: 600; opacity: 0.7;">
+                  <input type="radio" name="audit-sector" value="3D" style="accent-color: var(--green);"> ­ƒö« Impress├úo 3D (3D)
+                </label>
+              </div>
+            </div>
+
+            <!-- Modo Cego -->
+            <div class="form-group" style="margin-bottom: 25px;">
+              <label style="font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; display: block; margin-bottom: 8px;">2. Configura├º├úo Especial</label>
+              <div style="display: flex; align-items: center; justify-content: space-between; padding: 12px 15px; border: 1px solid var(--border); border-radius: 8px; background: var(--white);">
+                <div>
+                  <strong style="font-size: 13px; display: block;">Modo Contagem Cega</strong>
+                  <span style="font-size: 11px; color: var(--text-muted);">Esconde o saldo do sistema durante a contagem.</span>
+                </div>
+                <label class="switch" style="position: relative; display: inline-block; width: 44px; height: 24px;">
+                  <input type="checkbox" id="audit-blind-mode" style="opacity: 0; width: 0; height: 0;">
+                  <span class="slider" style="position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #ccc; transition: .4s; border-radius: 34px;"></span>
+                </label>
+              </div>
+            </div>
+
+            <!-- Iniciar -->
+            <button class="btn-admin" onclick="window.iniciarAuditoria()" style="width: 100%; justify-content: center; height: 45px; font-size: 14px; border-radius: 8px;">­ƒÜÇ Iniciar Nova Auditoria</button>
+          </div>
+
+          <!-- HIST├ôRICO DE AUDITORIAS -->
+          <div class="card" style="background: white; padding: 25px; border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow-sm);">
+            <h3 style="margin-top: 0; margin-bottom: 15px; font-size: 16px; border-bottom: 1px solid var(--border); padding-bottom: 10px; color: var(--text);">­ƒôï Hist├│rico de Auditorias</h3>
+            <div class="table-wrap" style="max-height: 380px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px;">
+              <table class="dash-table" style="font-size: 12px; width: 100%;">
+                <thead>
+                  <tr style="background: var(--surface2);">
+                    <th style="text-align: left; padding: 10px;">C├│digo</th>
+                    <th style="text-align: center; padding: 10px;">Setor</th>
+                    <th style="text-align: center; padding: 10px;">Data</th>
+                    <th style="text-align: center; padding: 10px;">Acuracidade</th>
+                    <th style="text-align: center; padding: 10px;">A├º├Áes</th>
+                  </tr>
+                </thead>
+                <tbody id="audit-history-tbody">
+                  <tr><td colspan="5" class="text-center" style="padding: 30px; color: var(--text-muted);">Carregando hist├│rico...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= PAINEL 2: BIPAGEM ATIVA ================= -->
+      <div id="audit-panel-active" class="audit-panel" style="display: none;">
+        <div class="mov-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+          <div>
+            <h2 id="active-audit-title" style="font-size: 22px; color: var(--text); display: flex; align-items: center; gap: 10px;">­ƒöì Auditoria: AUD-XXXXXXXX</h2>
+            <div style="display: flex; gap: 15px; margin-top: 5px;">
+              <span class="badge-admin-pill" id="active-audit-sector" style="background: var(--blue-light); border-color: #b3d7f0; color: var(--blue);">Setor: -</span>
+              <span class="badge-admin-pill" id="active-audit-mode" style="background: var(--yellow-light); border-color: #fce4a8; color: #7d4a00;">Modo: -</span>
+            </div>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <button class="btn-admin" onclick="window.finalizarAuditoria()" style="background: var(--green); border-radius: 8px; padding: 10px 20px;">­ƒÅü Finalizar Auditoria</button>
+            <button class="btn-cancel" onclick="window.cancelarAuditoria()" style="border-radius: 8px; padding: 10px 20px;">Ô£ò Abandonar</button>
+          </div>
+        </div>
+
+        <!-- Cards de Estat├¡sticas em Tempo Real -->
+        <div class="dash-cards" style="margin-bottom: 20px;">
+          <div class="dash-card c-total">
+            <div class="dash-card-label">TOTAL BIPADO (ITENS F├ìSICOS)</div>
+            <div class="dash-card-value" id="active-audit-total-bipado">0</div>
+            <div class="dash-card-sub">unidades contadas</div>
+          </div>
+          <div class="dash-card c-stock" id="card-active-ok">
+            <div class="dash-card-label">CORRETOS (OK)</div>
+            <div class="dash-card-value" id="active-audit-total-ok" style="color: var(--green);">0</div>
+            <div class="dash-card-sub">saldo condizente</div>
+          </div>
+          <div class="dash-card c-low" id="card-active-error">
+            <div class="dash-card-label">DIVERGENTES (ERRO)</div>
+            <div class="dash-card-value" id="active-audit-total-error" style="color: var(--red);">0</div>
+            <div class="dash-card-sub">diferen├ºa detectada</div>
+          </div>
+        </div>
+
+        <!-- Bipador -->
+        <div class="card" style="background: white; padding: 25px; border-radius: 12px; border: 1px solid var(--border); text-align: center; margin-bottom: 20px; box-shadow: var(--shadow-sm);">
+          <div style="font-size: 13px; font-weight: 800; color: var(--text); margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.5px;">Aguardando Leitura do C├│digo de Barras...</div>
+          <input type="text" id="main-audit-bipador" placeholder="BIPE O C├ôDIGO DA PE├çA AQUI" class="modal-input" style="max-width: 480px; font-size: 22px; text-align: center; font-weight: bold; border: 3px solid var(--blue); border-radius: 12px; padding: 18px; margin: 0 auto; display: block; outline: none; box-shadow: 0 0 10px rgba(41, 128, 185, 0.15);" autocomplete="off">
+          <p style="margin-top: 10px; font-size: 11px; color: var(--text-muted);">Dica: O cursor ├® focado automaticamente. Basta bipar repetidamente para acumular.</p>
+        </div>
+
+        <!-- Tabela Ativa -->
+        <div class="table-wrap" style="max-height: 350px; overflow-y: auto; border: 1px solid var(--border); border-radius: 8px;">
+          <table class="dash-table" style="width: 100%;">
+            <thead>
+              <tr style="background: var(--surface2);" id="active-audit-thead">
+                <!-- Colunas din├ómicas dependendo do Modo Cego -->
+              </tr>
+            </thead>
+            <tbody id="active-audit-tbody">
+              <tr><td colspan="5" class="text-center" style="padding: 40px; color: var(--text-muted);">Nenhuma pe├ºa bipada ainda.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ================= PAINEL 3: DETALHES E RESUMO ================= -->
+      <div id="audit-panel-summary" class="audit-panel" style="display: none;">
+        <div class="mov-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+          <div>
+            <h2 id="summary-audit-title" style="font-size: 22px; color: var(--text);">­ƒôè Resumo do Invent├írio C├¡clico</h2>
+            <div style="display: flex; gap: 15px; margin-top: 5px;">
+              <span class="badge-admin-pill" id="summary-audit-code" style="background: var(--green-light); border-color: var(--green-mid); color: var(--green-dark);">AUD-XXXXXX</span>
+              <span class="badge-admin-pill" id="summary-audit-sector" style="background: var(--blue-light); border-color: #b3d7f0; color: var(--blue);">Setor: LAB</span>
+              <span class="badge-admin-pill" id="summary-audit-status" style="background: #e2e8f0; border-color: #cbd5e1; color: #475569;">Status: Finalizada</span>
+            </div>
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <button class="btn-admin" id="btn-sync-estoque-trigger" onclick="window.openModalAjuste()" style="background: var(--orange); border-radius: 8px; padding: 10px 20px; font-weight: 700; box-shadow: 0 2px 6px rgba(230, 126, 34, 0.3);">ÔÜí Ajustar Estoque do Sistema</button>
+            <button class="btn-confirm" onclick="window.exportarPlanilhaAuditoria()" style="border-radius: 8px; padding: 10px 20px;">­ƒôÑ Exportar Excel</button>
+            <button class="btn-cancel" onclick="window.fecharResumoAuditoria()" style="border-radius: 8px; padding: 10px 20px;">Ôå® Voltar ao Menu</button>
+          </div>
+        </div>
+
+        <!-- KPIs de Finaliza├º├úo -->
+        <div class="dash-cards" style="margin-bottom: 20px;">
+          <div class="dash-card c-stock" style="border-top-color: var(--green);">
+            <div class="dash-card-label">ACURACIDADE GERAL DO ESTOQUE</div>
+            <div class="dash-card-value" id="summary-audit-acuracidade" style="color: var(--green);">0%</div>
+            <div class="dash-card-sub">├¡ndice de acerto</div>
+          </div>
+          <div class="dash-card c-total" style="border-top-color: var(--blue);">
+            <div class="dash-card-label">DIVERG├èNCIAS TOTAIS (QTD ITENS)</div>
+            <div class="dash-card-value" id="summary-audit-total-divergentes" style="color: var(--blue);">0</div>
+            <div class="dash-card-sub">modelos com desvios</div>
+          </div>
+          <div class="dash-card c-zero" style="border-top-color: var(--red);">
+            <div class="dash-card-label">FALTAS E N├âO LOCALIZADOS</div>
+            <div class="dash-card-value" id="summary-audit-total-faltas" style="color: var(--red);">0</div>
+            <div class="dash-card-sub">unidades a menos</div>
+          </div>
+          <div class="dash-card c-low" style="border-top-color: var(--orange);">
+            <div class="dash-card-label">SOBRAS E ITENS EXTRAS</div>
+            <div class="dash-card-value" id="summary-audit-total-sobras" style="color: var(--orange);">0</div>
+            <div class="dash-card-sub">unidades a mais</div>
+          </div>
+        </div>
+
+        <!-- Tabela de Compara├º├úo Completa -->
+        <div class="card" style="background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border); box-shadow: var(--shadow-sm);">
+          <h3 style="margin-top: 0; margin-bottom: 15px; font-size: 15px; color: var(--text); border-bottom: 1px solid var(--border); padding-bottom: 10px;">­ƒôï Relat├│rio de Diverg├¬ncias Encontradas</h3>
+          
+          <div class="table-wrap" style="max-height: 400px; overflow-y: auto;">
+            <table class="dash-table" style="width: 100%;">
+              <thead>
+                <tr style="background: var(--surface2);">
+                  <th style="text-align: left; padding: 12px;">C├│digo Pe├ºa</th>
+                  <th style="text-align: left; padding: 12px;">Descri├º├úo</th>
+                  <th style="text-align: center; padding: 12px;">Saldo Sistema</th>
+                  <th style="text-align: center; padding: 12px;">Saldo F├¡sico</th>
+                  <th style="text-align: center; padding: 12px;">Diferen├ºa</th>
+                  <th style="text-align: center; padding: 12px;">Classifica├º├úo</th>
+                </tr>
+              </thead>
+              <tbody id="summary-audit-tbody">
+                <tr><td colspan="6" class="text-center" style="padding: 40px; color: var(--text-muted);">Calculando resumo...</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+
+</div>
+
+<!-- MODAL LOGIN ADMIN -->
+<div class="modal-overlay" id="modal-login-overlay">
+  <div class="modal-box">
+    <h3>­ƒöÉ Acesso ├ürea Admin</h3>
+    <div class="modal-label">E-mail</div>
+    <input type="text" class="modal-input" id="modal-login-user" placeholder="usuario@selbetti.com.br">
+    <div class="modal-label">Senha</div>
+    <input type="password" class="modal-input" id="modal-login-pass" placeholder="senha">
+    <div class="modal-err" id="modal-login-err"></div>
+    <div class="modal-btns">
+      <button class="btn-cancel" id="btn-cancel-login">Cancelar</button>
+      <button class="btn-confirm" id="btn-do-login">Entrar</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL SAIDA (BAIXA POR SELB) -->
+<div class="modal-overlay" id="modal-saida-overlay">
+  <div class="modal-box saida-batch">
+    <h3>Ô×û Baixa de Estoque por SELB</h3>
+    <div class="saida-search-box" style="margin-bottom: 15px; position: relative;">
+      <div class="modal-label">Busca por Descri├º├úo (use % como coringa)</div>
+      <input type="text" class="modal-input" id="saida-busca-desc" placeholder="Ex: ROLO%FUSOR" oninput="window.buscarPecaPorDesc(this.value)" autocomplete="off">
+      <div id="pecas-sugestoes-custom" style="display:none; position:absolute; top:100%; left:0; width:100%; background:var(--bg); border:1px solid var(--border); border-radius:8px; max-height:200px; overflow-y:auto; z-index:1000; box-shadow:0 4px 12px rgba(0,0,0,0.15);"></div>
+    </div>
+
+    <div class="saida-grid" style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; margin-bottom: 15px;">
+      <div>
+        <div class="modal-label">C├│digo da Pe├ºa</div>
+        <input type="text" class="modal-input" id="saida-peca" placeholder="Ex: CE123">
+      </div>
+      <div>
+        <div class="modal-label">Quantidade</div>
+        <input type="number" class="modal-input" id="saida-qtd" value="1" min="1">
+      </div>
+      <div>
+        <button class="btn-admin" onclick="addSaidaItem()" style="height: 42px;">Adicionar</button>
+      </div>
+    </div>
+    
+    <div class="saida-table-wrap" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border); margin-bottom: 15px;">
+      <table style="margin: 0; width: 100%;">
+        <thead>
+          <tr>
+            <th>C├│digo</th>
+            <th>Descri├º├úo</th>
+            <th style="text-align:center">Qtd</th>
+            <th style="text-align:right">Total</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="saida-tbody"></tbody>
+      </table>
+    </div>
+
+    <div class="saida-footer" style="display: flex; justify-content: space-between; align-items: center; background: var(--bg-hover); padding: 10px; border-radius: 8px; margin-bottom: 20px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <strong>SELB (4 d├¡gitos):</strong>
+        <input type="text" class="modal-input" id="saida-selb" maxlength="4" placeholder="Ex: 1234" style="width: 80px; margin: 0; text-align: center;">
+      </div>
+      <div style="font-size: 14px;">
+        <span>Itens: <strong id="saida-count">0</strong></span>
+        <span style="margin-left: 15px;">Valor Total: <strong id="saida-total">R$ 0.00</strong></span>
+      </div>
+    </div>
+
+    <div id="saida-selb-info" style="margin-top: -15px; margin-bottom: 20px; padding: 10px 15px; border-radius: 8px; font-size: 13px; display: none; text-align: left; font-weight: 500;">
+      <!-- Modelo ou mensagem de erro em tempo real -->
+    </div>
+
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeSaidaModal()">Cancelar</button>
+      <button class="btn-confirm" id="saida-confirm-btn" onclick="confirmarSaida()">Finalizar Baixa</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL AJUSTE MANUAL (L├üPIS) -->
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal-box">
+    <h3>Ô£Å´©Å Ajuste de Estoque e Pre├ºo</h3>
+    <div style="margin-bottom: 15px; background: var(--bg-hover); padding: 10px; border-radius: 6px;">
+      <div style="font-family: var(--mono); font-weight: bold; color: var(--blue);" id="modal-code"></div>
+      <div id="modal-desc" style="font-size: 13px; color: var(--text-muted); margin-top: 4px;"></div>
+    </div>
+    <div class="modal-label">Quantidade em Estoque</div>
+    <input type="number" class="modal-input" id="modal-qty">
+    <div class="modal-label">Custo Unit├írio (Valor Comercial / Venda) (R$)</div>
+    <input type="number" step="0.01" class="modal-input" id="modal-price">
+    <div id="modal-price-preview" style="font-size: 12px; color: var(--green); margin-top: 5px; font-weight: 500;">
+      ­ƒæü´©Å Custo Real Equivalente (Vis├úo Atual): R$ 0.00
+    </div>
+    <div class="modal-label">Observa├º├úo / Motivo do Ajuste *</div>
+    <input type="text" class="modal-input" id="modal-obs" placeholder="Ex: Corre├º├úo de invent├írio f├¡sico" required>
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="closeModal()">Cancelar</button>
+      <button class="btn-confirm" onclick="savePriceModal()">Salvar Altera├º├Áes</button>
+    </div>
+  </div>
+</div>
+
+<!-- MENU ADMIN OVERLAY (ENGRENAGEM) -->
+<div class="modal-overlay" id="admin-menu-overlay" style="align-items: flex-start; justify-content: flex-end; padding: 20px;">
+  <div class="modal-box" style="width: 320px; margin: 0; box-shadow: -4px 4px 20px rgba(0,0,0,0.1);">
+    <div id="admin-menu-box">
+      <h3 style="margin-bottom: 20px;">ÔÜÖ´©Å Administrativo</h3>
+      <div style="display: flex; flex-direction: column; gap: 10px;">
+        <button id="admin-btn-import-xml" class="btn-admin" style="width: 100%; justify-content: center;" onclick="openImportFromMenu()">­ƒôÑ Importar Dados (XML Protheus)</button>
+        <button id="admin-btn-modelo-custo" class="btn-admin" style="width: 100%; justify-content: center;" onclick="window.switchTab('modelo-custo'); closeAdminMenu();">­ƒôè Custo por Modelo (Financeiro)</button>
+        <button id="admin-btn-import-wms" class="btn-admin" style="width: 100%; justify-content: center;" onclick="window.switchTab('bi-equipamentos'); closeAdminMenu();">­ƒôü Importar Base BI (WMS)</button>
+        <button id="admin-btn-revisados" class="btn-admin" style="width: 100%; justify-content: center;" onclick="window.switchTab('revisados'); closeAdminMenu();">­ƒøá´©Å Registrar SELBs Revisados</button>
+        <button id="admin-btn-vinculo-selb" class="btn-admin" style="width: 100%; justify-content: center; background: #0ea5e9; color: white;" onclick="openManualSELBModal()">­ƒöù Vincular SELB Manualmente</button>
+        <button id="admin-btn-cadastro-peca" class="btn-admin" style="width: 100%; justify-content: center; background: #10b981; color: white;" onclick="openCadastroPecaModal()">Ô×ò Cadastrar Pe├ºa Nova</button>
+        <button id="admin-btn-backup" class="btn-admin" style="width: 100%; justify-content: center; background: #8b5cf6;" onclick="gerarBackupCompleto()">­ƒôª Gerar Backup Completo (JSON)</button>
+        <button id="btn-toggle-custo" class="btn-admin" style="width: 100%; justify-content: center; background: var(--bg-hover); color: var(--text);" onclick="window.toggleModeCusto()">­ƒÆ▓ Modo Custo Real (DESATIVADO)</button>
+        <button class="btn-cancel" onclick="closeAdminMenu()" style="margin-top: 20px; width: 100%;">Fechar Menu</button>
+      </div>
+    </div>
+    
+    <div id="import-submenu-box" style="display:none">
+      <h3 style="margin-bottom: 10px;">­ƒôÑ Importa├º├úo XML</h3>
+      <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px; line-height: 1.4;">Selecione o arquivo XML exportado pelo Protheus. O sistema ir├í ler as Tags &lt;cProd&gt;, &lt;qCom&gt; e &lt;vUnCom&gt; para atualizar saldos e custos automaticamente.</p>
+      
+      <div style="margin-bottom: 15px; padding: 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 8px;">
+        <div class="modal-label" style="margin-bottom: 8px;">Selecione o Setor Destino:</div>
+        <div style="display: flex; gap: 15px;">
+          <label style="display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 13px; font-weight: 600;">
+            <input type="radio" name="xml-sector" value="LAB" checked> Laborat├│rio
+          </label>
+          <label style="display: flex; align-items: center; gap: 5px; cursor: pointer; font-size: 13px; font-weight: 600;">
+            <input type="radio" name="xml-sector" value="REMANU"> Remanufatura
+          </label>
+        </div>
+      </div>
+
+      <div id="xml-drop-area" style="border: 2px dashed var(--border); padding: 20px; text-align: center; border-radius: 8px; margin-bottom: 20px;">
+        <input type="file" id="xml-file-input" accept=".xml" onchange="processarXML(this.files[0])" style="display: none;">
+        <label for="xml-file-input" style="cursor: pointer; color: var(--blue); font-weight: 500;">
+          ­ƒôü Clique aqui para selecionar o arquivo XML
+        </label>
+      </div>
+
+      <div style="display: flex; justify-content: flex-end;">
+        <button class="btn-cancel" onclick="backToAdminMenu()">Voltar</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL CADASTRO PE├çA NOVA -->
+<div class="modal-overlay" id="modal-cadastro-peca">
+  <div class="modal-box" style="max-width: 420px;">
+    <h3 style="color: #10b981; display: flex; align-items: center; gap: 8px;">Ô×ò Cadastrar Nova Pe├ºa</h3>
+    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;">
+      Insira as informa├º├Áes b├ísicas para cadastrar a pe├ºa no banco de dados. Ela ficar├í dispon├¡vel para todas as movimenta├º├Áes e auditoria.
+    </p>
+
+    <div style="margin-bottom: 15px;">
+      <div class="modal-label">C├│digo da Pe├ºa *</div>
+      <input type="text" class="modal-input" id="cad-code" placeholder="Ex: 302LV94270" style="text-transform: uppercase;">
+    </div>
+
+    <div style="margin-bottom: 15px;">
+      <div class="modal-label">Descri├º├úo Completa *</div>
+      <input type="text" class="modal-input" id="cad-desc" placeholder="Ex: CONJUNTO ROLETES DE ALIMENTACAO KYOCERA">
+    </div>
+
+    <div style="margin-bottom: 15px;">
+      <div class="modal-label">Marca (Opcional)</div>
+      <input type="text" class="modal-input" id="cad-marca" placeholder="Ex: KYOCERA" list="marcas-sugestoes">
+      <datalist id="marcas-sugestoes">
+        <option value="RICOH">
+        <option value="KYOCERA">
+        <option value="BROTHER">
+        <option value="SAMSUNG">
+        <option value="HP">
+        <option value="LEXMARK">
+        <option value="OUTROS">
+      </datalist>
+    </div>
+
+    <div style="margin-bottom: 20px;">
+      <div class="modal-label">Valor do Produto (Custo de Venda Comercial R$) *</div>
+      <input type="number" step="0.01" class="modal-input" id="cad-custo" placeholder="Ex: 150.00">
+      <div id="cad-custo-preview" style="font-size: 12px; color: var(--green); margin-top: 5px; font-weight: 500;">
+        ­ƒæü´©Å Custo Real Equivalente (Vis├úo Atual): R$ 0.00
+      </div>
+    </div>
+
+    <div style="display: flex; gap: 10px;">
+      <button class="btn-cancel" onclick="closeCadastroPecaModal()" style="flex: 1;">Cancelar</button>
+      <button class="btn-confirm" onclick="saveCadastroPeca()" style="flex: 2; background: #10b981;">Salvar Pe├ºa</button>
+    </div>
+    <div id="cadastro-peca-status" style="margin-top: 15px; font-size: 13px; text-align: center;"></div>
+  </div>
+</div>
+
+<!-- MODAL VINCULO MANUAL SELB -->
+<div class="modal-overlay" id="modal-selb-manual">
+  <div class="modal-box" style="max-width: 400px;">
+    <h3>­ƒöù Vincular SELB ao Modelo</h3>
+    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;">
+      Use esta tela para identificar SELBs que j├í sa├¡ram do estoque mas aparecem no relat├│rio de custos.
+    </p>
+
+    <div style="margin-bottom: 15px;">
+      <div class="modal-label">C├│digo SELB (Exato)</div>
+      <input type="text" class="modal-input" id="manual-selb" placeholder="Ex: 5TJ4">
+    </div>
+
+    <div style="margin-bottom: 20px;">
+      <div class="modal-label">Modelo do Equipamento</div>
+      <input type="text" class="modal-input" id="manual-modelo" placeholder="Ex: RICOH MPC 3003" list="modelos-existentes">
+      <datalist id="modelos-existentes"></datalist>
+    </div>
+
+    <div style="display: flex; gap: 10px;">
+      <button class="btn-cancel" onclick="closeManualSELBModal()" style="flex: 1;">Cancelar</button>
+      <button class="btn-confirm" onclick="saveManualSELB()" style="flex: 2;">Salvar V├¡nculo</button>
+    </div>
+    <div id="manual-selb-status" style="margin-top: 15px; font-size: 13px; text-align: center;"></div>
+  </div>
+</div>
+
+<!-- MODAL AJUSTE DE HIST├ôRICO -->
+<div class="modal-overlay" id="modal-ajuste-historico">
+  <div class="modal-box" style="max-width: 450px;">
+    <h3 style="color: var(--orange);">Ô£Å´©Å Ajustar Registro de Hist├│rico</h3>
+    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;">
+        Voc├¬ est├í editando um registro existente. O sistema registrar├í uma trilha de auditoria para esta altera├º├úo.
+    </p>
+
+    <input type="hidden" id="ajuste-id">
+    
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px;">
+        <div>
+            <div class="modal-label">SELB Original</div>
+            <input type="text" class="modal-input" id="ajuste-selb" placeholder="SELB">
+        </div>
+        <div>
+            <div class="modal-label">C├│digo da Pe├ºa</div>
+            <input type="text" class="modal-input" id="ajuste-code" placeholder="C├│digo">
+        </div>
+    </div>
+
+    <div style="margin-bottom: 20px;">
+        <div class="modal-label">Motivo do Ajuste / Observa├º├úo</div>
+        <input type="text" class="modal-input" id="ajuste-obs" placeholder="Ex: Operador registrou SELB errado">
+    </div>
+
+    <div style="display: flex; gap: 10px;">
+      <button class="btn-cancel" onclick="closeAjusteHistorico()" style="flex: 1;">Cancelar</button>
+      <button class="btn-confirm" onclick="saveAjusteHistorico()" style="flex: 2; background: var(--orange);">Confirmar Ajuste</button>
+    </div>
+    <div id="ajuste-status" style="margin-top: 15px; font-size: 13px; text-align: center;"></div>
+  </div>
+</div>
+
+<!-- MODAL DETALHE CUSTO MODELO -->
+<div class="modal-overlay" id="modal-detalhe-modelo">
+  <div class="modal-box" style="max-width: 550px; border-radius: 16px; overflow: hidden; padding: 0; border: none; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);">
+    <div id="modal-detalhe-header" style="padding: 24px; color: white; position: relative;">
+      <button onclick="window.closeDetalheModelo()" style="position: absolute; right: 20px; top: 20px; background: rgba(255,255,255,0.2); border: none; width: 32px; height: 32px; border-radius: 50%; color: white; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s;">Ô£ò</button>
+      <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; opacity: 0.9;" id="modal-detalhe-kicker">MODELO MAIS CARO</div>
+      <h3 style="font-size: 18px; font-weight: 800; color: white; margin: 8px 0 0 0; line-height: 1.3;" id="modal-detalhe-title">ÔÇö</h3>
+    </div>
+    
+    <!-- BODY PARA LABORAT├ôRIO -->
+    <div id="detalhe-body-lab" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); padding: 1px;">
+      <!-- Linha 1 -->
+      <div style="background: white; padding: 16px 20px;">
+        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Revis├Áes com Pe├ºa</div>
+        <div style="font-size: 20px; font-weight: 800;" id="detalhe-com-peca">0</div>
+      </div>
+      <div style="background: white; padding: 16px 20px;">
+        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Revisada sem Pe├ºa</div>
+        <div style="font-size: 20px; font-weight: 800;" id="detalhe-sem-peca">0</div>
+      </div>
+      
+      <!-- Linha 2 -->
+      <div style="background: white; padding: 16px 20px;">
+        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Total de M├íquinas</div>
+        <div style="font-size: 20px; font-weight: 800;" id="detalhe-total-maquinas">0</div>
+      </div>
+      <div style="background: white; padding: 16px 20px;">
+        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Pe├ºas Utilizadas</div>
+        <div style="font-size: 20px; font-weight: 800;" id="detalhe-pecas">0</div>
+      </div>
+      
+      <!-- Linha 3 -->
+      <div style="background: white; padding: 16px 20px;">
+        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Custo M├®dio por Revis├úo (Geral)</div>
+        <div style="font-size: 20px; font-weight: 800;" id="detalhe-custo-geral">R$ 0,00</div>
+      </div>
+      <div style="background: white; padding: 16px 20px;">
+        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Custo M├®dio por Revis├úo (Com Pe├ºa)</div>
+        <div style="font-size: 20px; font-weight: 800;" id="detalhe-custo-com-peca">R$ 0,00</div>
+      </div>
+      
+      <!-- Linha 4 -->
+      <div style="background: white; padding: 16px 20px;">
+        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">M├®dia de Pe├ºas por M├íquina</div>
+        <div style="font-size: 20px; font-weight: 800;" id="detalhe-media-pecas">0,00</div>
+      </div>
+      <div style="background: white; padding: 16px 20px;">
+        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Custo Total de Revis├úo</div>
+        <div style="font-size: 20px; font-weight: 800; font-family: var(--mono);" id="detalhe-custo-total">R$ 0,00</div>
+      </div>
+    </div>
+
+    <!-- BODY PARA REMANUFATURA -->
+    <div id="detalhe-body-remanu" style="display: none; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); padding: 1px;">
+      <!-- Linha 1 -->
+      <div style="background: white; padding: 16px 20px;">
+        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Total de Fus├Áes Recuperadas</div>
+        <div style="font-size: 20px; font-weight: 800;" id="remanu-detalhe-recup">0</div>
+      </div>
+      <div style="background: white; padding: 16px 20px;">
+        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Custo M├®dio por Recupera├º├úo</div>
+        <div style="font-size: 20px; font-weight: 800;" id="remanu-detalhe-custo-medio">R$ 0,00</div>
+      </div>
+
+      <!-- Linha 2 -->
+      <div style="background: white; padding: 16px 20px;">
+        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">M├®dia de Pe├ºas por Recupera├º├úo</div>
+        <div style="font-size: 20px; font-weight: 800;" id="remanu-detalhe-media-pecas">0,00</div>
+      </div>
+      <div style="background: white; padding: 16px 20px;">
+        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Pe├ºa Mais Consumida</div>
+        <div style="font-size: 20px; font-weight: 800; color: var(--text); cursor: help;" id="remanu-detalhe-peca-top" title="Passe o mouse para ver a descri├º├úo completa">ÔÇö</div>
+      </div>
+
+      <!-- Linha 3 -->
+      <div style="background: white; padding: 16px 20px;">
+        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Valor da Fus├úo Nova</div>
+        <div style="font-size: 20px; font-weight: 800;" id="remanu-detalhe-vlr-nova">R$ 0,00</div>
+      </div>
+      <div style="background: white; padding: 16px 20px;">
+        <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Valor Total Investido</div>
+        <div style="font-size: 20px; font-weight: 800; font-family: var(--mono);" id="remanu-detalhe-total-invest">R$ 0,00</div>
+      </div>
+
+      <!-- Linha 4 (Ocupando duas colunas) -->
+      <div style="background: white; padding: 16px 20px; grid-column: span 2; display: flex; flex-direction: column; align-items: center; justify-content: center; border-top: 1px solid var(--border);">
+        <div style="font-size: 11px; font-weight: 800; color: var(--green); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">Economia Total Gerada</div>
+        <div style="font-size: 28px; font-weight: 900; color: var(--green); font-family: var(--mono);" id="remanu-detalhe-economia-gerada">R$ 0,00</div>
+      </div>
+    
+    <div style="padding: 12px; text-align: center; background: #f8fafc; font-size: 11px; color: var(--text-muted);">
+      Clique fora para fechar
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- MODAL AJUSTE HIST├ôRICO -->
+<div id="modal-ajuste-historico" class="modal-overlay">
+  <div class="modal-content">
+    <h2>Ajustar Registro Hist├│rico</h2>
+    <div class="form-group" style="margin-top:15px;">
+      <label>Nova Quantidade</label>
+      <input type="number" id="hist-ajuste-qty" min="1" class="modal-input" placeholder="Qtd">
+    </div>
+    <div class="form-group">
+      <label>Valor Total do Registro (R$)</label>
+      <input type="text" id="hist-ajuste-valor" class="modal-input" placeholder="Ex: 150,00">
+    </div>
+    <div class="form-group">
+      <label>Motivo do Ajuste</label>
+      <input type="text" id="hist-ajuste-motivo" class="modal-input" placeholder="Ex: Corre├º├úo de digita├º├úo">
+    </div>
+    <div class="modal-actions" style="margin-top:20px;">
+      <button class="btn-cancel" onclick="document.getElementById('modal-ajuste-historico').classList.remove('open')">Cancelar</button>
+      <button class="btn-confirm" id="btn-salvar-ajuste-hist">Salvar Ajuste</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL V├ìNCULOS REMANUFATURA (NOVO VS RS) -->
+<div class="modal-overlay" id="modal-vinculos-remanu">
+  <div class="modal-box" style="max-width: 500px;">
+    <h3>­ƒöù Vincular Fus├Áes (Nova vs RS)</h3>
+    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;">
+      Use esta tela para cadastrar os c├│digos de fus├Áes correspondentes a cada modelo de equipamento.
+    </p>
+
+    <div class="modal-label">MODELO DO EQUIPAMENTO</div>
+    <input type="text" id="vinc-modelo" list="list-modelos-remanu" class="modal-input" placeholder="Ex: RICOH IM 430F">
+    <datalist id="list-modelos-remanu"></datalist>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+      <div>
+        <div class="modal-label">C├ôDIGO PE├çA NOVA</div>
+        <input type="text" id="vinc-nova" class="modal-input" placeholder="Ex: D0A44164" style="text-transform: uppercase;">
+      </div>
+      <div>
+        <div class="modal-label">C├ôDIGO PE├çA RS</div>
+        <input type="text" id="vinc-rs" class="modal-input" placeholder="Ex: D0A44164RS" style="text-transform: uppercase;">
+      </div>
+    </div>
+
+    <div class="modal-btns" style="margin-top: 10px;">
+      <button class="btn-confirm" id="btn-salvar-vinculo" onclick="salvarVinculoRemanu()" style="width: 100%;">Salvar V├¡nculo</button>
+    </div>
+
+    <h3 style="font-size: 14px; margin-top: 30px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">V├¡nculos Cadastrados</h3>
+    <div style="max-height: 200px; overflow-y: auto; margin-top: 10px; border: 1px solid var(--border); border-radius: 8px;">
+      <table class="dash-table" style="font-size: 12px; margin-top: 0;">
+        <thead>
+          <tr>
+            <th style="text-align: left;">Modelo</th>
+            <th style="text-align: center;">Nova</th>
+            <th style="text-align: center;">RS</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="tbody-vinculos-remanu">
+          <tr><td colspan="4" class="text-center">Nenhum v├¡nculo.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="modal-btns" style="margin-top: 20px;">
+      <button class="btn-cancel" onclick="document.getElementById('modal-vinculos-remanu').classList.remove('open')" style="width: 100%;">Fechar Janela</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL SENHA AJUSTE AUTOM├üTICO DE ESTOQUE -->
+<div class="modal-overlay" id="modal-audit-ajuste">
+  <div class="modal-box" style="max-width: 450px;">
+    <h3>ÔÜí Ajustar Estoque do Sistema</h3>
+    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;">
+      Esta a├º├úo ir├í sincronizar permanentemente as quantidades do sistema com as bipadas fisicamente nesta auditoria. <strong>Isso gerar├í lan├ºamentos autom├íticos no hist├│rico.</strong>
+    </p>
+
+    <div style="background: var(--red-light); border: 1px solid #f87171; border-radius: 8px; padding: 15px; margin-bottom: 20px;">
+      <h4 style="color: #991b1b; margin-top: 0; margin-bottom: 5px; font-size: 13px;">ÔÜá´©Å Rastreabilidade Garantida</h4>
+      <p style="font-size: 11px; color: #7f1d1d; margin: 0;">
+        Todos os lan├ºamentos de corre├º├úo (Sobras/Entradas e Faltas/Sa├¡das) ser├úo marcados no hist├│rico geral do sistema com o seu usu├írio e o ID desta sess├úo.
+      </p>
+    </div>
+
+    <div class="form-group">
+      <label class="modal-label">Digite a Senha de Auditoria</label>
+      <input type="password" id="audit-ajuste-senha" class="modal-input" placeholder="Senha do Auditor" style="text-align: center; font-size: 16px; letter-spacing: 2px;">
+      <span id="audit-ajuste-err" style="color: var(--red); font-size: 11px; font-weight: 700; margin-top: 5px; display: block; text-align: center;"></span>
+    </div>
+
+    <div class="modal-actions" style="margin-top: 25px; display: flex; gap: 10px;">
+      <button class="btn-cancel" onclick="document.getElementById('modal-audit-ajuste').classList.remove('open')" style="flex: 1; border-radius: 8px; height: 40px;">Cancelar</button>
+      <button class="btn-confirm" onclick="window.confirmarAjusteEstoque()" style="flex: 1; border-radius: 8px; height: 40px; background: var(--orange);">Confirmar Ajuste</button>
+    </div>
+  </div>
+</div>
+
+<!-- OVERLAY DE REPETI├ç├âO/REDEFINI├ç├âO DE SENHA -->
+<div id="modal-reset-password" class="modal-overlay" style="display:none; align-items: center; justify-content: center; z-index: 10000; backdrop-filter: blur(15px); background: rgba(15, 23, 42, 0.85);">
+  <div class="modal-box" style="width: 400px; background: var(--surface); border: 1px solid var(--border); border-radius: 20px; padding: 30px; text-align: left; box-shadow: 0 20px 40px rgba(0,0,0,0.3);">
+    <h3 style="font-size: 18px; font-weight: 800; margin-bottom: 10px; color: var(--text); display: flex; align-items: center; gap: 8px;">­ƒöÆ Redefinir Senha</h3>
+    <p style="color: var(--text-muted); font-size: 13px; margin-bottom: 20px; line-height: 1.4;">
+      Digite e confirme a sua nova senha de acesso ao sistema.
+    </p>
+    
+    <div style="margin-bottom: 15px;">
+      <div class="modal-label">Nova Senha</div>
+      <input type="password" class="modal-input" id="reset-new-pass" placeholder="M├¡nimo 6 caracteres" style="margin-bottom: 0;">
+    </div>
+    <div style="margin-bottom: 15px;">
+      <div class="modal-label">Confirmar Nova Senha</div>
+      <input type="password" class="modal-input" id="reset-confirm-pass" placeholder="Confirme sua nova senha" style="margin-bottom: 0;">
+    </div>
+    
+    <div class="modal-err" id="reset-pass-err" style="min-height: 1.2rem; font-weight: 600; text-align: center;"></div>
+    
+    <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 15px;">
+      <button class="btn-confirm" id="btn-reset-pass-confirm">Atualizar Senha</button>
+    </div>
+  </div>
+</div>
+
+<script type="module" src="src/debug-center.js"></script>
+<script type="module" src="src/main.js?v=1.5"></script>
+</body>
+</html>
