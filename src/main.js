@@ -893,12 +893,24 @@ async function savePriceModal() {
 
         const formatChange = `AJUSTE MANUAL: ${obs} (Qtd: ${currentEditPrevQty} ➡️ ${qty} | Preço: R$ ${currentEditPrevPrice.toFixed(2)} ➡️ R$ ${price.toFixed(2)})`;
 
+        const diffQty = qty - currentEditPrevQty;
+        let tipoMovimento = 'ajuste';
+        let recordedQty = 0;
+        
+        if (diffQty > 0) {
+            tipoMovimento = 'entrada';
+            recordedQty = diffQty;
+        } else if (diffQty < 0) {
+            tipoMovimento = 'saída';
+            recordedQty = Math.abs(diffQty);
+        }
+
         await supabase.from(getHistoricoTable()).insert({
-            tipo: 'ajuste',
+            tipo: tipoMovimento,
             code: currentEditCode,
-            qty: qty,
+            qty: recordedQty,
             vlr_unit: price,
-            vlr_total: qty * price,
+            vlr_total: recordedQty * price,
             selb: 'AJUSTE',
             descricao: formatChange,
             user_email: currentUser.email,
