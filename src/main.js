@@ -2069,6 +2069,17 @@ window.openDetalheModelo = (typeOrModel) => {
     document.getElementById('detalhe-custo-com-peca').textContent = model.comPeca > 0 ? fmt(model.custo / model.comPeca) : 'R$ 0,00';
     document.getElementById('detalhe-media-pecas').textContent = model.atendimentos > 0 ? fmtNum(model.pecas / model.atendimentos) : '0,00';
     
+    // Atualiza Labels baseadas no setor (Remanufatura trata "Peças" e não "Máquinas")
+    const lblTotal = document.getElementById('detalhe-total-maquinas').previousElementSibling;
+    const lblMedia = document.getElementById('detalhe-media-pecas').previousElementSibling;
+    if (window.currentSector === 'REMANU') {
+        lblTotal.textContent = 'Total de Peças/Kits Revistos';
+        lblMedia.textContent = 'Média de Componentes Utilizados';
+    } else {
+        lblTotal.textContent = 'Total de Máquinas';
+        lblMedia.textContent = 'Média de Peças por Máquina';
+    }
+    
     const totalEl = document.getElementById('detalhe-custo-total');
     totalEl.textContent = fmt(model.custo);
     totalEl.style.color = type === 'expensive' ? '#e74c3c' : (type === 'cheap' ? '#27ae60' : '#f39c12');
@@ -2124,11 +2135,11 @@ window.openModalExplicacao = (type) => {
         titleEl.textContent = 'ECONOMIA GERADA TOTAL';
         contentEl.innerHTML = `
             <p style="margin-top:0;"><strong>Como este valor é calculado?</strong></p>
-            <p>O sistema avalia cada modelo de máquina individualmente e realiza a seguinte conta matemática:</p>
+            <p>O sistema avalia cada modelo de peça individualmente e realiza a seguinte conta matemática:</p>
             <div style="background: var(--surface2); padding: 12px; border-radius: 8px; margin: 10px 0; font-family: var(--mono); color: var(--text);">
-                Economia = (Preço da Máquina Nova) - (Custo Total das Revisões)
+                Economia = (Preço da Peça Nova) - (Custo Total das Revisões)
             </div>
-            <p>Se o custo gasto para consertar todas as máquinas daquele modelo for <strong>menor</strong> do que comprar as mesmas máquinas novas, essa diferença é considerada "Economia".</p>
+            <p>Se o custo gasto para consertar todas as peças daquele modelo for <strong>menor</strong> do que comprar as mesmas peças novas, essa diferença é considerada "Economia".</p>
             <p style="margin-bottom:0;">O valor exibido no card é o <strong>somatório total</strong> da economia de todos os modelos que possuíam preço de referência cadastrado no período pesquisado.</p>
         `;
     } else if (type === 'margem') {
@@ -2138,9 +2149,9 @@ window.openModalExplicacao = (type) => {
             <p style="margin-top:0;"><strong>Como esta porcentagem é calculada?</strong></p>
             <p>A margem média representa o percentual de dinheiro salvo em relação ao valor que seria gasto comprando equipamentos novos.</p>
             <div style="background: var(--surface2); padding: 12px; border-radius: 8px; margin: 10px 0; font-family: var(--mono); color: var(--text);">
-                Margem (%) = (Soma de Todas as Economias) ÷ (Soma de Todos os Preços de Máquina Nova) × 100
+                Margem (%) = (Soma de Todas as Economias) ÷ (Soma de Todos os Preços de Peça Nova) × 100
             </div>
-            <p>Exemplo: Se você economizou R$ 8.000 e o custo para comprar todas as máquinas novas seria de R$ 10.000, a margem de economia é de <strong>80%</strong>.</p>
+            <p>Exemplo: Se você economizou R$ 8.000 e o custo para comprar todas as peças novas seria de R$ 10.000, a margem de economia é de <strong>80%</strong>.</p>
             <p style="margin-bottom:0;">Isso mostra a eficiência financeira e a saúde do setor de remanufatura como um todo.</p>
         `;
     }
