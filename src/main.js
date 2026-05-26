@@ -1248,7 +1248,7 @@ window.processarXML = async (file) => {
                         if (t.includes('PRODUTO') && colProduto < 0) colProduto = i;
                         if ((t.includes('QUANTIDADE') || t === 'QTD') && colQtd < 0) colQtd = i;
                         if (t.includes('UNIT') && colVlrUnit < 0) colVlrUnit = i;
-                        if ((t.includes('PEDIDO') || t.includes('PED.COMPRA') || t.includes('PED. COMPRA') || t === 'PED') && colPedido < 0) colPedido = i;
+                        if ((t.includes('PEDIDO') || t.includes('PED.COMPRA') || t.includes('PED. COMPRA') || t === 'PED' || t.includes('DOCTO')) && colPedido < 0) colPedido = i;
                     });
                     dataStartIdx = ri + 1;
                     break;
@@ -1300,17 +1300,19 @@ window.processarXML = async (file) => {
             for (const code of keys) {
                 const { qty, vlrUnit, pedido } = itemsMap[code];
 
-                // Garante que a peça esteja cadastrada no catálogo 'parts' para evitar violação de chave estrangeira (FK)
-                const { data: pCheck } = await supabase.from('parts').select('code').eq('code', code).maybeSingle();
+                const { data: pCheck } = await supabase.from('parts').select('code, descricao').eq('code', code).maybeSingle();
+                let partDesc = `PEÇA IMPORTADA VIA XML (${code})`;
                 if (!pCheck) {
                     const { error: pErr } = await supabase.from('parts').insert({
                         code: code,
-                        descricao: `PEÇA IMPORTADA VIA XML (${code})`,
+                        descricao: partDesc,
                         marca: 'OUTROS'
                     });
                     if (pErr) {
                         console.warn(`Aviso ao cadastrar peça ${code}:`, pErr.message);
                     }
+                } else if (pCheck.descricao) {
+                    partDesc = pCheck.descricao;
                 }
 
                 const { data: cur } = await supabase.from(tableEstoque).select('qty').eq('code', code).single();
@@ -1325,10 +1327,11 @@ window.processarXML = async (file) => {
                 }
 
                 if (currentUser) {
-                    const descHist = pedido ? `Entrada Lote XML - Pedido ${pedido}` : 'Entrada Lote XML';
+                    const selbHist = pedido ? `XML | Pedido: ${pedido}` : 'Entrada Lote XML';
                     const { error: errHist } = await supabase.from(tableHist).insert({
-                        tipo: 'entrada', code, descricao: descHist, qty,
-                        user_email: currentUser.email, dt: new Date().toLocaleString('pt-BR'),
+                        tipo: 'entrada', code, descricao: partDesc, qty,
+                        selb: selbHist,
+                        user_email: currentUser.email, ts: new Date().toISOString(),
                         vlr_unit: vlrUnit, vlr_total: vlrUnit * qty
                     });
                     if (errHist) throw new Error(`Histórico: ${errHist.message}`);
