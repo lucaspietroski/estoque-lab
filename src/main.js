@@ -2147,7 +2147,7 @@ window.openModalExplicacao = (type) => {
         titleEl.textContent = 'MARGEM MÉDIA DE ECONOMIA';
         contentEl.innerHTML = `
             <p style="margin-top:0;"><strong>Como esta porcentagem é calculada?</strong></p>
-            <p>A margem média representa o percentual de dinheiro salvo em relação ao valor que seria gasto comprando equipamentos novos.</p>
+            <p>A margem média representa o percentual de dinheiro salvo em relação ao valor que seria gasto comprando peças novas.</p>
             <div style="background: var(--surface2); padding: 12px; border-radius: 8px; margin: 10px 0; font-family: var(--mono); color: var(--text);">
                 Margem (%) = (Soma de Todas as Economias) ÷ (Soma de Todos os Preços de Peça Nova) × 100
             </div>
