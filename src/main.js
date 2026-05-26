@@ -1753,11 +1753,22 @@ window.renderModeloCusto = async () => {
         };
 
         const byModel = {};
+        window.statsDefeitoData = { pecas: 0, custo: 0, counts: {} };
 
         // Saídas (Com Peça)
         saídas.filter(s => filtrarData(s.ts)).forEach(s => {
             const selb = (s.selb || '').toUpperCase().trim();
             if (!selb || selb === 'S/N' || selb === '0000') return;
+
+            if (selb === 'DEFE') {
+                window.statsDefeitoData.pecas += (s.qty || 1);
+                window.statsDefeitoData.custo += (s.vlr_total || 0);
+                if (s.code) {
+                    window.statsDefeitoData.counts[s.code] = window.statsDefeitoData.counts[s.code] || { qtd: 0, desc: s.descricao };
+                    window.statsDefeitoData.counts[s.code].qtd += (s.qty || 1);
+                }
+                return; // Ignora DEFE nas estatísticas de modelos
+            }
 
             const modelo = eqMap[selb] || 'MODELO NÃO IDENTIFICADO (' + selb + ')';
             if (query && !modelo.includes(query)) return;
@@ -1838,6 +1849,10 @@ window.renderModeloCusto = async () => {
             document.getElementById('remanu-kpi-top-val').textContent = top ? fmt(top.custo) : 'R$ 0,00';
             document.getElementById('remanu-kpi-bottom').textContent = bottom ? bottom.modelo : '—';
             document.getElementById('remanu-kpi-bottom-val').textContent = bottom ? fmt(bottom.custo) : 'R$ 0,00';
+            
+            if (window.statsDefeitoData) {
+                document.getElementById('remanu-kpi-defeito-val').textContent = fmt(window.statsDefeitoData.custo);
+            }
 
             // Render Table for Remanu
             document.getElementById('mod-thead-tr').innerHTML = `
@@ -2066,10 +2081,48 @@ window.closeDetalheModelo = () => {
     document.getElementById('modal-detalhe-modelo').classList.remove('open');
 };
 
+// --- MODAL DETALHE DEFEITOS ---
+window.openDetalheDefeito = () => {
+    const data = window.statsDefeitoData;
+    if (!data) return;
+
+    const fmt = v => 'R$ ' + Number(window.getDisplayValue({v}, 'v')).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    
+    document.getElementById('defeito-total-pecas').textContent = data.pecas;
+    document.getElementById('defeito-custo-total').textContent = fmt(data.custo);
+
+    let maxQtd = 0;
+    let worstCode = '—';
+    let worstDesc = 'Nenhum dado registrado';
+    
+    for (const [code, info] of Object.entries(data.counts)) {
+        if (info.qtd > maxQtd) {
+            maxQtd = info.qtd;
+            worstCode = code;
+            worstDesc = info.desc;
+        }
+    }
+
+    document.getElementById('defeito-peca-problematica').textContent = worstCode;
+    document.getElementById('defeito-peca-qtd').textContent = maxQtd + ' ocorrências';
+    document.getElementById('defeito-peca-desc').textContent = worstDesc;
+
+    document.getElementById('modal-detalhe-defeito').classList.add('open');
+};
+
+window.closeDetalheDefeito = () => {
+    document.getElementById('modal-detalhe-defeito').classList.remove('open');
+};
+
 // Registrar fechamento por clique fora
 document.getElementById('modal-detalhe-modelo')?.addEventListener('click', (e) => {
     if (e.target.id === 'modal-detalhe-modelo') {
         window.closeDetalheModelo();
+    }
+});
+document.getElementById('modal-detalhe-defeito')?.addEventListener('click', (e) => {
+    if (e.target.id === 'modal-detalhe-defeito') {
+        window.closeDetalheDefeito();
     }
 });
 
