@@ -382,18 +382,18 @@
         </div>
 
         <div class="mod-kpi-list" id="kpi-container-remanu" style="display:none;">
-          <div class="mod-kpi-item c-atend" style="border-left-color: #10b981;">
+          <div class="mod-kpi-item c-atend" style="border-left-color: #10b981; cursor: pointer;" onclick="window.openModalExplicacao('economia')">
             <div class="mod-kpi-icon" style="color:#10b981;">💰</div>
             <div class="mod-kpi-content">
-              <div class="mod-kpi-label">ECONOMIA GERADA TOTAL</div>
+              <div class="mod-kpi-label">ECONOMIA GERADA TOTAL 🔍</div>
               <div class="mod-kpi-value" id="remanu-kpi-economia" style="color:#10b981">R$ 0,00</div>
               <div class="mod-kpi-sub">margem real de lucro</div>
             </div>
           </div>
-          <div class="mod-kpi-item c-pecas" style="border-left-color: #3b82f6;">
+          <div class="mod-kpi-item c-pecas" style="border-left-color: #3b82f6; cursor: pointer;" onclick="window.openModalExplicacao('margem')">
             <div class="mod-kpi-icon" style="color:#3b82f6;">📈</div>
             <div class="mod-kpi-content">
-              <div class="mod-kpi-label">MARGEM MÉDIA DE ECONOMIA</div>
+              <div class="mod-kpi-label">MARGEM MÉDIA DE ECONOMIA 🔍</div>
               <div class="mod-kpi-value" id="remanu-kpi-percentual" style="color:#3b82f6">0%</div>
               <div class="mod-kpi-sub">economia vs nova</div>
             </div>
@@ -999,6 +999,25 @@
         <div style="font-size: 24px; font-weight: 800; font-family: var(--mono); color: #ef4444;" id="defeito-custo-total">R$ 0,00</div>
       </div>
       
+    </div>
+    
+    <div style="padding: 12px; text-align: center; background: #f8fafc; font-size: 11px; color: var(--text-muted);">
+      Clique fora para fechar
+    </div>
+  </div>
+</div>
+
+<!-- MODAL EXPLICAÇÃO DE CÁLCULOS -->
+<div class="modal-overlay" id="modal-explicacao">
+  <div class="modal-box" style="max-width: 500px; border-radius: 16px; overflow: hidden; padding: 0; border: none; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1);">
+    <div id="modal-exp-header" style="padding: 24px; color: white; position: relative;">
+      <button onclick="window.closeModalExplicacao()" style="position: absolute; right: 20px; top: 20px; background: rgba(255,255,255,0.2); border: none; width: 32px; height: 32px; border-radius: 50%; color: white; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s;">✕</button>
+      <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; opacity: 0.9;">ENTENDA O CÁLCULO</div>
+      <h3 style="font-size: 18px; font-weight: 800; color: white; margin: 8px 0 0 0; line-height: 1.3;" id="modal-exp-title">TÍTULO</h3>
+    </div>
+    
+    <div style="background: white; padding: 24px; text-align: left; font-size: 14px; line-height: 1.6; color: var(--text);">
+      <div id="modal-exp-content"></div>
     </div>
     
     <div style="padding: 12px; text-align: center; background: #f8fafc; font-size: 11px; color: var(--text-muted);">

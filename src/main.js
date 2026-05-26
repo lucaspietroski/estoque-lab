@@ -2113,6 +2113,51 @@ window.closeDetalheDefeito = () => {
     document.getElementById('modal-detalhe-defeito').classList.remove('open');
 };
 
+// --- MODAL EXPLICAÇÃO DE CÁLCULOS ---
+window.openModalExplicacao = (type) => {
+    const titleEl = document.getElementById('modal-exp-title');
+    const contentEl = document.getElementById('modal-exp-content');
+    const headerEl = document.getElementById('modal-exp-header');
+
+    if (type === 'economia') {
+        headerEl.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+        titleEl.textContent = 'ECONOMIA GERADA TOTAL';
+        contentEl.innerHTML = `
+            <p style="margin-top:0;"><strong>Como este valor é calculado?</strong></p>
+            <p>O sistema avalia cada modelo de máquina individualmente e realiza a seguinte conta matemática:</p>
+            <div style="background: var(--surface2); padding: 12px; border-radius: 8px; margin: 10px 0; font-family: var(--mono); color: var(--text);">
+                Economia = (Preço da Máquina Nova) - (Custo Total das Revisões)
+            </div>
+            <p>Se o custo gasto para consertar todas as máquinas daquele modelo for <strong>menor</strong> do que comprar as mesmas máquinas novas, essa diferença é considerada "Economia".</p>
+            <p style="margin-bottom:0;">O valor exibido no card é o <strong>somatório total</strong> da economia de todos os modelos que possuíam preço de referência cadastrado no período pesquisado.</p>
+        `;
+    } else if (type === 'margem') {
+        headerEl.style.background = 'linear-gradient(135deg, #3b82f6, #2563eb)';
+        titleEl.textContent = 'MARGEM MÉDIA DE ECONOMIA';
+        contentEl.innerHTML = `
+            <p style="margin-top:0;"><strong>Como esta porcentagem é calculada?</strong></p>
+            <p>A margem média representa o percentual de dinheiro salvo em relação ao valor que seria gasto comprando equipamentos novos.</p>
+            <div style="background: var(--surface2); padding: 12px; border-radius: 8px; margin: 10px 0; font-family: var(--mono); color: var(--text);">
+                Margem (%) = (Soma de Todas as Economias) ÷ (Soma de Todos os Preços de Máquina Nova) × 100
+            </div>
+            <p>Exemplo: Se você economizou R$ 8.000 e o custo para comprar todas as máquinas novas seria de R$ 10.000, a margem de economia é de <strong>80%</strong>.</p>
+            <p style="margin-bottom:0;">Isso mostra a eficiência financeira e a saúde do setor de remanufatura como um todo.</p>
+        `;
+    }
+
+    document.getElementById('modal-explicacao').classList.add('open');
+};
+
+window.closeModalExplicacao = () => {
+    document.getElementById('modal-explicacao').classList.remove('open');
+};
+
+document.getElementById('modal-explicacao')?.addEventListener('click', (e) => {
+    if (e.target.id === 'modal-explicacao') {
+        window.closeModalExplicacao();
+    }
+});
+
 // Registrar fechamento por clique fora
 document.getElementById('modal-detalhe-modelo')?.addEventListener('click', (e) => {
     if (e.target.id === 'modal-detalhe-modelo') {
