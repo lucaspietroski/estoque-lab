@@ -752,6 +752,9 @@ async function confirmarSaida() {
             }
         }
 
+        const obsEl = document.getElementById('saida-obs');
+        const customObs = obsEl ? obsEl.value.trim() : '';
+
         for (const item of saidaItems) {
             // 1) Baixa o estoque
             const { data: cur } = await supabase.from(getEstoqueTable()).select('qty').eq('code', item.code).single();
@@ -759,11 +762,13 @@ async function confirmarSaida() {
             const { error: estoqueErr } = await supabase.from(getEstoqueTable()).upsert({ code: item.code, qty: newQty });
             if (estoqueErr) throw new Error(`Erro ao baixar estoque de ${item.code}: ${estoqueErr.message}`);
 
+            const finalDesc = customObs ? `${item.descricao} (${customObs})` : item.descricao;
+
             // 2) Grava no histórico COM vlr_unit e vlr_total
             const histPayload = {
                 tipo: 'saída',
                 code: item.code,
-                descricao: item.descricao,
+                descricao: finalDesc,
                 qty: item.qty,
                 vlr_unit: item.vlrUnit,
                 vlr_total: item.vlrTotal,
@@ -791,6 +796,8 @@ async function confirmarSaida() {
 function openSaidaModal(code) {
     saidaItems = [];
     document.getElementById('saida-selb').value = '';
+    const obsEl = document.getElementById('saida-obs');
+    if (obsEl) obsEl.value = '';
     
     const infoDiv = document.getElementById('saida-selb-info');
     if (infoDiv) {
