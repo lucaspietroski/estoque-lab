@@ -1843,7 +1843,6 @@ window.renderModeloCusto = async () => {
 
             document.getElementById('remanu-kpi-economia').textContent = fmt(totalEconomia);
             document.getElementById('remanu-kpi-percentual').textContent = mediaEconomiaPct.toFixed(1) + '%';
-            document.getElementById('remanu-kpi-melhor').textContent = melhorModelo.length > 25 ? melhorModelo.substring(0,25)+'...' : melhorModelo;
             
             document.getElementById('remanu-kpi-top').textContent = top ? top.modelo : '—';
             document.getElementById('remanu-kpi-top-val').textContent = top ? fmt(top.custo) : 'R$ 0,00';
