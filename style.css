@@ -32,7 +32,7 @@
 body { background: var(--bg); color: var(--text); font-family: var(--sans); font-size: 14px; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
 
 /* ── HEADER ── */
-.header-bar { background: var(--white); border-bottom: 1px solid var(--border); padding: 0 1.75rem; height: 56px; display: flex; align-items: center; gap: 1.5rem; flex-shrink: 0; box-shadow: var(--shadow-sm); z-index: 20; }
+.header-bar { background: var(--white); border-bottom: 1px solid var(--border); padding: 0 1.75rem; height: 90px; display: flex; align-items: center; gap: 1.5rem; flex-shrink: 0; box-shadow: var(--shadow-sm); z-index: 20; }
 .logo-selbetti { font-family: var(--sans); font-size: 1.3rem; font-weight: 800; color: var(--green); letter-spacing: -0.04em; user-select: none; }
 .header-center { flex: 1; text-align: center; }
 .header-title { font-size: 1rem; font-weight: 800; color: var(--text); letter-spacing: -0.02em; line-height: 1; }
