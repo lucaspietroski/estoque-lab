@@ -297,7 +297,11 @@ function updateUIForAuth() {
         appShell.style.display = 'flex';
         btnLogout.style.display = 'inline-flex';
         btnLoginArea.style.display = 'none';
-        if (currentUser.email.endsWith('@selbetti.com.br')) adminBadge.style.display = 'inline-flex';
+        if (currentUser.email.endsWith('@selbetti.com.br')) {
+            adminBadge.style.display = 'inline-flex';
+            const secAuditTab = document.getElementById('tab-btn-sec-audit');
+            if (secAuditTab) secAuditTab.style.display = 'inline-block';
+        }
         
         const isLucas = currentUser.email === 'lucas.araujo@selbetti.com.br';
         const remanuOnlyUsers = ['carlos.nogueira@selbetti.com.br', 'andrio.rockenbach@selbetti.com.br', 'bernardo.voit@selbetti.com.br'];

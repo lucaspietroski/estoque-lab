@@ -88,6 +88,7 @@
     <button class="tab-btn" data-tab="movimentacoes">📈 Movimentações</button>
     <button class="tab-btn" data-tab="modelo-custo">💰 Custo/Modelo</button>
     <button class="tab-btn" data-tab="auditoria" id="tab-btn-auditoria" style="display:none">🔍 Auditoria</button>
+    <button class="tab-btn" data-tab="sec-audit" id="tab-btn-sec-audit" style="display:none; color: var(--orange); font-weight: 800;">🔒 Audit Corporativa</button>
   </div>
 
   <!-- VIEWS -->
@@ -712,6 +713,40 @@
 
 </div>
 
+  <!-- VIEW SEC AUDIT (AUDITORIA CORPORATIVA ETAPA 1) -->
+  <div id="view-sec-audit" class="view">
+    <div class="dash-scroll" style="padding: 20px;">
+      <div style="background: white; border-radius: 12px; padding: 30px; box-shadow: var(--shadow-sm); border: 1px solid var(--border); max-width: 900px; margin: 0 auto;">
+        
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border); padding-bottom: 20px; margin-bottom: 25px;">
+          <div>
+            <h2 style="font-size: 26px; color: var(--text); margin: 0; display: flex; align-items: center; gap: 10px;">
+              🛡️ LabTech Security Audit
+            </h2>
+            <p style="color: var(--text-muted); margin-top: 5px; font-size: 14px;">Análise contínua de arquitetura, vulnerabilidades e exposição de dados.</p>
+          </div>
+          
+          <div style="text-align: right; background: var(--bg); padding: 15px 25px; border-radius: 12px; border: 1px solid var(--border);">
+            <div style="font-size: 12px; color: var(--text-muted); font-weight: 700; letter-spacing: 1px; text-transform: uppercase;">Risk Score</div>
+            <div id="audit-score-val" style="font-size: 32px; font-weight: 900; color: var(--text); line-height: 1;">--/100</div>
+          </div>
+        </div>
+
+        <button class="btn-admin" id="btn-run-audit" onclick="window.runSecurityAudit()" style="width: 100%; height: 50px; font-size: 16px; border-radius: 8px; justify-content: center; margin-bottom: 30px; background: var(--orange); border-color: var(--orange);">
+          🚀 Executar Inventário
+        </button>
+
+        <div id="audit-results" style="display: flex; flex-direction: column; gap: 10px;">
+          <div style="text-align: center; color: var(--text-muted); padding: 40px; font-size: 14px; border: 2px dashed var(--border); border-radius: 8px;">
+            Clique no botão acima para iniciar a varredura do sistema.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
 <!-- MODAL LOGIN ADMIN -->
 <div class="modal-overlay" id="modal-login-overlay">
   <div class="modal-box">
@@ -1140,5 +1175,9 @@
 </div>
 
 <script type="module" src="src/main.js?v=1.5"></script>
+<script type="module">
+  import { runSecurityAudit } from './src/views/audit/index.js';
+  window.runSecurityAudit = runSecurityAudit;
+</script>
 </body>
 </html>
