@@ -715,10 +715,9 @@
 
   <!-- VIEW SEC AUDIT (AUDITORIA CORPORATIVA ETAPA 1) -->
   <div id="view-sec-audit" class="view">
-    <div class="dash-scroll">
-      <div style="background: white; border-radius: 12px; padding: 30px; box-shadow: var(--shadow-sm); border: 1px solid var(--border); min-height: 100%;">
+    <div style="display: flex; flex-direction: column; height: 100%; background: white;">
         
-        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border); padding-bottom: 20px; margin-bottom: 25px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border); padding: 20px 30px; flex-shrink: 0;">
           <div>
             <h2 style="font-size: 26px; color: var(--text); margin: 0; display: flex; align-items: center; gap: 10px;">
               🛡️ LabTech Security Audit
@@ -732,16 +731,18 @@
           </div>
         </div>
 
-        <button class="btn-admin" id="btn-run-audit" onclick="window.runSecurityAudit()" style="width: 100%; height: 50px; font-size: 16px; border-radius: 8px; justify-content: center; margin-bottom: 30px; background: var(--orange); border-color: var(--orange);">
-          🚀 Executar Inventário
-        </button>
+        <div style="padding: 30px; overflow-y: auto; flex: 1; display: flex; flex-direction: column;">
+          <button class="btn-admin" id="btn-run-audit" onclick="window.runSecurityAudit()" style="width: 100%; height: 50px; font-size: 16px; border-radius: 8px; justify-content: center; margin-bottom: 30px; background: var(--orange); border-color: var(--orange); flex-shrink: 0;">
+            🚀 Executar Inventário
+          </button>
 
-        <div id="audit-results" style="display: flex; flex-direction: column; gap: 10px;">
-          <div style="text-align: center; color: var(--text-muted); padding: 40px; font-size: 14px; border: 2px dashed var(--border); border-radius: 8px;">
-            Clique no botão acima para iniciar a varredura do sistema.
+          <div id="audit-results" style="display: flex; flex-direction: column; gap: 10px;">
+            <div style="text-align: center; color: var(--text-muted); padding: 40px; font-size: 14px; border: 2px dashed var(--border); border-radius: 8px;">
+              Clique no botão acima para iniciar a varredura do sistema.
+            </div>
           </div>
         </div>
-      </div>
+
     </div>
   </div>
 
