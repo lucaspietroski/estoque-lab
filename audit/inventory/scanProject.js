@@ -5,8 +5,8 @@ import path from 'path';
 const IGNORE_DIRS = ['node_modules', '.git', 'dist', 'build', 'coverage', '.cache', '.vscode', '.idea'];
 const BINARY_EXTENSIONS = ['.png', '.jpg', '.jpeg', '.gif', '.pdf', '.exe', '.dll', '.zip', '.tar', '.gz', '.mp4', '.ico', '.woff', '.woff2'];
 
-// Detectores sensíveis
-const SENSITIVE_FILES = ['.env', 'package.json', 'supabase_schema.sql', 'firebird.conf', 'config.json'];
+// Detectores sensíveis (Fase 1 focada apenas no óbvio)
+const SENSITIVE_FILES = ['.env', 'service-account.json', 'firebase-admin.json'];
 
 export function scanProject(rootDir) {
     const result = {
