@@ -43,7 +43,7 @@ export async function runSecurityAudit() {
         
         if (data.riskIndicators.sensitiveFiles.length > 0) {
             html += `<div class="audit-card warn">⚠ ${data.riskIndicators.sensitiveFiles.length} arquivos sensíveis expostos</div>`;
-            html += `<pre class="audit-logs">${data.riskIndicators.sensitiveFiles.join('\\n')}</pre>`;
+            html += `<pre class="audit-logs">${data.riskIndicators.sensitiveFiles.join('\n')}</pre>`;
         }
         
         html += `<div class="audit-card info">ℹ Total mapeado: ${data.inventory.files.length} arquivos em ${data.inventory.folders.length} pastas</div>`;
