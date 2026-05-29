@@ -15,7 +15,7 @@ export function analyzeFiles(filesList, rootDir) {
     const analysisId = `AUD-${timestampStr}`;
     
     const result = {
-        analysisVersion: "2.1",
+        analysisVersion: "2.1.1",
         generatedAt: new Date().toISOString(),
         analysisId: analysisId,
         stats: {
@@ -28,17 +28,20 @@ export function analyzeFiles(filesList, rootDir) {
                 configs: 0
             },
             findingsBySeverity: {
+                critical: 0,
                 high: 0,
                 medium: 0,
-                low: 0
+                low: 0,
+                info: 0
             }
         },
         filesMetadata: [],
-        findings: []
+        findings: [],
+        ignoredFindings: []
     };
 
-    function addFinding(file, line, type, severity, confidence, snippet, sendToAI = false) {
-        result.findings.push({
+    function addFinding(file, line, type, severity, confidence, snippet, sendToAI = false, reason = null) {
+        const finding = {
             id: `FT-${crypto.randomBytes(3).toString('hex')}`,
             file,
             line,
@@ -47,8 +50,15 @@ export function analyzeFiles(filesList, rootDir) {
             confidence,
             snippet,
             sendToAI
-        });
+        };
+        if (reason) finding.reason = reason;
+        
+        result.findings.push(finding);
         result.stats.findingsBySeverity[severity]++;
+    }
+
+    function addIgnoredFinding(file, reason) {
+        result.ignoredFindings.push({ file, reason });
     }
 
     for (const relPath of filesList) {
@@ -59,6 +69,7 @@ export function analyzeFiles(filesList, rootDir) {
         if (!stat.isFile()) continue;
 
         const ext = path.extname(relPath).toLowerCase();
+        const baseName = path.basename(relPath).toLowerCase();
         
         let category = 'UNKNOWN';
         if (ALLOWED_EXTS.FRONTEND.includes(ext)) category = 'frontend';
@@ -99,15 +110,25 @@ export function analyzeFiles(filesList, rootDir) {
         
         // Calcula Hash
         const hash = crypto.createHash('sha256').update(content).digest('hex').slice(0, 16);
-        
         const lines = content.split(/\r?\n/);
 
         result.filesMetadata.push({ path: relPath, category, size: stat.size, lines: lines.length, hash });
 
+        const isDependencyFile = baseName === 'package.json' || baseName.includes('lock');
+        
         // Regexes
-        const secretRegex = /((?:API_KEY|TOKEN|PASSWORD|SECRET|SUPABASE_KEY))\s*[:=]\s*(['"`])([^'"`]+)\2/ig;
+        const secretRegex = /((?:API_KEY|TOKEN|PASSWORD|SECRET|SUPABASE_KEY|SERVICE_ROLE_KEY))\s*[:=]\s*(['"`])([^'"`]+)\2/ig;
         const dbRegex = /postgres|supabase|mysql|firebird/i;
         
+        // Verifica dependency reference em package.json/lock
+        if (isDependencyFile) {
+            addIgnoredFinding(relPath, 'dependency_lockfile_db_check_skipped');
+            if (content.includes('@supabase') || content.includes('supabase-js')) {
+                addFinding(relPath, 0, 'dependency_reference', 'info', 'high', 'Supabase SDK Reference', false, 'framework_reference');
+            }
+            continue; // Pular análise linha a linha pesada
+        }
+
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
             
@@ -116,17 +137,19 @@ export function analyzeFiles(filesList, rootDir) {
             secretRegex.lastIndex = 0;
             while ((match = secretRegex.exec(line)) !== null) {
                 // Ignore context UI/DOM
-                if (/(getElementById|querySelector|console\.log|_FIELD|_INPUT)/i.test(line)) continue;
+                if (/(getElementById|querySelector|console\.log|_FIELD|_INPUT|_LABEL)/i.test(line)) continue;
                 
-                const key = match[1];
+                const key = match[1].toUpperCase();
                 const value = match[3];
                 let snippetMasked = line.trim();
-                // Ocultar apenas o valor para evitar vazamento
                 snippetMasked = snippetMasked.replace(value, '********');
-                // Limitar tamanho do snippet
                 if (snippetMasked.length > 120) snippetMasked = snippetMasked.substring(0, 120) + '...';
                 
-                addFinding(relPath, i + 1, 'possible_secret', 'high', 'high', snippetMasked, true);
+                if (key === 'SERVICE_ROLE_KEY' && value.length > 30) {
+                    addFinding(relPath, i + 1, 'possible_service_role_key', 'critical', 'medium', snippetMasked, true, 'service_role_key_detected');
+                } else if (key !== 'SERVICE_ROLE_KEY') {
+                    addFinding(relPath, i + 1, 'possible_secret', 'high', 'high', snippetMasked, true);
+                }
             }
             
             // Check DB connections (evitando .html/.css)
@@ -134,7 +157,6 @@ export function analyzeFiles(filesList, rootDir) {
                 if (line.includes('://') || line.includes('require(') || line.includes('import ') || line.includes('createClient')) {
                    let snippet = line.trim();
                    if (snippet.length > 120) snippet = snippet.substring(0, 120) + '...';
-                   // Não classificar como envio para IA ainda para evitar spam, apenas flag false
                    addFinding(relPath, i + 1, 'database_connection', 'medium', 'medium', snippet, false);
                 }
             }

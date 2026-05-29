@@ -79,12 +79,21 @@ export async function runFileAnalysis() {
             <div style="flex: 1; padding: 20px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px;">
                 <div style="font-size: 12px; color: var(--text-muted); text-transform: uppercase; font-weight: 700; margin-bottom: 15px;">Por Severidade</div>
                 <div style="display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 700;">
+                    ${data.stats.findingsBySeverity.critical > 0 ? `<div style="color: #991b1b;">🚨 Crítica (${data.stats.findingsBySeverity.critical})</div>` : ''}
                     <div style="color: #ef4444;">🔴 Alta (${data.stats.findingsBySeverity.high})</div>
                     <div style="color: #f59e0b;">🟡 Média (${data.stats.findingsBySeverity.medium})</div>
                     <div style="color: #10b981;">🟢 Baixa (${data.stats.findingsBySeverity.low})</div>
+                    ${data.stats.findingsBySeverity.info > 0 ? `<div style="color: #3b82f6;">🔵 Info (${data.stats.findingsBySeverity.info})</div>` : ''}
                 </div>
             </div>
         </div>`;
+        
+        // Bloco de Ignorados (Apenas um indicativo de rastreabilidade)
+        if (data.ignoredFindings && data.ignoredFindings.length > 0) {
+             html += `<div style="margin-bottom: 20px; font-size: 12px; color: var(--text-muted); text-align: right;">
+                 * ${data.ignoredFindings.length} ações ignoradas deliberadamente (Filtros Anti-Ruído).
+             </div>`;
+        }
         
         // Bloco 4: Evidências (Findings)
         if (data.findings.length > 0) {
@@ -92,14 +101,15 @@ export async function runFileAnalysis() {
             html += `<div style="display: flex; flex-direction: column; gap: 15px;">`;
             
             data.findings.forEach(f => {
-                let badgeColor = f.severity === 'high' ? '#ef4444' : (f.severity === 'medium' ? '#f59e0b' : '#10b981');
+                let badgeColor = f.severity === 'critical' ? '#991b1b' : (f.severity === 'high' ? '#ef4444' : (f.severity === 'medium' ? '#f59e0b' : (f.severity === 'info' ? '#3b82f6' : '#10b981')));
                 let aiBadge = f.sendToAI ? `<span style="background: #8b5cf6; color: white; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 10px;">✨ IA Target</span>` : '';
+                let reasonBadge = f.reason ? `<span style="background: var(--surface); color: var(--text-muted); border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 10px;">${f.reason}</span>` : '';
                 
                 html += `
                 <div style="border: 1px solid var(--border); border-left: 4px solid ${badgeColor}; border-radius: 8px; padding: 15px; background: white;">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
                         <div>
-                            <div style="font-weight: 800; font-family: var(--mono); color: var(--text); font-size: 14px;">[${f.id}] ${f.type.toUpperCase().replace('_', ' ')}${aiBadge}</div>
+                            <div style="font-weight: 800; font-family: var(--mono); color: var(--text); font-size: 14px;">[${f.id}] ${f.type.toUpperCase().replace(/_/g, ' ')}${aiBadge}${reasonBadge}</div>
                             <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Confiança: ${f.confidence.toUpperCase()} | Severidade: ${f.severity.toUpperCase()}</div>
                         </div>
                     </div>
