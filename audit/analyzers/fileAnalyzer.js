@@ -15,7 +15,7 @@ export function analyzeFiles(filesList, rootDir) {
     const analysisId = `AUD-${timestampStr}`;
     
     const result = {
-        analysisVersion: "2.1.1",
+        analysisVersion: "2.1.2",
         generatedAt: new Date().toISOString(),
         analysisId: analysisId,
         stats: {
@@ -40,7 +40,7 @@ export function analyzeFiles(filesList, rootDir) {
         ignoredFindings: []
     };
 
-    function addFinding(file, line, type, severity, confidence, snippet, sendToAI = false, reason = null) {
+    function addFinding(file, line, type, severity, confidence, snippet, sendToAI = false, reason = null, securityContext = null) {
         const finding = {
             id: `FT-${crypto.randomBytes(3).toString('hex')}`,
             file,
@@ -52,6 +52,7 @@ export function analyzeFiles(filesList, rootDir) {
             sendToAI
         };
         if (reason) finding.reason = reason;
+        if (securityContext) finding.securityContext = securityContext;
         
         result.findings.push(finding);
         result.stats.findingsBySeverity[severity]++;
@@ -93,11 +94,11 @@ export function analyzeFiles(filesList, rootDir) {
 
         // Big file check
         if (stat.size > 10 * 1024 * 1024) {
-            addFinding(relPath, 0, 'large_file', 'high', 'high', `File size is ${(stat.size/1024/1024).toFixed(2)}MB`, true);
+            addFinding(relPath, 0, 'large_file', 'high', 'high', `File size is ${(stat.size/1024/1024).toFixed(2)}MB`, true, null, category);
         } else if (stat.size > 2 * 1024 * 1024) {
-            addFinding(relPath, 0, 'large_file', 'medium', 'high', `File size is ${(stat.size/1024/1024).toFixed(2)}MB`, true);
+            addFinding(relPath, 0, 'large_file', 'medium', 'high', `File size is ${(stat.size/1024/1024).toFixed(2)}MB`, true, null, category);
         } else if (stat.size > 500 * 1024) {
-            addFinding(relPath, 0, 'large_file', 'low', 'high', `File size is ${(stat.size/1024).toFixed(0)}KB`, false);
+            addFinding(relPath, 0, 'large_file', 'low', 'high', `File size is ${(stat.size/1024).toFixed(0)}KB`, false, null, category);
         }
 
         // Pular arquivos enormes para análise de regex para evitar OOM
@@ -117,14 +118,14 @@ export function analyzeFiles(filesList, rootDir) {
         const isDependencyFile = baseName === 'package.json' || baseName.includes('lock');
         
         // Regexes
-        const secretRegex = /((?:API_KEY|TOKEN|PASSWORD|SECRET|SUPABASE_KEY|SERVICE_ROLE_KEY))\s*[:=]\s*(['"`])([^'"`]+)\2/ig;
+        const secretRegex = /((?:API_KEY|TOKEN|PASSWORD|SECRET|SUPABASE_KEY|SUPABASE_ANON_KEY|SUPABASE_SERVICE_ROLE_KEY|SERVICE_ROLE_KEY))\s*[:=]\s*(['"`])([^'"`]+)\2/ig;
         const dbRegex = /postgres|supabase|mysql|firebird/i;
         
         // Verifica dependency reference em package.json/lock
         if (isDependencyFile) {
             addIgnoredFinding(relPath, 'dependency_lockfile_db_check_skipped');
             if (content.includes('@supabase') || content.includes('supabase-js')) {
-                addFinding(relPath, 0, 'dependency_reference', 'info', 'high', 'Supabase SDK Reference', false, 'framework_reference');
+                addFinding(relPath, 0, 'dependency_reference', 'info', 'high', 'Supabase SDK Reference', false, 'framework_reference', category);
             }
             continue; // Pular análise linha a linha pesada
         }
@@ -145,19 +146,39 @@ export function analyzeFiles(filesList, rootDir) {
                 snippetMasked = snippetMasked.replace(value, '********');
                 if (snippetMasked.length > 120) snippetMasked = snippetMasked.substring(0, 120) + '...';
                 
-                if (key === 'SERVICE_ROLE_KEY' && value.length > 30) {
-                    addFinding(relPath, i + 1, 'possible_service_role_key', 'critical', 'medium', snippetMasked, true, 'service_role_key_detected');
-                } else if (key !== 'SERVICE_ROLE_KEY') {
-                    addFinding(relPath, i + 1, 'possible_secret', 'high', 'high', snippetMasked, true);
+                if ((key === 'SERVICE_ROLE_KEY' || key === 'SUPABASE_SERVICE_ROLE_KEY') && value.length > 30) {
+                    addFinding(relPath, i + 1, 'possible_service_role_key', 'critical', 'medium', snippetMasked, true, 'service_role_key_detected', category);
+                } else if (key === 'SUPABASE_ANON_KEY') {
+                    addFinding(relPath, i + 1, 'supabase_anon_key', 'low', 'high', snippetMasked, false, null, category);
+                } else if (key === 'SUPABASE_KEY') {
+                    addFinding(relPath, i + 1, 'ambiguous_supabase_key', 'medium', 'high', snippetMasked, false, 'ambiguous_key_name', category);
+                } else if (key !== 'SERVICE_ROLE_KEY' && key !== 'SUPABASE_SERVICE_ROLE_KEY') {
+                    addFinding(relPath, i + 1, 'possible_secret', 'high', 'high', snippetMasked, true, null, category);
                 }
             }
             
-            // Check DB connections (evitando .html/.css)
-            if (category !== 'frontend' && dbRegex.test(line)) {
-                if (line.includes('://') || line.includes('require(') || line.includes('import ') || line.includes('createClient')) {
+            // Check DB connections and SDK
+            if (dbRegex.test(line)) {
+                if (line.includes('createClient')) {
+                    if (line.includes('supabaseServiceKey') || line.includes('service_role')) {
+                        let snippet = line.trim();
+                        if (snippet.length > 120) snippet = snippet.substring(0, 120) + '...';
+                        addFinding(relPath, i + 1, 'possible_service_role_exposure', 'critical', 'high', snippet, true, 'service_role_hydration_detected', category);
+                    } else {
+                        let snippet = line.trim();
+                        if (snippet.length > 120) snippet = snippet.substring(0, 120) + '...';
+                        addFinding(relPath, i + 1, 'sdk_usage', 'info', 'high', snippet, false, null, category);
+                    }
+                } else if (line.includes('://') || line.includes('require(') || line.includes('import ')) {
                    let snippet = line.trim();
                    if (snippet.length > 120) snippet = snippet.substring(0, 120) + '...';
-                   addFinding(relPath, i + 1, 'database_connection', 'medium', 'medium', snippet, false);
+                   
+                   if (line.includes('supabase.co')) {
+                       addFinding(relPath, i + 1, 'external_service', 'low', 'high', snippet, false, null, category);
+                   } else if (category !== 'frontend') {
+                       // Conexão bruta de banco, ignorada no frontend para não gerar FP
+                       addFinding(relPath, i + 1, 'database_connection', 'medium', 'medium', snippet, false, null, category);
+                   }
                 }
             }
         }

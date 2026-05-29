@@ -95,6 +95,19 @@ export async function runFileAnalysis() {
              </div>`;
         }
         
+        // Dicionário de Recomendações
+        const RECOMMENDATIONS = {
+            possible_service_role_exposure: "Risco Imediato. Mover SERVICE_ROLE_KEY para o backend seguro e remover qualquer exposição ou importação no frontend.",
+            possible_service_role_key: "Risco Crítico. Confirmar se a chave vazada é uma Service Role Key válida e revogar imediatamente caso afirmativo.",
+            supabase_anon_key: "Monitorar uso da Anon Key. Ela é desenhada para exposição pública, mas as políticas do banco (RLS) devem estar estritamente habilitadas.",
+            ambiguous_supabase_key: "Renomear a variável de ambiente para explicitar se trata-se de chave anônima ou de serviço, e validar escopo de exposição.",
+            sdk_usage: "Verificar se as bibliotecas cliente (SDK) operam sob escopo com RLS rigoroso.",
+            external_service: "Validação de domínio: Garantir que o apontamento externo não seja vulnerável a requisições CORS irrestritas.",
+            possible_secret: "Verificar se este token concede acesso a recursos sensíveis e considerar uso de cofres de senha (Vaults).",
+            dependency_reference: "Dependência detectada. Manter a biblioteca atualizada para evitar vulnerabilidades conhecidas no framework.",
+            database_connection: "String de conexão bruta encontrada. Garantir que credenciais não estejam hardcoded e que o banco não esteja exposto para a internet pública."
+        };
+
         // Bloco 4: Evidências (Findings)
         if (data.findings.length > 0) {
             html += `<h3 style="margin-top: 10px; margin-bottom: 15px; font-size: 16px; border-bottom: 2px solid var(--border); padding-bottom: 10px;">Evidências Encontradas (Findings)</h3>`;
@@ -105,11 +118,14 @@ export async function runFileAnalysis() {
                 let aiBadge = f.sendToAI ? `<span style="background: #8b5cf6; color: white; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 10px;">✨ IA Target</span>` : '';
                 let reasonBadge = f.reason ? `<span style="background: var(--surface); color: var(--text-muted); border: 1px solid var(--border); padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 10px;">${f.reason}</span>` : '';
                 
+                let recommendationText = RECOMMENDATIONS[f.type] || "Revisão manual necessária pela equipe de segurança.";
+                let contextBadge = f.securityContext ? `<span style="background: #1e293b; color: #94a3b8; padding: 2px 6px; border-radius: 4px; font-size: 10px; margin-left: 10px; text-transform: uppercase;">Contexto: ${f.securityContext}</span>` : '';
+
                 html += `
                 <div style="border: 1px solid var(--border); border-left: 4px solid ${badgeColor}; border-radius: 8px; padding: 15px; background: white;">
                     <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
                         <div>
-                            <div style="font-weight: 800; font-family: var(--mono); color: var(--text); font-size: 14px;">[${f.id}] ${f.type.toUpperCase().replace(/_/g, ' ')}${aiBadge}${reasonBadge}</div>
+                            <div style="font-weight: 800; font-family: var(--mono); color: var(--text); font-size: 14px;">[${f.id}] ${f.type.toUpperCase().replace(/_/g, ' ')}${aiBadge}${reasonBadge}${contextBadge}</div>
                             <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Confiança: ${f.confidence.toUpperCase()} | Severidade: ${f.severity.toUpperCase()}</div>
                         </div>
                     </div>
@@ -117,6 +133,9 @@ export async function runFileAnalysis() {
                         <div style="margin-bottom: 5px;"><strong>Arquivo:</strong> <span style="font-family: var(--mono);">${f.file}</span></div>
                         ${f.line ? `<div style="margin-bottom: 5px;"><strong>Linha:</strong> <span style="font-family: var(--mono);">${f.line}</span></div>` : ''}
                         ${f.snippet ? `<div style="background: #1e293b; color: #e2e8f0; font-family: var(--mono); padding: 8px; border-radius: 4px; margin-top: 10px; overflow-x: auto; white-space: pre-wrap;">${f.snippet}</div>` : ''}
+                        <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border); color: var(--text); font-size: 12px;">
+                            <strong>💡 Recomendação:</strong> ${recommendationText}
+                        </div>
                     </div>
                 </div>`;
             });
