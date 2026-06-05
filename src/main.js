@@ -184,7 +184,7 @@ async function init() {
         if (selb.length === 4) {
             // Validação Remanufatura
             if (window.currentSector === 'REMANU') {
-                const allowed = ['RI43', 'RK55', 'RI37', 'KY40', 'DEFE', 'SA70'];
+                const allowed = ['RI43', 'RK55', 'RI37', 'KY40', 'DEFE', 'SA70', 'SEMP'];
                 if (!allowed.includes(selb)) {
                     infoDiv.style.display = 'block';
                     infoDiv.style.background = '#fee2e2';
@@ -695,7 +695,7 @@ async function confirmarSaida() {
     if (selb.length !== 4 || !saidaItems.length) { alert('Verifique o SELB e as peças.'); return; }
 
     if (window.currentSector === 'REMANU') {
-        const allowed = ['RI43', 'RK55', 'RI37', 'KY40', 'DEFE', 'SA70'];
+        const allowed = ['RI43', 'RK55', 'RI37', 'KY40', 'DEFE', 'SA70', 'SEMP'];
         if (!allowed.includes(selb)) {
             alert(`❌ SELB Inválido para a Remanufatura!\n\nEste setor está restrito aos seguintes modelos:\n${allowed.join(', ')}`);
             return;
@@ -2957,3 +2957,114 @@ window.exportarPlanilhaAuditoria = () => {
     }
 };
 
+// --- CADASTRO DE PEÇA NOVA ---
+window.openCadastroPecaModal = () => {
+    if (!hasPermission('create_parts')) {
+        alert('❌ Permissão negada! Seu perfil não possui autorização para cadastrar peças novas.');
+        return;
+    }
+    document.getElementById('cad-code').value = '';
+    document.getElementById('cad-desc').value = '';
+    document.getElementById('cad-marca').value = 'OUTROS';
+    document.getElementById('cad-custo').value = '';
+    
+    const preview = document.getElementById('cad-custo-preview');
+    if(preview) preview.innerHTML = '';
+    
+    document.getElementById('cadastro-peca-status').innerHTML = '';
+    
+    const inputCusto = document.getElementById('cad-custo');
+    inputCusto.removeEventListener('input', updateCadastroPricePreview);
+    inputCusto.addEventListener('input', updateCadastroPricePreview);
+    
+    document.getElementById('modal-cadastro-peca').classList.add('open');
+    if (window.closeAdminMenu) window.closeAdminMenu();
+};
+
+function updateCadastroPricePreview() {
+    window.updatePricePreview('cad-custo', 'cad-custo-preview');
+}
+
+window.closeCadastroPecaModal = () => {
+    document.getElementById('modal-cadastro-peca').classList.remove('open');
+};
+
+window.saveCadastroPeca = async () => {
+    if (!hasPermission('create_parts')) {
+        alert('❌ Permissão negada! Seu perfil não possui autorização para cadastrar peças novas.');
+        return;
+    }
+
+    const code = document.getElementById('cad-code').value.trim().toUpperCase();
+    const desc = document.getElementById('cad-desc').value.trim().toUpperCase();
+    const marca = document.getElementById('cad-marca').value.trim().toUpperCase() || 'OUTROS';
+    
+    // Obtém o valor comercial digitado
+    const custoString = document.getElementById('cad-custo').value;
+    const custo = parseFloat(custoString);
+    const status = document.getElementById('cadastro-peca-status');
+
+    if (!code || !desc || custoString === '' || isNaN(custo) || custo < 0) {
+        status.innerHTML = '<span style="color:var(--red)">⚠️ Código, descrição e valor (0 ou maior) são obrigatórios!</span>';
+        return;
+    }
+
+    status.innerHTML = '⌛ Cadastrando peça no banco de dados...';
+    
+    const btnConfirm = document.querySelector('#modal-cadastro-peca .btn-confirm');
+    btnConfirm.disabled = true;
+
+    try {
+        // 1. Verificar se a peça já existe
+        const { data: checkPart, error: checkErr } = await supabase
+            .from('parts')
+            .select('code')
+            .eq('code', code)
+            .maybeSingle();
+
+        if (checkErr) throw checkErr;
+        if (checkPart) {
+            status.innerHTML = '<span style="color:var(--red)">❌ Código de peça já cadastrado!</span>';
+            btnConfirm.disabled = false;
+            return;
+        }
+
+        // 2. Cadastrar na tabela parts
+        const { error: partErr } = await supabase.from('parts').insert({
+            code: code,
+            descricao: desc,
+            marca: marca
+        });
+        if (partErr) throw partErr;
+
+        // 3. Cadastrar na tabela custos (inserindo o custo como VENDA / last_cost)
+        const { error: costErr } = await supabase.from('custos').upsert({
+            code: code,
+            last_cost: custo
+        });
+        if (costErr) throw costErr;
+
+        // 4. Inicializar saldos com 0 nas tabelas de estoque (LAB, REMANU e 3D)
+        await supabase.from('estoque').upsert({ code: code, qty: 0 });
+        await supabase.from('estoque_remanu').upsert({ code: code, qty: 0 });
+        await supabase.from('estoque_3d').upsert({ code: code, qty: 0 });
+
+        status.innerHTML = '<span style="color:var(--green)">✅ Peça cadastrada com sucesso em todos os setores!</span>';
+        
+        setTimeout(() => {
+            window.closeCadastroPecaModal();
+            
+            // Recarrega se estiver na aba de estoque
+            if (typeof currentTab !== 'undefined' && currentTab === 'estoque') {
+                const search = document.getElementById('search-main')?.value || '';
+                renderEstoque(search);
+            }
+        }, 1500);
+
+    } catch (e) {
+        console.error(e);
+        status.innerHTML = `<span style="color:var(--red)">❌ Erro: ${e.message}</span>`;
+    } finally {
+        btnConfirm.disabled = false;
+    }
+};
