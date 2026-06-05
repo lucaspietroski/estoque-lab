@@ -961,7 +961,12 @@ async function renderHistorico() {
 
     const { data: rawData } = await q;
     if (!rawData) return;
-    const data = rawData.filter(h => h.code !== 'SEMPEÇA' && h.code !== 'SEMPECA');
+    const data = rawData.filter(h => {
+        if (h.code === 'SEMPEÇA' || h.code === 'SEMPECA') {
+            return h.tipo === 'saída' || h.tipo === 'saida' || h.tipo === 'REVISÃO';
+        }
+        return true;
+    });
 
     let displayData = [];
     
@@ -1389,7 +1394,12 @@ window.renderMovDashboard = async () => {
 
     const { data: rawData } = await q;
     if (!rawData) return;
-    const data = rawData.filter(h => h.code !== 'SEMPEÇA' && h.code !== 'SEMPECA');
+    const data = rawData.filter(h => {
+        if (h.code === 'SEMPEÇA' || h.code === 'SEMPECA') {
+            return h.tipo === 'saída' || h.tipo === 'saida' || h.tipo === 'REVISÃO';
+        }
+        return true;
+    });
 
     let totIn = 0, totOut = 0, vlrIn = 0, vlrOut = 0;
     const daily = {};
@@ -1763,8 +1773,8 @@ window.renderModeloCusto = async () => {
         const byModel = {};
         window.statsDefeitoData = { pecas: 0, custo: 0, counts: {} };
 
-        // Saídas (Com Peça)
-        saídas.filter(s => filtrarData(s.ts) && s.code !== 'SEMPEÇA' && s.code !== 'SEMPECA').forEach(s => {
+        // Saídas (Com Peça e Tratamento Especial de Sem Peça)
+        saídas.filter(s => filtrarData(s.ts)).forEach(s => {
             const selb = (s.selb || '').toUpperCase().trim();
             if (!selb || selb === 'S/N' || selb === '0000') return;
 
@@ -1783,6 +1793,20 @@ window.renderModeloCusto = async () => {
 
             if (!byModel[modelo]) byModel[modelo] = { atendimentos: 0, comPeca: new Set(), semPeca: new Set(), pecas: 0, custo: 0, vlrNovaRef: 0, vlrNovaRevs: new Set() };
             
+            // Lógica para registrar as revisões que usaram a peça SEMPEÇA
+            if (s.code === 'SEMPEÇA' || s.code === 'SEMPECA') {
+                if (window.currentSector === 'REMANU' && s.revision_id) {
+                    byModel[modelo].semPeca.add(s.revision_id);
+                    // Acumula a referência de valor da máquina nova se houver
+                    if (s.vlr_nova_ref && !byModel[modelo].vlrNovaRevs.has(s.revision_id)) {
+                        byModel[modelo].vlrNovaRef += s.vlr_nova_ref;
+                        byModel[modelo].vlrNovaRevs.add(s.revision_id);
+                    }
+                } else {
+                    byModel[modelo].semPeca.add(selb);
+                }
+                return; // Encerra o loop aqui (não computa custo ou qty de peças)
+            }
             if (window.currentSector === 'REMANU' && s.revision_id) {
                 byModel[modelo].comPeca.add(s.revision_id);
                 // Acumula vlr_nova_ref uma vez por revision_id (não por peça)
@@ -1810,6 +1834,12 @@ window.renderModeloCusto = async () => {
             if (!byModel[modelo].comPeca.has(selb)) {
                 byModel[modelo].semPeca.add(selb);
             }
+        });
+
+        // Garante que, se uma mesma revisão (SELB ou revision_id) teve SEMPEÇA mas também peças reais,
+        // ela seja contada APENAS como "Com Peça" (evitando que Atendimentos fique duplicado)
+        Object.values(byModel).forEach(d => {
+            d.comPeca.forEach(rev => d.semPeca.delete(rev));
         });
 
         const rows = Object.entries(byModel).map(([modelo, d]) => {
