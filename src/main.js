@@ -581,7 +581,7 @@ async function renderEstoque(query = '') {
         }
 
         // Ordenação por maior volume (físico) primeiro
-        const data = rawData.sort((a, b) => {
+        const data = rawData.filter(p => p.code !== 'SEMPEÇA' && p.code !== 'SEMPECA').sort((a, b) => {
             const qtyA = a[tName]?.qty ?? a[tName]?.[0]?.qty ?? 0;
             const qtyB = b[tName]?.qty ?? b[tName]?.[0]?.qty ?? 0;
             return qtyB - qtyA;
@@ -957,8 +957,9 @@ async function renderHistorico() {
     if (d1Str) q = q.gte('ts', d1Str + 'T00:00:00Z');
     if (d2Str) q = q.lte('ts', d2Str + 'T23:59:59.999Z');
 
-    const { data } = await q;
-    if (!data) return;
+    const { data: rawData } = await q;
+    if (!rawData) return;
+    const data = rawData.filter(h => h.code !== 'SEMPEÇA' && h.code !== 'SEMPECA');
 
     let displayData = [];
     
@@ -1384,8 +1385,9 @@ window.renderMovDashboard = async () => {
     if (d1) q = q.gte('ts', d1 + 'T00:00:00Z');
     if (d2) q = q.lte('ts', d2 + 'T23:59:59Z');
 
-    const { data } = await q;
-    if (!data) return;
+    const { data: rawData } = await q;
+    if (!rawData) return;
+    const data = rawData.filter(h => h.code !== 'SEMPEÇA' && h.code !== 'SEMPECA');
 
     let totIn = 0, totOut = 0, vlrIn = 0, vlrOut = 0;
     const daily = {};
@@ -1760,7 +1762,7 @@ window.renderModeloCusto = async () => {
         window.statsDefeitoData = { pecas: 0, custo: 0, counts: {} };
 
         // Saídas (Com Peça)
-        saídas.filter(s => filtrarData(s.ts)).forEach(s => {
+        saídas.filter(s => filtrarData(s.ts) && s.code !== 'SEMPEÇA' && s.code !== 'SEMPECA').forEach(s => {
             const selb = (s.selb || '').toUpperCase().trim();
             if (!selb || selb === 'S/N' || selb === '0000') return;
 
