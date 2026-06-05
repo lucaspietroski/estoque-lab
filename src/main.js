@@ -2959,8 +2959,8 @@ window.exportarPlanilhaAuditoria = () => {
 
 // --- CADASTRO DE PEÇA NOVA ---
 window.openCadastroPecaModal = () => {
-    if (!hasPermission('create_parts')) {
-        alert('❌ Permissão negada! Seu perfil não possui autorização para cadastrar peças novas.');
+    if (!currentUser || currentUser.email !== 'lucas.araujo@selbetti.com.br') {
+        alert('❌ Permissão negada! Apenas o administrador pode cadastrar peças novas.');
         return;
     }
     document.getElementById('cad-code').value = '';
@@ -2990,8 +2990,8 @@ window.closeCadastroPecaModal = () => {
 };
 
 window.saveCadastroPeca = async () => {
-    if (!hasPermission('create_parts')) {
-        alert('❌ Permissão negada! Seu perfil não possui autorização para cadastrar peças novas.');
+    if (!currentUser || currentUser.email !== 'lucas.araujo@selbetti.com.br') {
+        alert('❌ Permissão negada! Apenas o administrador pode cadastrar peças novas.');
         return;
     }
 
