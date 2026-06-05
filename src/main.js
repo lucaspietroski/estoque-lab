@@ -393,13 +393,13 @@ let dashFilterLow = false;
 async function updateDashboard() {
     try {
         console.log('📊 Atualizando Dashboard...');
-        const { count: totalParts } = await supabase.from('parts').select('*', { count: 'exact', head: true });
+        const { count: totalParts } = await supabase.from('parts').select('*', { count: 'exact', head: true }).neq('code', 'SEMPEÇA').neq('code', 'SEMPECA');
         
-        const { data: stockData } = await supabase.from(getEstoqueTable()).select('qty').gt('qty', 0);
+        const { data: stockData } = await supabase.from(getEstoqueTable()).select('qty, code').gt('qty', 0).neq('code', 'SEMPEÇA').neq('code', 'SEMPECA');
         const inStockCount = stockData?.length || 0;
         const volTotal = stockData?.reduce((acc, curr) => acc + curr.qty, 0) || 0;
 
-        const { count: lowCount } = await supabase.from(getEstoqueTable()).select('*', { count: 'exact', head: true }).lt('qty', 5).gt('qty', 0);
+        const { count: lowCount } = await supabase.from(getEstoqueTable()).select('*', { count: 'exact', head: true }).lt('qty', 5).gt('qty', 0).neq('code', 'SEMPEÇA').neq('code', 'SEMPECA');
 
         document.getElementById('dash-total').textContent = (totalParts || 0).toLocaleString('pt-BR');
         document.getElementById('dash-instock').textContent = inStockCount.toLocaleString('pt-BR');
@@ -408,7 +408,7 @@ async function updateDashboard() {
 
         if (document.getElementById('stat-in-stock')) document.getElementById('stat-in-stock').textContent = volTotal;
         if (document.getElementById('stat-zero')) {
-             const { count: zeroCount } = await supabase.from(getEstoqueTable()).select('*', { count: 'exact', head: true }).eq('qty', 0);
+             const { count: zeroCount } = await supabase.from(getEstoqueTable()).select('*', { count: 'exact', head: true }).eq('qty', 0).neq('code', 'SEMPEÇA').neq('code', 'SEMPECA');
              document.getElementById('stat-zero').textContent = zeroCount || 0;
         }
 
@@ -438,7 +438,9 @@ async function renderDashTable() {
         if (!tbody) return;
 
         let query = supabase.from(getEstoqueTable())
-            .select('qty, parts!inner(code, descricao)')
+            .select('qty, code, parts!inner(code, descricao)')
+            .neq('code', 'SEMPEÇA')
+            .neq('code', 'SEMPECA')
             .order('qty', { ascending: false });
 
         if (dashFilterLow) {
