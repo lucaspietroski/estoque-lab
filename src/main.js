@@ -1553,10 +1553,56 @@ async function gerarBackupCompleto() {
 window.gerarBackupCompleto = gerarBackupCompleto;
 
 // --- LOGICA BI EQUIPAMENTOS ---
+window.pendingBiImportData = [];
+
+window.closeBiPreviewModal = () => {
+    document.getElementById('bi-preview-modal').classList.remove('active');
+    window.pendingBiImportData = [];
+    document.getElementById('bi-status').innerHTML = '❌ Importação cancelada pelo usuário.';
+};
+
+window.confirmBiImport = async () => {
+    if (!window.pendingBiImportData || window.pendingBiImportData.length === 0) return;
+    
+    const status = document.getElementById('bi-preview-status');
+    const btn = document.getElementById('bi-confirm-btn');
+    status.innerHTML = '⌛ Enviando registros...';
+    btn.disabled = true;
+
+    try {
+        let count = 0;
+        const total = window.pendingBiImportData.length;
+        
+        for (let i = 0; i < total; i += 500) {
+            const chunk = window.pendingBiImportData.slice(i, i + 500);
+            const { error } = await supabase.from('equipamentos').upsert(chunk);
+            if (error) throw error;
+            count += chunk.length;
+            status.innerHTML = `⌛ Enviando... (${count}/${total})`;
+        }
+
+        document.getElementById('bi-status').innerHTML = '✅ Base BI atualizada com sucesso!';
+        renderEquipamentos();
+        
+        // Fechar modal após 1 segundo de sucesso
+        setTimeout(() => {
+            document.getElementById('bi-preview-modal').classList.remove('active');
+            window.pendingBiImportData = [];
+            btn.disabled = false;
+            status.innerHTML = '';
+        }, 1000);
+
+    } catch (err) {
+        console.error(err);
+        status.innerHTML = `<span style="color:var(--red)">❌ Erro: ${err.message}</span>`;
+        btn.disabled = false;
+    }
+};
+
 window.processarBI = async (file) => {
     if (!file) return;
     const status = document.getElementById('bi-status');
-    status.innerHTML = '⌛ Lendo arquivo...';
+    status.innerHTML = '⌛ Lendo arquivo e buscando colunas...';
     
     const reader = new FileReader();
     reader.onload = async (e) => {
@@ -1566,58 +1612,92 @@ window.processarBI = async (file) => {
             const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
             const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
 
-            // Processamento resiliente
+            if (rows.length < 2) {
+                status.innerHTML = '❌ Arquivo vazio ou sem dados suficientes.';
+                return;
+            }
+
+            // 1. Procurar a linha de cabeçalho e identificar os índices
+            let headerRowIndex = -1;
+            let colSelb = -1;
+            let colModelo = -1;
+
+            for (let i = 0; i < Math.min(10, rows.length); i++) {
+                const row = rows[i] || [];
+                const rowTexts = row.map(c => String(c || '').trim().toUpperCase());
+                
+                // Encontrar o índice da coluna SELB
+                const sIdx = rowTexts.findIndex(t => t === 'SELB' || t === 'CÓDIGO' || t === 'CODIGO' || t.includes('SELB'));
+                
+                // Encontrar o índice da coluna Modelo/Produto
+                const mIdx = rowTexts.findIndex(t => t === 'MODELO' || t === 'PRODUTO' || t.includes('MODELO') || t.includes('PRODUTO'));
+
+                if (sIdx >= 0 && mIdx >= 0) {
+                    headerRowIndex = i;
+                    colSelb = sIdx;
+                    colModelo = mIdx;
+                    break;
+                }
+            }
+
+            if (colSelb === -1 || colModelo === -1) {
+                status.innerHTML = `<span style="color:var(--red)">❌ Erro: Colunas "SELB" ou "MODELO" não encontradas automaticamente no cabeçalho do arquivo.</span>`;
+                return;
+            }
+
             const seen = new Set();
             const validRows = [];
             
-            rows.forEach((r, index) => {
-                // Converte a linha em uma lista de strings limpas
-                const cells = r.map(c => String(c || '').trim().toUpperCase());
+            // 2. Extrair dados com base nos índices corretos
+            for (let i = headerRowIndex + 1; i < rows.length; i++) {
+                const cells = rows[i] || [];
                 
-                // Tenta achar o SELB (geralmente é a primeira coluna ou a que tem texto curto)
-                const selb = cells[0] || '';
+                const rawSelb = String(cells[colSelb] || '').trim().toUpperCase();
+                const rawModelo = String(cells[colModelo] || '').trim().toUpperCase();
                 
-                // Tenta achar o Modelo (procura nas colunas B, C ou D)
-                let modelo = cells[3] || cells[2] || cells[1] || '';
+                if (!rawSelb || rawSelb === 'TOTAL') continue;
 
-                // Se a linha for o cabeçalho (ex: contiver a palavra SELB), pula
-                if (selb === 'SELB' || selb === 'CODIGO' || !selb) return;
+                // Tenta buscar a Situação WMS ou similar para colocar na descrição
+                const situacao = cells.find(c => String(c).toUpperCase() === 'LIBERADO' || String(c).toUpperCase() === 'BLOQUEADO');
+                const desc = situacao ? `Importação Excel (${situacao})` : 'Importação Excel';
 
-                // Se achou SELB mas o modelo tá vazio, tenta pegar qualquer outra célula da linha
-                if (selb && !modelo) {
-                    modelo = cells.find((c, i) => i > 0 && c.length > 2) || '';
+                if (rawSelb && rawModelo && !seen.has(rawSelb)) {
+                    seen.add(rawSelb);
+                    validRows.push({ 
+                        selb: rawSelb, 
+                        modelo: rawModelo, 
+                        descricao: desc 
+                    });
                 }
-                
-                if (selb && modelo && !seen.has(selb)) {
-                    seen.add(selb);
-                    validRows.push({ selb, modelo, descricao: cells[3] || cells[2] || 'IMPORTAÇÃO MASSIVA' });
-                }
-            });
+            }
 
             if (!validRows.length) { 
-                status.innerHTML = '❌ Nenhum dado válido encontrado.<br><small>Verifique se o SELB está na Coluna A.</small>'; 
+                status.innerHTML = '❌ Nenhum dado válido encontrado após o cabeçalho.'; 
                 return; 
             }
-            status.innerHTML = `⌛ Enviando ${validRows.length} registros...`;
 
-            // Envia em lotes de 500 para não estourar a API
-            let count = 0;
-            for (let i = 0; i < validRows.length; i += 500) {
-                const chunk = validRows.slice(i, i + 500);
-                const { error } = await supabase.from('equipamentos').upsert(chunk);
-                if (error) throw error;
-                count += chunk.length;
-                status.innerHTML = `⌛ Enviando... (${count}/${validRows.length})`;
-            }
+            // 3. Preparar e exibir o Modal de Preview
+            window.pendingBiImportData = validRows;
+            
+            const tbody = document.getElementById('bi-preview-tbody');
+            tbody.innerHTML = validRows.map(r => `
+                <tr>
+                    <td style="font-weight:bold; color:var(--blue)">${r.selb}</td>
+                    <td>${r.modelo}</td>
+                    <td style="font-size:0.75rem; color:var(--text-muted)">${r.descricao}</td>
+                </tr>
+            `).join('');
+            
+            document.getElementById('bi-preview-count').textContent = validRows.length;
+            document.getElementById('bi-preview-status').innerHTML = '';
+            document.getElementById('bi-confirm-btn').disabled = false;
+            
+            status.innerHTML = 'Aguardando confirmação do usuário...';
+            document.getElementById('bi-preview-modal').classList.add('active');
 
-            status.innerHTML = '✅ Base BI atualizada com sucesso!';
-            renderEquipamentos();
         } catch (err) {
             console.error(err);
-            status.innerHTML = '❌ Erro: ' + err.message;
-            if (err.message.includes('not found')) {
-                alert('⚠️ Tabela "equipamentos" não encontrada no Supabase. Por favor, crie-a no SQL Editor primeiro.');
-            }
+            status.innerHTML = '❌ Erro ao processar arquivo: ' + err.message;
         }
     };
     reader.readAsArrayBuffer(file);

@@ -1213,6 +1213,36 @@
       <button class="btn-cancel" onclick="closeCadastroPecaModal()">Cancelar</button>
       <button class="btn-confirm" style="background: #22c55e;" onclick="saveCadastroPeca()">Cadastrar Peça</button>
     </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL PREVIEW IMPORTAÇÃO BI -->
+<div class="modal-overlay" id="bi-preview-modal">
+  <div class="modal" style="max-width: 800px; width: 95%;">
+    <h3>👀 Confirmação de Importação de Equipamentos</h3>
+    <p style="color: var(--text-muted); margin-bottom: 15px;">
+      Os registros abaixo serão atualizados/inseridos no banco de dados. Revise as colunas para garantir que o mapeamento automático funcionou corretamente.
+    </p>
+    
+    <div class="table-wrap" style="max-height: 450px; overflow-y: auto; margin-bottom: 20px; border: 1px solid var(--border); border-radius: 8px;">
+      <table class="dash-table">
+        <thead style="position: sticky; top: 0; background: var(--bg-secondary); z-index: 10;">
+          <tr>
+            <th style="padding: 12px; text-align: left;">SELB</th>
+            <th style="padding: 12px; text-align: left;">MODELO</th>
+            <th style="padding: 12px; text-align: left;">DESCRIÇÃO (Fonte)</th>
+          </tr>
+        </thead>
+        <tbody id="bi-preview-tbody"></tbody>
+      </table>
+    </div>
+
+    <div style="display: flex; gap: 15px; justify-content: flex-end; align-items: center;">
+      <div id="bi-preview-status" style="font-weight: 600; font-size: 13px; margin-right: auto;"></div>
+      <button class="btn-cancel" onclick="closeBiPreviewModal()">Cancelar</button>
+      <button class="btn-confirm" id="bi-confirm-btn" style="background: var(--blue);" onclick="confirmBiImport()">Confirmar Importação (<span id="bi-preview-count">0</span>)</button>
+    </div>
   </div>
 </div>
 
