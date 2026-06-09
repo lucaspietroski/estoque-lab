@@ -1838,6 +1838,17 @@ window.processarRevisados = async () => {
     const dtInput = document.getElementById('revisados-data');
     const selbData = dtInput?.value || new Date().toISOString().split('T')[0];
 
+    // --- VALIDAÇÃO DE DATA ---
+    const dataSelecionada = new Date(selbData + 'T00:00:00');
+    const hoje = new Date();
+    hoje.setHours(0,0,0,0);
+
+    if (dataSelecionada > hoje) {
+        status.innerHTML = '❌ Erro: Não é permitido lançar SELBs com data futura.';
+        return;
+    }
+    // -------------------------
+
     status.innerHTML = '⌛ Gravando...';
     const selbs = raw.split(/[\n,;]+/).map(s => s.trim().toUpperCase()).filter(s => s.length >= 2);
     
