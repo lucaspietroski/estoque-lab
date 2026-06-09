@@ -1138,6 +1138,61 @@ window.saveAjusteHistorico = async () => {
     }, 1500);
 };
 
+window.anularRegistroHistorico = async () => {
+    const id = document.getElementById('ajuste-id').value;
+    const obs = document.getElementById('ajuste-obs').value.trim();
+    const status = document.getElementById('ajuste-status');
+
+    if (!confirm("⚠️ ATENÇÃO: Tem certeza que deseja CANCELAR este registro?\\nEle continuará no histórico como CANCELADO, mas não será mais considerado nos cálculos de custos e o estoque será revertido.")) return;
+
+    if (!obs) {
+        status.innerHTML = '<span style="color:var(--red)">⚠️ Informe o motivo do cancelamento na observação.</span>';
+        return;
+    }
+
+    status.innerHTML = '⌛ Cancelando registro...';
+
+    // 1. Pegar registro original
+    const { data: original } = await supabase.from(getHistoricoTable()).select('*').eq('id', id).single();
+    if (!original) return;
+
+    // 2. Reverte o estoque
+    const factor = (original.tipo === 'saída' || original.tipo === 'saida') ? 1 : -1;
+    const { data: stOld } = await supabase.from(getEstoqueTable()).select('qty').eq('code', original.code).single();
+    await supabase.from(getEstoqueTable()).upsert({ code: original.code, qty: (stOld?.qty || 0) + (original.qty * factor) });
+
+    // 3. Marca como CANCELADO
+    const { error: errUpdate } = await supabase.from(getHistoricoTable()).update({
+        tipo: 'CANCELADO',
+        descricao: `CANCELADO: ${obs} (Original: ${original.tipo})`
+    }).eq('id', id);
+
+    if (errUpdate) {
+        status.innerHTML = '❌ Erro ao cancelar: ' + errUpdate.message;
+        return;
+    }
+
+    // 4. Cria registro de auditoria (TIPO AJUSTE)
+    await supabase.from(getHistoricoTable()).insert({
+        tipo: 'ajuste',
+        code: original.code,
+        qty: original.qty,
+        vlr_unit: original.vlr_unit,
+        vlr_total: original.vlr_total,
+        selb: original.selb,
+        descricao: `CANCELAMENTO DE REGISTRO: ${obs}`,
+        user_email: currentUser.email,
+        ts: new Date().toISOString()
+    });
+
+    status.innerHTML = '<span style="color:var(--green)">✅ Registro cancelado com sucesso!</span>';
+    setTimeout(() => {
+        closeAjusteHistorico();
+        renderHistorico();
+        updateDashboard();
+    }, 1500);
+};
+
 // --- EXPOR PARA GLOBAL (BOTÕES HTML) ---
 window.switchTab = switchTab;
 window.processarEntrada = processarEntrada;
