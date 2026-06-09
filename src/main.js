@@ -1376,7 +1376,7 @@ window.processarXML = async (file) => {
             tbody.innerHTML = '<tr><td colspan="5" style="text-align:center">⌛ Buscando descrições no banco...</td></tr>';
             
             // Abre o modal
-            document.getElementById('xml-preview-modal').classList.add('active');
+            document.getElementById('xml-preview-modal').classList.add('open');
 
             // Busca as descrições em lote para exibir na prévia
             let html = '';
@@ -1415,7 +1415,7 @@ window.processarXML = async (file) => {
 };
 
 window.fecharModalXML = () => {
-    document.getElementById('xml-preview-modal').classList.remove('active');
+    document.getElementById('xml-preview-modal').classList.remove('open');
     window.pendingXmlImport = null;
     document.getElementById('xml-preview-status').innerHTML = '';
 };
@@ -1683,7 +1683,7 @@ window.gerarBackupCompleto = gerarBackupCompleto;
 window.pendingBiImportData = [];
 
 window.closeBiPreviewModal = () => {
-    document.getElementById('bi-preview-modal').classList.remove('active');
+    document.getElementById('bi-preview-modal').classList.remove('open');
     window.pendingBiImportData = [];
     document.getElementById('bi-status').innerHTML = '❌ Importação cancelada pelo usuário.';
 };
@@ -1713,7 +1713,7 @@ window.confirmBiImport = async () => {
         
         // Fechar modal após 1 segundo de sucesso
         setTimeout(() => {
-            document.getElementById('bi-preview-modal').classList.remove('active');
+            document.getElementById('bi-preview-modal').classList.remove('open');
             window.pendingBiImportData = [];
             btn.disabled = false;
             status.innerHTML = '';
@@ -1820,7 +1820,7 @@ window.processarBI = async (file) => {
             document.getElementById('bi-confirm-btn').disabled = false;
             
             status.innerHTML = 'Aguardando confirmação do usuário...';
-            document.getElementById('bi-preview-modal').classList.add('active');
+            document.getElementById('bi-preview-modal').classList.add('open');
 
         } catch (err) {
             console.error(err);
