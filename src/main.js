@@ -1347,7 +1347,9 @@ window.processarXML = async (file) => {
                 const rowPedido = colPedido >= 0 ? getCell(colPedido).trim() : '';
                 const orderNum = rowPedido || globalPedido || '';
 
-                if (!itemsMap[rawCode]) itemsMap[rawCode] = { qty: 0, vlrUnit: vlrUnit, pedido: orderNum };
+                if (!itemsMap[rawCode]) {
+                    itemsMap[rawCode] = { qty: 0, vlrUnit: vlrUnit, pedido: orderNum };
+                }
                 itemsMap[rawCode].qty += qty;
                 if (orderNum && !itemsMap[rawCode].pedido) {
                     itemsMap[rawCode].pedido = orderNum;
@@ -1357,63 +1359,133 @@ window.processarXML = async (file) => {
             const keys = Object.keys(itemsMap);
             if (keys.length === 0) { alert('Nenhum item válido encontrado.'); return; }
 
-            document.getElementById('xml-drop-area').innerHTML = `<h3 style="color:#2e7d32;text-align:center">Processando ${keys.length} itens no banco de dados... Aguarde.</h3>`;
-
-            let processados = 0;
             const targetSector = document.querySelector('input[name="xml-sector"]:checked').value;
-            const tableEstoque = targetSector === 'REMANU' ? 'estoque_remanu' : 'estoque';
-            const tableHist = targetSector === 'REMANU' ? 'historico_remanu' : 'historico';
+            const sectorName = targetSector === 'REMANU' ? 'Remanufatura' : 'Laboratório';
 
+            // Armazena na memória para a confirmação
+            window.pendingXmlImport = {
+                keys,
+                itemsMap,
+                targetSector
+            };
+
+            document.getElementById('xml-preview-sector-label').textContent = sectorName;
+            document.getElementById('xml-preview-count').textContent = keys.length;
+            
+            const tbody = document.getElementById('xml-preview-tbody');
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center">⌛ Buscando descrições no banco...</td></tr>';
+            
+            // Abre o modal
+            document.getElementById('xml-preview-modal').classList.add('active');
+
+            // Busca as descrições em lote para exibir na prévia
+            let html = '';
             for (const code of keys) {
-                const { qty, vlrUnit, pedido } = itemsMap[code];
-
-                const { data: pCheck } = await supabase.from('parts').select('code, descricao').eq('code', code).maybeSingle();
-                let partDesc = `PEÇA IMPORTADA VIA XML (${code})`;
-                if (!pCheck) {
-                    const { error: pErr } = await supabase.from('parts').insert({
-                        code: code,
-                        descricao: partDesc,
-                        marca: 'OUTROS'
-                    });
-                    if (pErr) {
-                        console.warn(`Aviso ao cadastrar peça ${code}:`, pErr.message);
-                    }
-                } else if (pCheck.descricao) {
-                    partDesc = pCheck.descricao;
-                }
-
-                const { data: cur } = await supabase.from(tableEstoque).select('qty').eq('code', code).single();
-                const newQty = (cur?.qty || 0) + qty;
-
-                const { error: errEst } = await supabase.from(tableEstoque).upsert({ code, qty: newQty });
-                if (errEst) throw new Error(`Estoque: ${errEst.message}`);
+                const item = itemsMap[code];
+                const { data: pCheck } = await supabase.from('parts').select('descricao').eq('code', code).maybeSingle();
+                const desc = pCheck?.descricao ? pCheck.descricao : `PEÇA IMPORTADA VIA XML (${code})`;
                 
-                if (vlrUnit > 0) {
-                    const { error: errCust } = await supabase.from('custos').upsert({ code, last_cost: vlrUnit });
-                    if (errCust) throw new Error(`Custos: ${errCust.message}`);
-                }
+                // Armazena a descrição encontrada para evitar buscar de novo depois
+                item.descInfo = desc;
+                item.isNew = !pCheck;
 
-                if (currentUser) {
-                    const selbHist = pedido ? `XML | Pedido: ${pedido}` : 'Entrada Lote XML';
-                    const { error: errHist } = await supabase.from(tableHist).insert({
-                        tipo: 'entrada', code, descricao: partDesc, qty,
-                        selb: selbHist,
-                        user_email: currentUser.email, ts: new Date().toISOString(),
-                        vlr_unit: vlrUnit, vlr_total: vlrUnit * qty
-                    });
-                    if (errHist) throw new Error(`Histórico: ${errHist.message}`);
-                }
-                processados++;
+                html += `
+                  <tr>
+                    <td style="font-family:var(--mono); font-weight:600;">${code}</td>
+                    <td>${desc}</td>
+                    <td style="text-align:center; font-weight:bold;">${item.qty}</td>
+                    <td style="text-align:right">R$ ${item.vlrUnit.toFixed(2).replace('.', ',')}</td>
+                    <td style="text-align:center; color:var(--text-muted);">${item.pedido || '-'}</td>
+                  </tr>
+                `;
             }
 
-            alert(`Importação concluída! ${processados} itens processados com sucesso.`);
-            window.location.reload();
+            tbody.innerHTML = html;
+            
+            // Limpa o input file para permitir selecionar o mesmo arquivo novamente se o usuário cancelar
+            document.getElementById('xml-file-input').value = '';
+
         } catch (err) {
-            alert('Erro na importação: ' + err.message);
-            window.location.reload();
+            console.error(err);
+            alert('Erro ao ler XML: ' + err.message);
+            document.getElementById('xml-file-input').value = '';
         }
     };
-    reader.readAsText(file, 'utf-8');
+    reader.readAsText(file, "ISO-8859-1");
+};
+
+window.fecharModalXML = () => {
+    document.getElementById('xml-preview-modal').classList.remove('active');
+    window.pendingXmlImport = null;
+    document.getElementById('xml-preview-status').innerHTML = '';
+};
+
+window.confirmarImportacaoXML = async () => {
+    if (!window.pendingXmlImport) return;
+
+    const btn = document.getElementById('xml-confirm-btn');
+    const status = document.getElementById('xml-preview-status');
+    const origBtnText = btn.innerHTML;
+
+    btn.disabled = true;
+    btn.innerHTML = '⌛ Salvando...';
+    status.innerHTML = '<span style="color:var(--orange)">Processando itens no banco de dados... Aguarde.</span>';
+
+    try {
+        const { keys, itemsMap, targetSector } = window.pendingXmlImport;
+        const tableEstoque = targetSector === 'REMANU' ? 'estoque_remanu' : 'estoque';
+        const tableHist = targetSector === 'REMANU' ? 'historico_remanu' : 'historico';
+
+        let processados = 0;
+
+        for (const code of keys) {
+            const { qty, vlrUnit, pedido, descInfo, isNew } = itemsMap[code];
+
+            if (isNew) {
+                const { error: pErr } = await supabase.from('parts').insert({
+                    code: code,
+                    descricao: descInfo,
+                    marca: 'OUTROS'
+                });
+                if (pErr) console.warn(`Aviso ao cadastrar peça ${code}:`, pErr.message);
+            }
+
+            const { data: cur } = await supabase.from(tableEstoque).select('qty').eq('code', code).single();
+            const newQty = (cur?.qty || 0) + qty;
+
+            const { error: errEst } = await supabase.from(tableEstoque).upsert({ code, qty: newQty });
+            if (errEst) throw new Error(`Estoque: ${errEst.message}`);
+            
+            if (vlrUnit > 0) {
+                const { error: errCust } = await supabase.from('custos').upsert({ code, last_cost: vlrUnit });
+                if (errCust) throw new Error(`Custos: ${errCust.message}`);
+            }
+
+            if (currentUser) {
+                const selbHist = pedido ? `XML | Pedido: ${pedido}` : 'Entrada Lote XML';
+                const { error: errHist } = await supabase.from(tableHist).insert({
+                    tipo: 'entrada', code, descricao: descInfo, qty,
+                    selb: selbHist,
+                    user_email: currentUser.email, ts: new Date().toISOString(),
+                    vlr_unit: vlrUnit, vlr_total: vlrUnit * qty
+                });
+                if (errHist) throw new Error(`Histórico: ${errHist.message}`);
+            }
+            processados++;
+        }
+
+        status.innerHTML = `<span style="color:var(--green)">✅ ${processados} itens processados com sucesso!</span>`;
+        setTimeout(() => {
+            window.fecharModalXML();
+            window.location.reload();
+        }, 1500);
+
+    } catch (err) {
+        console.error(err);
+        status.innerHTML = `<span style="color:var(--red)">❌ Erro: ${err.message}</span>`;
+        btn.disabled = false;
+        btn.innerHTML = origBtnText;
+    }
 };
 
 // --- MOVIMENTAÇÕES DASHBOARD ---

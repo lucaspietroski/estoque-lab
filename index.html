@@ -1247,6 +1247,40 @@
   </div>
 </div>
 
+<!-- MODAL PREVIEW IMPORTAÇÃO XML -->
+<div class="modal-overlay" id="xml-preview-modal">
+  <div class="modal" style="max-width: 900px; width: 95%;">
+    <h3>🧾 Confirmação de Importação de Nota Fiscal (XML)</h3>
+    <p style="color: var(--text-muted); margin-bottom: 5px;">
+      Os registros abaixo foram identificados na nota fiscal e serão importados.
+    </p>
+    <p style="font-weight: 600; margin-bottom: 15px;">
+      Destino: <span id="xml-preview-sector-label" style="color: var(--blue);"></span>
+    </p>
+    
+    <div class="table-wrap" style="max-height: 450px; overflow-y: auto; margin-bottom: 20px; border: 1px solid var(--border); border-radius: 8px;">
+      <table class="dash-table">
+        <thead style="position: sticky; top: 0; background: var(--bg-secondary); z-index: 10;">
+          <tr>
+            <th style="padding: 12px; text-align: left;">CÓDIGO</th>
+            <th style="padding: 12px; text-align: left;">DESCRIÇÃO (Interna/XML)</th>
+            <th style="padding: 12px; text-align: center;">QTD</th>
+            <th style="padding: 12px; text-align: right;">VLR UNIT.</th>
+            <th style="padding: 12px; text-align: center;">DOCUMENTO</th>
+          </tr>
+        </thead>
+        <tbody id="xml-preview-tbody"></tbody>
+      </table>
+    </div>
+
+    <div style="display: flex; gap: 15px; justify-content: flex-end; align-items: center;">
+      <div id="xml-preview-status" style="font-weight: 600; font-size: 13px; margin-right: auto;"></div>
+      <button class="btn-cancel" onclick="fecharModalXML()">Cancelar</button>
+      <button class="btn-confirm" id="xml-confirm-btn" style="background: var(--blue);" onclick="confirmarImportacaoXML()">Confirmar Importação (<span id="xml-preview-count">0</span>)</button>
+    </div>
+  </div>
+</div>
+
 <script type="module" src="src/main.js?v=1.5"></script>
 <script type="module">
   import { runSecurityAudit } from './src/views/audit/index.js';
