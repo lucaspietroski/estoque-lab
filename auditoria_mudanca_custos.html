@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Auditoria de Mudança de Custos - Protheus</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #09090b;
+      --surface: #18181b;
+      --surface-hover: #27272a;
+      --border: #3f3f46;
+      --text: #f4f4f5;
+      --text-muted: #a1a1aa;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --success: #10b981;
+      --success-hover: #059669;
+      --success-bg: rgba(16, 185, 129, 0.1);
+      --warning: #f59e0b;
+      --warning-bg: rgba(245, 158, 11, 0.1);
+      --danger: #ef4444;
+      --danger-bg: rgba(239, 68, 68, 0.1);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Inter', sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    header {
+      background: rgba(24, 24, 27, 0.8);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
+      padding: 20px 40px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .brand h1 { font-size: 1.25rem; font-weight: 600; letter-spacing: -0.02em; }
+    .brand .badge {
+      background: var(--primary); color: white; padding: 4px 8px;
+      border-radius: 6px; font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+    }
+
+    main { padding: 40px; flex: 1; max-width: 1400px; margin: 0 auto; width: 100%; }
+
+    .auth-container {
+      max-width: 400px; margin: 100px auto; background: var(--surface);
+      padding: 32px; border-radius: 16px; border: 1px solid var(--border);
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+    }
+    .auth-container h2 { margin-bottom: 24px; font-size: 1.5rem; text-align: center; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; margin-bottom: 8px; font-size: 0.875rem; color: var(--text-muted); }
+    .form-group input {
+      width: 100%; padding: 12px; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); font-size: 1rem; transition: border-color 0.2s;
+    }
+    .form-group input:focus { outline: none; border-color: var(--primary); }
+
+    .btn {
+      width: 100%; padding: 12px; background: var(--primary); color: white;
+      border: none; border-radius: 8px; font-size: 1rem; font-weight: 500;
+      cursor: pointer; transition: background-color 0.2s, transform 0.1s;
+    }
+    .btn:hover { background: var(--primary-hover); }
+    .btn:active { transform: scale(0.98); }
+    .btn:disabled { opacity: 0.7; cursor: not-allowed; }
+
+    .dashboard { display: none; animation: fadeIn 0.5s ease; }
+
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 24px; margin-bottom: 32px; }
+    .stat-card {
+      background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+      padding: 24px; display: flex; flex-direction: column; gap: 8px; transition: transform 0.2s;
+    }
+    .stat-card:hover { transform: translateY(-2px); }
+    .stat-card h3 { color: var(--text-muted); font-size: 0.875rem; font-weight: 500; }
+    .stat-card .value { font-size: 2rem; font-weight: 700; }
+    .stat-card.success .value { color: var(--success); }
+    .stat-card.warning .value { color: var(--warning); }
+
+    .controls { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; gap: 16px; flex-wrap: wrap; }
+    .search-box { flex: 1; max-width: 400px; }
+    .search-box input {
+      width: 100%; padding: 12px 16px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text);
+    }
+    .filters select {
+      padding: 12px 16px; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; color: var(--text); cursor: pointer;
+    }
+
+    .global-actions { display: flex; gap: 12px; }
+    .btn-global {
+      padding: 10px 16px; background: var(--surface-hover); border: 1px solid var(--border);
+      color: white; border-radius: 8px; cursor: pointer; font-weight: 500; transition: 0.2s;
+    }
+    .btn-global:hover { background: var(--border); }
+    .btn-global.success { background: rgba(16, 185, 129, 0.2); border-color: var(--success); color: var(--success); }
+    .btn-global.success:hover { background: rgba(16, 185, 129, 0.3); }
+
+    .table-container { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; text-align: left; }
+    th, td { padding: 16px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    th { font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.05em; background: rgba(255,255,255,0.02); }
+    tr:last-child td { border-bottom: none; }
+    tbody tr { transition: background-color 0.2s; }
+    tbody tr:hover { background: var(--surface-hover); }
+
+    .code { font-family: monospace; color: var(--primary); font-weight: 500; }
+    .desc { font-size: 0.875rem; max-width: 250px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .price { font-variant-numeric: tabular-nums; font-weight: 500; }
+    .price.old { color: var(--text-muted); text-decoration: line-through; font-size: 0.875rem; }
+    
+    .status-badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+    .status-consertado { background: var(--success-bg); color: var(--success); }
+    .status-pendente { background: var(--warning-bg); color: var(--warning); }
+    .status-novo { background: rgba(59, 130, 246, 0.1); color: var(--primary); }
+
+    .diff-down { color: var(--success); font-weight: 600; }
+    .diff-up { color: var(--danger); font-weight: 600; }
+    .diff-none { color: var(--text-muted); }
+
+    /* Ações na linha */
+    .row-actions { display: flex; gap: 8px; align-items: center; }
+    .input-cost {
+      width: 90px; padding: 6px; background: var(--bg); border: 1px solid var(--border);
+      border-radius: 6px; color: white; font-family: monospace;
+    }
+    .input-cost:focus { border-color: var(--primary); outline: none; }
+    .btn-sm {
+      padding: 6px 12px; border-radius: 6px; font-size: 0.75rem; font-weight: 600;
+      border: none; cursor: pointer; transition: 0.2s;
+    }
+    .btn-save { background: var(--primary); color: white; }
+    .btn-save:hover { background: var(--primary-hover); }
+    .btn-fix { background: var(--surface-hover); border: 1px solid var(--border); color: var(--text); }
+    .btn-fix:hover { background: var(--border); }
+    .btn-fix.done { background: var(--success-bg); color: var(--success); border-color: var(--success); pointer-events: none; }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+    #loading-overlay {
+      position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(9, 9, 11, 0.9);
+      display: none; flex-direction: column; justify-content: center; align-items: center;
+      z-index: 50; backdrop-filter: blur(4px);
+    }
+    .spinner {
+      width: 40px; height: 40px; border: 3px solid var(--border); border-top-color: var(--primary);
+      border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="brand">
+      <h1>Auditoria de Custos</h1>
+      <span class="badge">Protheus Sync</span>
+    </div>
+    <div id="user-info" style="display: none; color: var(--text-muted); font-size: 0.875rem;"></div>
+  </header>
+
+  <main>
+    <div id="auth-section" class="auth-container">
+      <h2>Acesso Administrativo</h2>
+      <div class="form-group">
+        <label>E-mail</label>
+        <input type="email" id="email" placeholder="admin@estoque-laboratorio.local">
+      </div>
+      <div class="form-group">
+        <label>Senha</label>
+        <input type="password" id="senha" placeholder="••••••••">
+      </div>
+      <button class="btn" id="btn-login">Entrar e Carregar Dados</button>
+      <div id="auth-error" style="color: var(--danger); margin-top: 12px; font-size: 0.875rem; text-align: center; display: none;"></div>
+    </div>
+
+    <div id="dashboard" class="dashboard">
+      <div class="stats-grid">
+        <div class="stat-card">
+          <h3>Total de Peças Analisadas</h3>
+          <div class="value" id="stat-total">0</div>
+        </div>
+        <div class="stat-card success">
+          <h3>Consertados (Custo Real)</h3>
+          <div class="value" id="stat-fixed">0</div>
+        </div>
+        <div class="stat-card warning">
+          <h3>Pendentes (Preço de Venda)</h3>
+          <div class="value" id="stat-pending">0</div>
+        </div>
+      </div>
+
+      <div class="controls">
+        <div class="search-box">
+          <input type="text" id="search" placeholder="Buscar por código ou descrição...">
+        </div>
+        <div class="filters">
+          <select id="filter-status">
+            <option value="all">Todos os Status</option>
+            <option value="consertado">✅ Consertados (Custo Caiu)</option>
+            <option value="pendente">⚠️ Pendentes (Preço Antigo)</option>
+            <option value="novo">ℹ️ Sem Histórico (Novo/Manual)</option>
+          </select>
+        </div>
+        <div class="global-actions">
+          <button class="btn-global success" id="btn-fix-all-history" onclick="corrigirTodosHistoricos()">
+            🔄 Corrigir Histórico de Todos "Consertados"
+          </button>
+        </div>
+      </div>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Código</th>
+              <th>Descrição</th>
+              <th>Status</th>
+              <th>Preço Antigo</th>
+              <th>Custo Atual</th>
+              <th>Variação</th>
+              <th>Ações Rápidas</th>
+            </tr>
+          </thead>
+          <tbody id="table-body">
+            <!-- Linhas geradas via JS -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+
+  <div id="loading-overlay">
+    <div class="spinner"></div>
+    <div id="loading-text" style="color: var(--text-muted); font-weight: 500;">Carregando dados...</div>
+  </div>
+
+  <script type="module">
+    import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js/+esm";
+
+    const supabaseUrl = 'https://idpmrjjalhnpsxpfugph.supabase.co';
+    const supabaseAnonKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkcG1yamphbGhucHN4cGZ1Z3BoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc2NjU2NjcsImV4cCI6MjA5MzI0MTY2N30.L4hV7YM9yjdOOW9zBl84L-1si2DU8nBI3J1WgmW02lY';
+    window.supabase = createClient(supabaseUrl, supabaseAnonKey);
+
+    window.allItems = [];
+    window.recovered64Codes = ["001R00613","013R00662NO","064K93623P","P1025950-019","302LV93080","302LV93134P","302LV94130","P1025950-014","2222770","JC90-01279B","JC9101023ARS","MLTD203USSTEP","113R00780","01001606065","01001806062","302F909171BORR","T12C120-AL","DR3440P","841919R","40X8023SP","FA39001","T671600P","T11A320-ALP","D1496097P","T11A420-ALP","ROLPRESS3710P","T04D100","T524220-AL","FA42041","P1058930-009","T524320-AL","418126","ROLOFS4100P","418094","FA42042","407823MR","408284P","T671600","302RV93010P","T12C120-ALP","P1080383-721","T05B200","T05B300","T05B400","T504420-ALP","D1174050P","RIC-0084","AF032100","R306C","R306Y","790","841920R","841921R","C12C938211","D2416141","T11A220-AL","W1332ACP","W1330XCP","T962120-ALP","T942120-AL","TK-3182P","TK-3162P","TK-1175P","TK3122P"];
+
+    document.getElementById('btn-login').addEventListener('click', async () => {
+      const email = document.getElementById('email').value;
+      const senha = document.getElementById('senha').value;
+      const errorDiv = document.getElementById('auth-error');
+      const btn = document.getElementById('btn-login');
+
+      btn.disabled = true;
+      btn.textContent = 'Autenticando...';
+      errorDiv.style.display = 'none';
+
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password: senha });
+      
+      if (error) {
+        errorDiv.textContent = 'Erro ao logar: ' + error.message;
+        errorDiv.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Entrar e Carregar Dados';
+        return;
+      }
+
+      document.getElementById('auth-section').style.display = 'none';
+      document.getElementById('user-info').style.display = 'block';
+      document.getElementById('user-info').textContent = data.user.email;
+      
+      await carregarDados();
+    });
+
+
+
+    function showLoading(text) {
+      document.getElementById('loading-overlay').style.display = 'flex';
+      document.getElementById('loading-text').textContent = text;
+    }
+
+    function hideLoading() {
+      document.getElementById('loading-overlay').style.display = 'none';
+      document.getElementById('dashboard').style.display = 'block';
+    }
+
+    function formatMoney(value) {
+      if (value === null || value === undefined) return '-';
+      return 'R$ ' + parseFloat(value).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
+    async function carregarDados() {
+      showLoading('Buscando peças e custos...');
+
+      const { data: partsData } = await supabase.from('parts').select('code, description');
+      const partsMap = {};
+      (partsData || []).forEach(p => partsMap[p.code] = p.description);
+
+      const { data: costsData } = await supabase.from('custos').select('*');
+      
+      showLoading('Buscando histórico de entradas (isso pode levar alguns segundos)...');
+
+      let allEntradas = [];
+      let start = 0;
+      const limit = 1000;
+      while(true) {
+        const { data: hData, error: hError } = await supabase.from('historico')
+          .select('id, code, vlr_unit, qty, ts')
+          .eq('tipo', 'entrada')
+          .range(start, start + limit - 1)
+          .order('ts', { ascending: true });
+          
+        if (hError || !hData || hData.length === 0) break;
+        allEntradas.push(...hData);
+        start += limit;
+      }
+
+      const historyByCode = {};
+      allEntradas.forEach(e => {
+        if(!historyByCode[e.code]) historyByCode[e.code] = [];
+        historyByCode[e.code].push(e);
+      });
+
+      window.allItems = (costsData || []).map(c => {
+        const code = c.code;
+        const desc = partsMap[code] || 'Sem descrição';
+        const currentCost = c.last_cost || 0;
+        
+        const history = historyByCode[code] || [];
+        let maxHistoricalCost = currentCost;
+        let status = 'novo';
+
+        // Determinar o maior custo já registrado (geralmente o primeiro de venda antes da correção)
+        if (history.length > 0) {
+          maxHistoricalCost = Math.max(...history.map(h => h.vlr_unit || 0));
+          
+          if (currentCost < maxHistoricalCost * 0.95) {
+            status = 'consertado';
+          } else if (currentCost >= maxHistoricalCost * 0.95) {
+            status = 'pendente';
+          }
+        } else {
+          if (currentCost > 0) status = 'pendente';
+        }
+
+        const diffPercent = maxHistoricalCost > 0 ? ((currentCost - maxHistoricalCost) / maxHistoricalCost) * 100 : 0;
+
+        return {
+          code,
+          desc,
+          currentCost,
+          maxHistoricalCost,
+          diffPercent,
+          status,
+          history
+        };
+      });
+
+      hideLoading();
+      atualizarDashboard();
+    }
+
+    function atualizarDashboard() {
+      const termoBusca = document.getElementById('search').value.toLowerCase();
+      const statusFiltro = document.getElementById('filter-status').value;
+
+      const filtrados = window.allItems.filter(item => {
+        const matchBusca = item.code.toLowerCase().includes(termoBusca) || item.desc.toLowerCase().includes(termoBusca);
+        const matchStatus = statusFiltro === 'all' || item.status === statusFiltro;
+        return matchBusca && matchStatus;
+      });
+
+      document.getElementById('stat-total').textContent = filtrados.length;
+      document.getElementById('stat-fixed').textContent = filtrados.filter(i => i.status === 'consertado').length;
+      document.getElementById('stat-pending').textContent = filtrados.filter(i => i.status === 'pendente').length;
+
+      const tbody = document.getElementById('table-body');
+      tbody.innerHTML = '';
+
+      filtrados.sort((a, b) => {
+        if (a.status === 'pendente' && b.status !== 'pendente') return -1;
+        if (a.status !== 'pendente' && b.status === 'pendente') return 1;
+        return a.diffPercent - b.diffPercent;
+      });
+
+      filtrados.forEach(item => {
+        const tr = document.createElement('tr');
+        const isRecovered = window.recovered64Codes.includes(item.code);
+
+        if (isRecovered) {
+          tr.style.backgroundColor = 'rgba(16, 185, 129, 0.1)';
+          tr.style.borderLeft = '4px solid var(--success)';
+        }
+        
+        let statusBadge = '';
+        if (isRecovered) statusBadge = '<span class="status-badge status-consertado">✅ Recuperado</span>';
+        else if (item.status === 'consertado') statusBadge = '<span class="status-badge status-consertado">✅ Consertado</span>';
+        else if (item.status === 'pendente') statusBadge = '<span class="status-badge status-pendente">⚠️ Pendente</span>';
+        else statusBadge = '<span class="status-badge status-novo">ℹ️ Sem Hist.</span>';
+
+        let diffHtml = '<span class="diff-none">-</span>';
+        if (item.diffPercent < -1) diffHtml = `<span class="diff-down">↓ ${Math.abs(item.diffPercent).toFixed(1)}%</span>`;
+        else if (item.diffPercent > 1) diffHtml = `<span class="diff-up">↑ ${item.diffPercent.toFixed(1)}%</span>`;
+        else if (item.diffPercent !== 0) diffHtml = `<span class="diff-none">${item.diffPercent.toFixed(1)}%</span>`;
+
+        // Ações Baseadas no Status
+        let acoesHtml = '';
+        
+        // Input para edição (presente em todos para flexibilidade)
+        acoesHtml += `
+          <div class="row-actions">
+            <input type="number" id="input-${item.code}" class="input-cost" value="${item.currentCost}" step="0.01" title="Novo Custo">
+            <button class="btn-sm btn-save" onclick="salvarNovoCusto('${item.code}')">Salvar</button>
+        `;
+
+        // Se tiver histórico e for Consertado (ou Pendente recém salvo), permite corrigir histórico
+        if (item.history.length > 0) {
+           acoesHtml += `<button class="btn-sm btn-fix" id="btn-hist-${item.code}" onclick="corrigirHistoricoItem('${item.code}')">Sinc. Histórico</button>`;
+        }
+        
+        acoesHtml += `</div>`;
+
+        tr.innerHTML = `
+          <td class="code">${item.code}</td>
+          <td><div class="desc" title="${item.desc}">${item.desc}</div></td>
+          <td id="status-${item.code}">${statusBadge}</td>
+          <td class="price old">${item.maxHistoricalCost > 0 && item.maxHistoricalCost !== item.currentCost ? formatMoney(item.maxHistoricalCost) : '-'}</td>
+          <td class="price" id="current-${item.code}">${formatMoney(item.currentCost)}</td>
+          <td>${diffHtml}</td>
+          <td>${acoesHtml}</td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    document.getElementById('search').addEventListener('input', atualizarDashboard);
+    document.getElementById('filter-status').addEventListener('change', atualizarDashboard);
+
+    // FUNÇÕES DE AÇÃO
+
+    window.salvarNovoCusto = async (code) => {
+      const inputVal = document.getElementById(`input-${code}`).value;
+      const novoCusto = parseFloat(inputVal);
+      
+      if (isNaN(novoCusto) || novoCusto < 0) {
+        alert("Valor inválido.");
+        return;
+      }
+
+      showLoading('Salvando novo custo...');
+      
+      // Atualiza na tabela custos
+      const { error } = await window.supabase.from('custos')
+        .update({ last_cost: novoCusto, last_cost_date: new Date().toISOString() })
+        .eq('code', code);
+
+      if (error) {
+        hideLoading();
+        alert('Erro ao salvar custo: ' + error.message);
+        return;
+      }
+
+      // Pergunta se quer arrumar o histórico também (se tiver histórico)
+      const item = window.allItems.find(i => i.code === code);
+      if (item && item.history.length > 0) {
+        if (confirm('Custo salvo com sucesso!\nDeseja também retroagir esse valor para todas as notas antigas dessa peça no Histórico?')) {
+           await processarCorrecaoHistorico(code, novoCusto);
+        }
+      } else {
+        alert('Custo salvo com sucesso!');
+      }
+
+      hideLoading();
+      
+      // Adiciona o código na lista de recuperados para ficar verde
+      if (!window.recovered64Codes.includes(code)) {
+        window.recovered64Codes.push(code);
+      }
+
+      // Recarrega tudo para atualizar a tela
+      await carregarDados();
+    };
+
+    window.corrigirHistoricoItem = async (code) => {
+      const item = window.allItems.find(i => i.code === code);
+      if (!item) return;
+
+      if (!confirm(`Sincronizar todo o histórico da peça ${code} para o valor de R$ ${item.currentCost}?`)) return;
+
+      showLoading(`Corrigindo histórico de ${code}...`);
+      await processarCorrecaoHistorico(code, item.currentCost);
+      hideLoading();
+      
+      if (!window.recovered64Codes.includes(code)) {
+        window.recovered64Codes.push(code);
+      }
+      
+      const btn = document.getElementById(`btn-hist-${code}`);
+      if (btn) {
+        btn.textContent = '✅ Sincronizado';
+        btn.classList.add('done');
+      }
+      
+      await carregarDados();
+    };
+
+    window.corrigirTodosHistoricos = async () => {
+      const consertados = window.allItems.filter(i => i.status === 'consertado' && i.history.length > 0);
+      
+      if (consertados.length === 0) {
+        alert("Não há peças com status 'Consertado' pendentes para corrigir.");
+        return;
+      }
+
+      if (!confirm(`Você está prestes a corrigir o histórico de ${consertados.length} peças para que todas as entradas passadas reflitam o NOVO custo real. Isso pode demorar alguns minutos.\n\nDeseja continuar?`)) {
+        return;
+      }
+
+      showLoading('Corrigindo históricos em lote. Por favor, aguarde...');
+
+      let erros = 0;
+      let sucesso = 0;
+
+      // Usando for...of para processar em série e não sobrecarregar o DB
+      for (const item of consertados) {
+        const ok = await processarCorrecaoHistorico(item.code, item.currentCost);
+        if (ok) sucesso++;
+        else erros++;
+        
+        document.getElementById('loading-text').textContent = `Corrigindo históricos em lote... (${sucesso + erros} de ${consertados.length})`;
+      }
+
+      hideLoading();
+      alert(`Processo finalizado!\nPeças atualizadas com sucesso: ${sucesso}\nErros: ${erros}`);
+      await carregarDados();
+    };
+
+    async function processarCorrecaoHistorico(code, novoValor) {
+      // 1. Busca todos os históricos dessa peça
+      const { data: historicos, error: errFetch } = await window.supabase.from('historico')
+        .select('id, qty, vlr_unit')
+        .eq('code', code)
+        .eq('tipo', 'entrada'); // Apenas as entradas alteraram o custo (ou saídas também? O usuário falou de notas. Geralmente é entrada)
+      
+      if (errFetch || !historicos) return false;
+
+      // 2. Atualiza um por um (Supabase JS não suporta update batch dinâmico fácil com cálculo vlr_total)
+      let deuErro = false;
+      for (const hist of historicos) {
+        // Se o valor já estiver correto, ignora
+        if (hist.vlr_unit === novoValor) continue;
+
+        const novoVlrTotal = hist.qty * novoValor;
+        const { error: errUpdate } = await window.supabase.from('historico')
+          .update({ 
+            vlr_unit: novoValor,
+            vlr_total: novoVlrTotal
+          })
+          .eq('id', hist.id);
+
+        if (errUpdate) deuErro = true;
+      }
+      
+      // Corrigir as Saídas também para não dar distorção financeira? (Opcional, mas recomendado. Vamos atualizar todas as movimentações da peça)
+      const { data: histSaidas } = await window.supabase.from('historico')
+        .select('id, qty, vlr_unit')
+        .eq('code', code)
+        .eq('tipo', 'saída');
+        
+      if (histSaidas) {
+        for (const hist of histSaidas) {
+          if (hist.vlr_unit === novoValor) continue;
+          const { error: errUpdate } = await window.supabase.from('historico')
+            .update({ 
+              vlr_unit: novoValor,
+              vlr_total: hist.qty * novoValor
+            })
+            .eq('id', hist.id);
+        }
+      }
+
+      return !deuErro;
+    }
+
+
+
+  </script>
+</body>
+</html>

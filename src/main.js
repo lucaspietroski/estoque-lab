@@ -46,63 +46,15 @@ window.formatSearchQuery = (val) => {
 };
 
 // --- MODO CUSTO REAL PERMANENTE ---
-window.priceDisplayMode = 'REAL_COST';
 
 window.getDisplayValue = (item, valKey) => {
     if (!item) return 0;
-    const rawVal = Number(item[valKey]) || 0;
-    
-    if (window.priceDisplayMode === 'REAL_COST') {
-        // Usa custo_real se existir na entidade, senão usa o fallback (simulação legado)
-        // Se a entidade não foi passada corretamente e só veio o valor bruto, aplicamos a simulação.
-        if (item.custo_real !== undefined && item.custo_real !== null) {
-            return Number(item.custo_real);
-        }
-        return rawVal / 1.90;
-    }
-    
-    return rawVal;
+    return Number(item[valKey]) || 0;
 };
 
 // Retrocompatibilidade temporária para código que passava apenas o número
 window.adjC = (val) => {
-    if (window.priceDisplayMode === 'REAL_COST') {
-        return Number(val) / 1.90;
-    }
     return Number(val);
-};
-
-window.toggleModeCusto = () => {
-    window.priceDisplayMode = window.priceDisplayMode === 'REAL_COST' ? 'SALE_VALUE' : 'REAL_COST';
-    window.updateModeCustoBtn();
-
-    // Recarregar a tela atual que exibe custos
-    if (currentTab === 'dashboard') updateDashboard();
-    if (currentTab === 'modelo-custo') renderModeloCusto();
-    if (currentTab === 'movimentacoes') renderMovDashboard();
-    if (currentTab === 'historico') renderHistorico();
-    if (currentTab === 'estoque') renderEstoque();
-};
-
-window.updateModeCustoBtn = () => {
-    const btn = document.getElementById('btn-toggle-custo');
-    const badge = document.getElementById('custo-real-badge');
-    const active = window.priceDisplayMode === 'REAL_COST';
-
-    // Badge no header
-    if (badge) badge.style.display = active ? 'inline-flex' : 'none';
-
-    // Botão no menu admin
-    if (!btn) return;
-    if (active) {
-        btn.style.background = '#10b981';
-        btn.style.color = '#ffffff';
-        btn.textContent = '💲 Modo Custo Real (ATIVADO)';
-    } else {
-        btn.style.background = 'var(--bg-hover)';
-        btn.style.color = 'var(--text)';
-        btn.textContent = '💲 Modo Custo Real (DESATIVADO)';
-    }
 };
 
 // --- ELEMENTOS DOM ---
@@ -118,7 +70,6 @@ const adminBadge = document.getElementById('admin-badge');
 async function init() {
     console.log('🚀 Inicializando sistema...');
     renderChips();
-    window.updateModeCustoBtn();
 
     const { data: { session } } = await supabase.auth.getSession();
     currentUser = session?.user || null;
@@ -881,6 +832,29 @@ function openEditModal(code, desc) {
     document.getElementById('modal-overlay').classList.add('open');
 }
 
+window.syncHistoricoCustos = async (code, newPrice) => {
+    try {
+        const updateHistForTable = async (tableName) => {
+            const { data: hist } = await supabase.from(tableName).select('id, qty, vlr_unit').eq('code', code);
+            if (hist && hist.length > 0) {
+                for (const h of hist) {
+                    if (h.vlr_unit !== newPrice) {
+                        await supabase.from(tableName).update({
+                            vlr_unit: newPrice,
+                            vlr_total: h.qty * newPrice
+                        }).eq('id', h.id);
+                    }
+                }
+            }
+        };
+        await updateHistForTable('historico');
+        await updateHistForTable('historico_remanu');
+        await updateHistForTable('historico_3d');
+    } catch (e) {
+        console.error("Erro ao sincronizar historico para o code " + code, e);
+    }
+};
+
 async function savePriceModal() {
     if (!currentUser || currentUser.email !== 'lucas.araujo@selbetti.com.br') {
         alert('❌ Permissão negada! Apenas o usuário lucas.araujo@selbetti.com.br pode realizar ajustes manuais.');
@@ -903,6 +877,7 @@ async function savePriceModal() {
     try {
         await supabase.from(getEstoqueTable()).upsert({ code: currentEditCode, qty });
         await supabase.from('custos').upsert({ code: currentEditCode, last_cost: price });
+        await window.syncHistoricoCustos(currentEditCode, price);
 
         const formatChange = `AJUSTE MANUAL: ${obs} (Qtd: ${currentEditPrevQty} ➡️ ${qty} | Preço: R$ ${currentEditPrevPrice.toFixed(2)} ➡️ R$ ${price.toFixed(2)})`;
 
@@ -1459,6 +1434,9 @@ window.confirmarImportacaoXML = async () => {
             if (vlrUnit > 0) {
                 const { error: errCust } = await supabase.from('custos').upsert({ code, last_cost: vlrUnit });
                 if (errCust) throw new Error(`Custos: ${errCust.message}`);
+                
+                // Nova Regra: Atualiza todo o histórico passado com o novo custo real
+                await window.syncHistoricoCustos(code, vlrUnit);
             }
 
             if (currentUser) {
