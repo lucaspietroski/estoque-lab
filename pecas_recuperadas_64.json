@@ -1,0 +1,260 @@
+[
+  {
+    "code": "302F909171BORR",
+    "desc": "",
+    "currentCost": 13.26,
+    "oldCost": 25.19
+  },
+  {
+    "code": "302LV93080",
+    "desc": "",
+    "currentCost": 570,
+    "oldCost": 1283.051
+  },
+  {
+    "code": "302LV93134P",
+    "desc": "",
+    "currentCost": 550.2415,
+    "oldCost": 1045.44
+  },
+  {
+    "code": "302LV94130",
+    "desc": "",
+    "currentCost": 50,
+    "oldCost": 95
+  },
+  {
+    "code": "001R00613",
+    "desc": "",
+    "currentCost": 319.395,
+    "oldCost": 606.85
+  },
+  {
+    "code": "013R00662NO",
+    "desc": "",
+    "currentCost": 1327.6063,
+    "oldCost": 2238.53
+  },
+  {
+    "code": "064K93623P",
+    "desc": "",
+    "currentCost": 662.234,
+    "oldCost": 1052.97
+  },
+  {
+    "code": "P1025950-019",
+    "desc": "",
+    "currentCost": 0,
+    "oldCost": 948.1
+  },
+  {
+    "code": "P1025950-014",
+    "desc": "",
+    "currentCost": 100,
+    "oldCost": 190
+  },
+  {
+    "code": "01001806062",
+    "desc": "",
+    "currentCost": 38,
+    "oldCost": 72.2
+  },
+  {
+    "code": "JC90-01279B",
+    "desc": "",
+    "currentCost": 20,
+    "oldCost": 38
+  },
+  {
+    "code": "JC9101023ARS",
+    "desc": "",
+    "currentCost": 55,
+    "oldCost": 104.5
+  },
+  {
+    "code": "MLTD203USSTEP",
+    "desc": "",
+    "currentCost": 61,
+    "oldCost": 121.41
+  },
+  {
+    "code": "T12C120-AL",
+    "desc": "",
+    "currentCost": 571.7531,
+    "oldCost": 1092.8
+  },
+  {
+    "code": "DR3440P",
+    "desc": "",
+    "currentCost": 53.8,
+    "oldCost": 102.22
+  },
+  {
+    "code": "40X8023SP",
+    "desc": "",
+    "currentCost": 475,
+    "oldCost": 902.5
+  },
+  {
+    "code": "FA39001",
+    "desc": "",
+    "currentCost": 1421.555,
+    "oldCost": 1589.046
+  },
+  {
+    "code": "T671600P",
+    "desc": "",
+    "currentCost": 65,
+    "oldCost": 123.5
+  },
+  {
+    "code": "T11A320-ALP",
+    "desc": "",
+    "currentCost": 124.9296,
+    "oldCost": 218.5
+  },
+  {
+    "code": "C12C938211",
+    "desc": "",
+    "currentCost": 138.2725,
+    "oldCost": 173.93
+  },
+  {
+    "code": "T11A420-ALP",
+    "desc": "",
+    "currentCost": 124.9296,
+    "oldCost": 218.5
+  },
+  {
+    "code": "T04D100",
+    "desc": "",
+    "currentCost": 46.9729,
+    "oldCost": 89.25
+  },
+  {
+    "code": "T524220-AL",
+    "desc": "",
+    "currentCost": 59.82,
+    "oldCost": 113.66
+  },
+  {
+    "code": "FA42041",
+    "desc": "",
+    "currentCost": 690.88,
+    "oldCost": 1312.67
+  },
+  {
+    "code": "P1058930-009",
+    "desc": "",
+    "currentCost": 1594.78,
+    "oldCost": 3030.082
+  },
+  {
+    "code": "T524320-AL",
+    "desc": "",
+    "currentCost": 59.83,
+    "oldCost": 113.67
+  },
+  {
+    "code": "418126",
+    "desc": "",
+    "currentCost": 253.47,
+    "oldCost": 481.59
+  },
+  {
+    "code": "ROLOFS4100P",
+    "desc": "",
+    "currentCost": 39.9,
+    "oldCost": 75.81
+  },
+  {
+    "code": "418094",
+    "desc": "",
+    "currentCost": 474.0712,
+    "oldCost": 900.7353
+  },
+  {
+    "code": "AF032100",
+    "desc": "",
+    "currentCost": 147.584,
+    "oldCost": 280.4096
+  },
+  {
+    "code": "T11A220-AL",
+    "desc": "",
+    "currentCost": 226.9086,
+    "oldCost": 433.69
+  },
+  {
+    "code": "FA42042",
+    "desc": "",
+    "currentCost": 799.97,
+    "oldCost": 1519.94
+  },
+  {
+    "code": "407823MR",
+    "desc": "",
+    "currentCost": 85,
+    "oldCost": 199.5
+  },
+  {
+    "code": "408284P",
+    "desc": "",
+    "currentCost": 62,
+    "oldCost": 123.5
+  },
+  {
+    "code": "T671600",
+    "desc": "",
+    "currentCost": 91.5411,
+    "oldCost": 173.93
+  },
+  {
+    "code": "T12C120-ALP",
+    "desc": "",
+    "currentCost": 257.1018,
+    "oldCost": 530.1
+  },
+  {
+    "code": "W1332ACP",
+    "desc": "",
+    "currentCost": 94.99,
+    "oldCost": 180.48
+  },
+  {
+    "code": "W1330XCP",
+    "desc": "",
+    "currentCost": 72.6519,
+    "oldCost": 138.04
+  },
+  {
+    "code": "T962120-ALP",
+    "desc": "",
+    "currentCost": 298,
+    "oldCost": 566.2
+  },
+  {
+    "code": "T942120-AL",
+    "desc": "",
+    "currentCost": 219.8555,
+    "oldCost": 417.7255
+  },
+  {
+    "code": "TK-3182P",
+    "desc": "",
+    "currentCost": 75,
+    "oldCost": 163.59
+  },
+  {
+    "code": "TK-3162P",
+    "desc": "",
+    "currentCost": 76.18,
+    "oldCost": 144.74
+  },
+  {
+    "code": "TK3122P",
+    "desc": "",
+    "currentCost": 78.99,
+    "oldCost": 150.08
+  }
+]

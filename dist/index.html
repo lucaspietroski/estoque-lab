@@ -17,7 +17,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Fira+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-  <script type="module" crossorigin src="/assets/index-BrNPSCzi.js"></script>
+  <script type="module" crossorigin src="/assets/index-BAfHz5eC.js"></script>
   <link rel="stylesheet" crossorigin href="/assets/index-Tj5o7Hm3.css">
 </head>
 <body>
@@ -87,6 +87,7 @@
     <button class="tab-btn" data-tab="historico">📋 Histórico</button>
     <button class="tab-btn" data-tab="movimentacoes">📈 Movimentações</button>
     <button class="tab-btn" data-tab="modelo-custo">💰 Custo/Modelo</button>
+    <button class="tab-btn" data-tab="retorno">🔄 Retorno (Reversa)</button>
     <button class="tab-btn" data-tab="auditoria" id="tab-btn-auditoria" style="display:none">🔍 Auditoria</button>
     <button class="tab-btn" data-tab="sec-audit" id="tab-btn-sec-audit" style="display:none; color: var(--orange); font-weight: 800;">🔒 Audit Corporativa</button>
   </div>
@@ -469,6 +470,78 @@
     </div>
   </div>
 
+  <!-- VIEW RETORNO (REVERSA) -->
+  <div id="view-retorno" class="view" style="display:none;">
+    <div class="mov-container">
+      <div class="mov-header" style="display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          <h2>🔄 Retorno de Peças (Logística Reversa)</h2>
+          <p style="color:var(--text-muted); font-size:13px;">Acompanhamento das devoluções enviadas à Logística (Sobra ou Garantia).</p>
+        </div>
+        <button class="btn-admin" onclick="window.openRetornoModal()" style="height: 42px; background: #8b5cf6; color: white;">➕ Nova Devolução</button>
+      </div>
+
+      <!-- KPIs de Retorno -->
+      <div class="dash-cards" style="margin-bottom: 25px;">
+        <div class="dash-card c-stock" style="border-top-color: #8b5cf6;">
+          <div class="dash-card-label">VALOR RECUPERADO (SOBRA)</div>
+          <div class="dash-card-value" id="ret-kpi-sobra">R$ 0,00</div>
+          <div class="dash-card-sub">Peças intactas devolvidas</div>
+        </div>
+        <div class="dash-card c-low" style="border-top-color: #f59e0b;">
+          <div class="dash-card-label">VALOR RECUPERADO (GARANTIA)</div>
+          <div class="dash-card-value" id="ret-kpi-garantia">R$ 0,00</div>
+          <div class="dash-card-sub">Estorno de peças com defeito</div>
+        </div>
+        <div class="dash-card c-total" style="border-top-color: #10b981;">
+          <div class="dash-card-label">TOTAL ABATIDO NO LABORATÓRIO</div>
+          <div class="dash-card-value" id="ret-kpi-total" style="color: #10b981;">R$ 0,00</div>
+          <div class="dash-card-sub">Crédito geral acumulado</div>
+        </div>
+      </div>
+
+      <!-- Filtros de Retorno -->
+      <div class="card" style="margin-bottom: 25px; padding: 15px; border-radius: 8px;">
+        <div style="display: flex; gap: 15px; align-items: flex-end;">
+          <div style="flex:1">
+            <div class="modal-label">Buscar por Peça, SELB ou OS</div>
+            <input type="text" id="ret-search" class="modal-input" placeholder="Digite para filtrar..." style="margin:0">
+          </div>
+          <div>
+            <div class="modal-label">Tipo</div>
+            <select id="ret-tipo" class="modal-input" style="margin:0; width:150px;">
+              <option value="">Todos</option>
+              <option value="retorno_sobra">Sobra</option>
+              <option value="retorno_garantia">Garantia</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tabela de Retornos -->
+      <div class="table-wrap">
+        <table class="dash-table">
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>OS Reversa</th>
+              <th>Tipo</th>
+              <th>SELB (Gar)</th>
+              <th>Código</th>
+              <th>Descrição</th>
+              <th style="text-align:center">Qtd</th>
+              <th style="text-align:right">Valor Recuperado</th>
+              <th>Usuário</th>
+            </tr>
+          </thead>
+          <tbody id="ret-tbody">
+            <tr><td colspan="9" style="text-align:center; padding: 30px;">Carregando histórico de retornos...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
   <!-- VIEW EQUIPAMENTOS (ADMIN) -->
   <div id="view-bi-equipamentos" class="view">
     <div class="mov-container">
@@ -829,6 +902,93 @@
     <div class="modal-btns">
       <button class="btn-cancel" onclick="closeSaidaModal()">Cancelar</button>
       <button class="btn-confirm" id="saida-confirm-btn" onclick="confirmarSaida()">Finalizar Baixa</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL RETORNO DE PEÇAS (REVERSA) -->
+<div class="modal-overlay" id="modal-retorno-overlay">
+  <div class="modal-box saida-batch" style="max-width: 700px;">
+    <h3>🔄 Nova Devolução para Logística (Reversa)</h3>
+    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;">
+      As devoluções abatem custos do laboratório. Sobras reduzem do saldo disponível, Garantias reduzem o custo aplicado ao SELB.
+    </p>
+
+    <!-- Tipo de Devolução -->
+    <div style="margin-bottom: 15px; background: var(--surface2); padding: 15px; border-radius: 8px; border: 1px solid var(--border);">
+      <div class="modal-label">Tipo de Devolução (Selecione primeiro)</div>
+      <select id="retorno-tipo-select" class="modal-input" style="margin: 0;" onchange="window.toggleRetornoFields()">
+        <option value="retorno_sobra">Sobra (Peça intacta do estoque)</option>
+        <option value="retorno_garantia">Garantia (Peça com defeito baixada num SELB)</option>
+      </select>
+    </div>
+
+    <!-- Input de SELB (Visível apenas se Garantia) -->
+    <div id="retorno-selb-container" style="display: none; margin-bottom: 15px; padding: 15px; border: 1px dashed var(--orange); border-radius: 8px; background: var(--yellow-light);">
+      <div class="modal-label" style="color: #7d4a00; font-weight: bold;">SELB da Máquina onde a peça falhou * (Exato, 4 caracteres)</div>
+      <input type="text" class="modal-input" id="retorno-selb-input" maxlength="4" placeholder="Ex: 1234" style="margin: 0; border-color: var(--orange);">
+      <div style="font-size: 11px; color: #7d4a00; margin-top: 5px;">O sistema buscará a baixa original deste SELB para estornar o valor diretamente no custo do equipamento.</div>
+    </div>
+
+    <!-- Busca e Adição de Peças -->
+    <div class="saida-search-box" style="margin-bottom: 15px; position: relative;">
+      <div class="modal-label">Busca da Peça por Descrição (use % como coringa)</div>
+      <input type="text" class="modal-input" id="retorno-busca-desc" placeholder="Ex: ROLO%FUSOR" oninput="window.buscarPecaPorDescRetorno(this.value)" autocomplete="off">
+      <div id="retorno-pecas-sugestoes" style="display:none; position:absolute; top:100%; left:0; width:100%; background:var(--bg); border:1px solid var(--border); border-radius:8px; max-height:200px; overflow-y:auto; z-index:1000; box-shadow:0 4px 12px rgba(0,0,0,0.15);"></div>
+    </div>
+
+    <div class="saida-grid" style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; margin-bottom: 15px;">
+      <div>
+        <div class="modal-label">Código da Peça</div>
+        <input type="text" class="modal-input" id="retorno-peca" placeholder="Ex: CE123">
+      </div>
+      <div>
+        <div class="modal-label">Quantidade para Devolver</div>
+        <input type="number" class="modal-input" id="retorno-qtd" value="1" min="1">
+      </div>
+      <div>
+        <button class="btn-admin" onclick="window.addRetornoItem()" style="height: 42px; background: #8b5cf6;">Adicionar</button>
+      </div>
+    </div>
+    
+    <!-- Carrinho de Devolução -->
+    <div class="saida-table-wrap" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border); margin-bottom: 15px;">
+      <table style="margin: 0; width: 100%;">
+        <thead>
+          <tr>
+            <th>Código</th>
+            <th>Descrição</th>
+            <th style="text-align:center">Qtd</th>
+            <th style="text-align:right">Total Recuperado</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="retorno-tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- Informações da OS (Obrigatório) -->
+    <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+      <div style="flex: 1;">
+        <div class="modal-label" style="font-weight: bold;">Nº da OS de Reversa * (Apenas Números)</div>
+        <input type="text" class="modal-input" id="retorno-os-input" placeholder="Ex: 582910" pattern="\d*" oninput="this.value = this.value.replace(/[^0-9]/g, '');" style="border: 2px solid #8b5cf6;">
+      </div>
+      <div style="flex: 2;">
+        <div class="modal-label">Observação Interna (Opcional)</div>
+        <input type="text" class="modal-input" id="retorno-obs-input" placeholder="Ex: Motor com barulho, OS devolvida.">
+      </div>
+    </div>
+
+    <div class="saida-footer" style="display: flex; justify-content: flex-end; background: var(--bg-hover); padding: 10px; border-radius: 8px; margin-bottom: 20px;">
+      <div style="font-size: 14px;">
+        <span>Itens: <strong id="retorno-count">0</strong></span>
+        <span style="margin-left: 15px;">Crédito Previsto: <strong id="retorno-total" style="color: #10b981;">R$ 0.00</strong></span>
+      </div>
+    </div>
+
+    <div class="modal-btns">
+      <button class="btn-cancel" onclick="window.closeRetornoModal()">Cancelar</button>
+      <button class="btn-confirm" id="retorno-confirm-btn" onclick="window.confirmarRetorno()" style="background: #8b5cf6;">Salvar Devolução no Sistema</button>
     </div>
   </div>
 </div>
