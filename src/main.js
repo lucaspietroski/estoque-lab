@@ -3573,7 +3573,7 @@ window.renderRetornoTab = async () => {
         else totGarantia += d.vlr_total;
 
         const badgeTipo = isSobra ? 
-            `<span style="background: #8b5cf6; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px;">SOBRA</span>` : 
+            `<span style="background: #10b981; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px;">SOBRA</span>` : 
             `<span style="background: #f59e0b; color: white; padding: 2px 8px; border-radius: 4px; font-size: 10px;">GARANTIA</span>`;
 
         return `<tr>

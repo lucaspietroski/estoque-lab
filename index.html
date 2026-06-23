@@ -477,12 +477,12 @@
           <h2>🔄 Retorno de Peças (Logística Reversa)</h2>
           <p style="color:var(--text-muted); font-size:13px;">Acompanhamento das devoluções enviadas à Logística (Sobra ou Garantia).</p>
         </div>
-        <button class="btn-admin" onclick="window.openRetornoModal()" style="height: 42px; background: #8b5cf6; color: white;">➕ Nova Devolução</button>
+        <button class="btn-admin" onclick="window.openRetornoModal()" style="height: 42px; background: #10b981; color: white;">➕ Nova Devolução</button>
       </div>
 
       <!-- KPIs de Retorno -->
       <div class="dash-cards" style="margin-bottom: 25px;">
-        <div class="dash-card c-stock" style="border-top-color: #8b5cf6;">
+        <div class="dash-card c-stock" style="border-top-color: #10b981;">
           <div class="dash-card-label">VALOR RECUPERADO (SOBRA)</div>
           <div class="dash-card-value" id="ret-kpi-sobra">R$ 0,00</div>
           <div class="dash-card-sub">Peças intactas devolvidas</div>
@@ -805,7 +805,7 @@
             <button class="btn-admin" id="btn-run-audit" onclick="window.runSecurityAudit()" style="flex: 1; height: 50px; font-size: 16px; border-radius: 8px; justify-content: center; background: var(--orange); border-color: var(--orange);">
               🚀 Executar Inventário
             </button>
-            <button class="btn-admin" id="btn-run-analysis" onclick="window.runFileAnalysis()" style="flex: 1; height: 50px; font-size: 16px; border-radius: 8px; justify-content: center; background: #8b5cf6; border-color: #8b5cf6; display: none;">
+            <button class="btn-admin" id="btn-run-analysis" onclick="window.runFileAnalysis()" style="flex: 1; height: 50px; font-size: 16px; border-radius: 8px; justify-content: center; background: #10b981; border-color: #10b981; display: none;">
               🔍 Analisar Arquivos
             </button>
           </div>
@@ -909,12 +909,12 @@
 <div class="modal-overlay" id="modal-retorno-overlay">
   <div class="modal-box saida-batch" style="max-width: 700px;">
     <h3>🔄 Nova Devolução para Logística (Reversa)</h3>
-    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;">
+    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 10px;">
       As devoluções abatem custos do laboratório. Sobras reduzem do saldo disponível, Garantias reduzem o custo aplicado ao SELB.
     </p>
 
     <!-- Tipo de Devolução -->
-    <div style="margin-bottom: 15px; background: var(--surface2); padding: 15px; border-radius: 8px; border: 1px solid var(--border);">
+    <div style="margin-bottom: 10px; background: var(--surface2); padding: 12px; border-radius: 8px; border: 1px solid var(--border);">
       <div class="modal-label">Tipo de Devolução (Selecione primeiro)</div>
       <select id="retorno-tipo-select" class="modal-input" style="margin: 0;" onchange="window.toggleRetornoFields()">
         <option value="retorno_sobra">Sobra (Peça intacta do estoque)</option>
@@ -923,20 +923,20 @@
     </div>
 
     <!-- Input de SELB (Visível apenas se Garantia) -->
-    <div id="retorno-selb-container" style="display: none; margin-bottom: 15px; padding: 15px; border: 1px dashed var(--orange); border-radius: 8px; background: var(--yellow-light);">
+    <div id="retorno-selb-container" style="display: none; margin-bottom: 10px; padding: 12px; border: 1px dashed var(--orange); border-radius: 8px; background: var(--yellow-light);">
       <div class="modal-label" style="color: #7d4a00; font-weight: bold;">SELB da Máquina onde a peça falhou * (Exato, 4 caracteres)</div>
       <input type="text" class="modal-input" id="retorno-selb-input" maxlength="4" placeholder="Ex: 1234" style="margin: 0; border-color: var(--orange);">
       <div style="font-size: 11px; color: #7d4a00; margin-top: 5px;">O sistema buscará a baixa original deste SELB para estornar o valor diretamente no custo do equipamento.</div>
     </div>
 
     <!-- Busca e Adição de Peças -->
-    <div class="saida-search-box" style="margin-bottom: 15px; position: relative;">
+    <div class="saida-search-box" style="margin-bottom: 10px; position: relative;">
       <div class="modal-label">Busca da Peça por Descrição (use % como coringa)</div>
       <input type="text" class="modal-input" id="retorno-busca-desc" placeholder="Ex: ROLO%FUSOR" oninput="window.buscarPecaPorDescRetorno(this.value)" autocomplete="off">
       <div id="retorno-pecas-sugestoes" style="display:none; position:absolute; top:100%; left:0; width:100%; background:var(--bg); border:1px solid var(--border); border-radius:8px; max-height:200px; overflow-y:auto; z-index:1000; box-shadow:0 4px 12px rgba(0,0,0,0.15);"></div>
     </div>
 
-    <div class="saida-grid" style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; margin-bottom: 15px;">
+    <div class="saida-grid" style="display: grid; grid-template-columns: 1fr 1fr auto; gap: 10px; align-items: end; margin-bottom: 10px;">
       <div>
         <div class="modal-label">Código da Peça</div>
         <input type="text" class="modal-input" id="retorno-peca" placeholder="Ex: CE123">
@@ -946,12 +946,12 @@
         <input type="number" class="modal-input" id="retorno-qtd" value="1" min="1">
       </div>
       <div>
-        <button class="btn-admin" onclick="window.addRetornoItem()" style="height: 42px; background: #8b5cf6;">Adicionar</button>
+        <button class="btn-admin" onclick="window.addRetornoItem()" style="height: 42px; background: #10b981;">Adicionar</button>
       </div>
     </div>
     
     <!-- Carrinho de Devolução -->
-    <div class="saida-table-wrap" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--border); margin-bottom: 15px;">
+    <div class="saida-table-wrap" style="max-height: 140px; overflow-y: auto; border: 1px solid var(--border); margin-bottom: 10px;">
       <table style="margin: 0; width: 100%;">
         <thead>
           <tr>
@@ -967,10 +967,10 @@
     </div>
 
     <!-- Informações da OS (Obrigatório) -->
-    <div style="display: flex; gap: 15px; margin-bottom: 20px;">
+    <div style="display: flex; gap: 10px; margin-bottom: 10px;">
       <div style="flex: 1;">
         <div class="modal-label" style="font-weight: bold;">Nº da OS de Reversa * (Apenas Números)</div>
-        <input type="text" class="modal-input" id="retorno-os-input" placeholder="Ex: 582910" pattern="\d*" oninput="this.value = this.value.replace(/[^0-9]/g, '');" style="border: 2px solid #8b5cf6;">
+        <input type="text" class="modal-input" id="retorno-os-input" placeholder="Ex: 582910" pattern="\d*" oninput="this.value = this.value.replace(/[^0-9]/g, '');" style="border: 2px solid #10b981;">
       </div>
       <div style="flex: 2;">
         <div class="modal-label">Observação Interna (Opcional)</div>
@@ -978,16 +978,16 @@
       </div>
     </div>
 
-    <div class="saida-footer" style="display: flex; justify-content: flex-end; background: var(--bg-hover); padding: 10px; border-radius: 8px; margin-bottom: 20px;">
+    <div class="saida-footer" style="display: flex; justify-content: flex-end; background: var(--bg-hover); padding: 8px; border-radius: 8px; margin-bottom: 15px;">
       <div style="font-size: 14px;">
         <span>Itens: <strong id="retorno-count">0</strong></span>
         <span style="margin-left: 15px;">Crédito Previsto: <strong id="retorno-total" style="color: #10b981;">R$ 0.00</strong></span>
       </div>
     </div>
 
-    <div class="modal-btns">
+    <div class="modal-btns" style="margin-top: 0;">
       <button class="btn-cancel" onclick="window.closeRetornoModal()">Cancelar</button>
-      <button class="btn-confirm" id="retorno-confirm-btn" onclick="window.confirmarRetorno()" style="background: #8b5cf6;">Salvar Devolução no Sistema</button>
+      <button class="btn-confirm" id="retorno-confirm-btn" onclick="window.confirmarRetorno()" style="background: #10b981;">Salvar Devolução no Sistema</button>
     </div>
   </div>
 </div>
@@ -1023,7 +1023,7 @@
         <button class="btn-admin" style="width: 100%; justify-content: center;" onclick="window.switchTab('bi-equipamentos'); closeAdminMenu();">📁 Importar Base BI (WMS)</button>
         <button class="btn-admin" style="width: 100%; justify-content: center;" onclick="window.switchTab('revisados'); closeAdminMenu();">🛠️ Registrar SELBs Revisados</button>
         <button class="btn-admin" style="width: 100%; justify-content: center; background: #0ea5e9; color: white;" onclick="openManualSELBModal()">🔗 Vincular SELB Manualmente</button>
-        <button class="btn-admin" style="width: 100%; justify-content: center; background: #8b5cf6;" onclick="gerarBackupCompleto()">📦 Gerar Backup Completo (JSON)</button>
+        <button class="btn-admin" style="width: 100%; justify-content: center; background: #10b981;" onclick="gerarBackupCompleto()">📦 Gerar Backup Completo (JSON)</button>
         <button class="btn-admin" style="width: 100%; justify-content: center; background: #22c55e; color: white;" onclick="openCadastroPecaModal()">➕ Cadastrar Nova Peça</button>
         <button class="btn-cancel" onclick="closeAdminMenu()" style="margin-top: 20px; width: 100%;">Fechar Menu</button>
       </div>
