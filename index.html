@@ -88,6 +88,7 @@
     <button class="tab-btn" data-tab="modelo-custo">💰 Custo/Modelo</button>
     <button class="tab-btn" data-tab="retorno">🔄 Retorno (Reversa)</button>
     <button class="tab-btn" data-tab="auditoria" id="tab-btn-auditoria" style="display:none">🔍 Auditoria</button>
+    <button class="tab-btn" data-tab="resumo">📈 Resumo da Operação</button>
     <button class="tab-btn" data-tab="sec-audit" id="tab-btn-sec-audit" style="display:none; color: var(--orange); font-weight: 800;">🔒 Audit Corporativa</button>
   </div>
 
@@ -586,6 +587,95 @@
           </div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- VIEW RESUMO DA OPERACAO -->
+  <div id="view-resumo" class="view">
+    <div class="dash-scroll">
+      
+      <!-- Top Filters -->
+      <div class="card" style="margin-bottom: 20px;">
+        <div style="display: flex; gap: 15px; align-items: center; justify-content: space-between;">
+          <h2 style="font-size: 20px; color: var(--text); margin: 0;">Resumo da Operação</h2>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <button class="btn-admin" style="height:auto; padding: 5px 10px;" onclick="window.resumoSetFilter('today')">Hoje</button>
+            <button class="btn-admin" style="height:auto; padding: 5px 10px;" onclick="window.resumoSetFilter('yesterday')">Ontem</button>
+            <button class="btn-admin" style="height:auto; padding: 5px 10px;" onclick="window.resumoSetFilter('week')">Semana</button>
+            <button class="btn-admin" style="height:auto; padding: 5px 10px;" onclick="window.resumoSetFilter('month')">Mês</button>
+            <span style="color: var(--text-muted); margin: 0 10px;">|</span>
+            <input type="date" id="resumo-d1" style="padding: 5px; border-radius: 4px; border: 1px solid var(--border);" onchange="window.renderResumoOperacao()">
+            <span style="color: var(--text-muted);">até</span>
+            <input type="date" id="resumo-d2" style="padding: 5px; border-radius: 4px; border: 1px solid var(--border);" onchange="window.renderResumoOperacao()">
+          </div>
+        </div>
+      </div>
+
+      <!-- CARDS (KPIs) -->
+      <div class="dash-cards" style="grid-template-columns: repeat(5, 1fr);">
+        <div class="dash-card">
+          <div class="dash-card-label">EQUIPAMENTOS REVISADOS</div>
+          <div class="dash-card-value" id="resumo-total-rev">0</div>
+          <div style="margin-top: 10px; font-size: 12px; color: var(--text-muted);">
+            <div style="color: var(--blue)"><span id="resumo-com-peca">0</span> com peça</div>
+            <div style="color: var(--orange)"><span id="resumo-sem-peca">0</span> sem peça</div>
+          </div>
+        </div>
+        <div class="dash-card">
+          <div class="dash-card-label">CUSTO TOTAL</div>
+          <div class="dash-card-value" id="resumo-custo-total">R$ 0,00</div>
+        </div>
+        <div class="dash-card">
+          <div class="dash-card-label">CUSTO MÉDIO POR EQUIP.</div>
+          <div class="dash-card-value" id="resumo-custo-medio">R$ 0,00</div>
+        </div>
+        <div class="dash-card">
+          <div class="dash-card-label">MODELOS DIFERENTES REVISADOS</div>
+          <div class="dash-card-value" id="resumo-modelos-unicos">0</div>
+          <div style="margin-top: 10px; font-size: 12px; color: var(--text-muted);">modelos</div>
+        </div>
+        <div class="dash-card">
+          <div class="dash-card-label">PEÇA MAIS CONSUMIDA</div>
+          <div class="dash-card-value" id="resumo-top-peca-nome" style="font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">-</div>
+          <div style="margin-top: 10px; font-size: 12px; color: var(--text-muted);">
+            <span id="resumo-top-peca-qtd">0</span> utilizações
+          </div>
+        </div>
+      </div>
+
+      <!-- GRAFICOS -->
+      <div class="dash-charts" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
+        <div class="card" style="background: white; border-radius: 12px; border: 1px solid var(--border); padding: 20px;">
+          <h4 style="margin: 0 0 15px 0;">Top 10 Custo por Modelo</h4>
+          <div id="chart-resumo-custo" style="min-height: 300px;"></div>
+        </div>
+        <div class="card" style="background: white; border-radius: 12px; border: 1px solid var(--border); padding: 20px;">
+          <h4 style="margin: 0 0 15px 0;">Top 10 Quantidade Revisada por Modelo</h4>
+          <div id="chart-resumo-qtd" style="min-height: 300px;"></div>
+        </div>
+      </div>
+
+      <!-- TABELA RICA -->
+      <div class="card" style="margin-top: 20px;">
+        <h4 style="margin: 0 0 15px 0;">Detalhamento por Modelo</h4>
+        <div class="table-wrap">
+          <table class="dash-table">
+            <thead>
+              <tr>
+                <th>Modelo</th>
+                <th style="text-align:center">Revisados</th>
+                <th style="text-align:center; color: var(--blue)">Com Peça</th>
+                <th style="text-align:center; color: var(--orange)">Sem Peça</th>
+                <th style="text-align:right">Custo Total</th>
+                <th style="text-align:right">Custo Médio</th>
+              </tr>
+            </thead>
+            <tbody id="resumo-tbody">
+            </tbody>
+          </table>
+        </div>
+      </div>
+
     </div>
   </div>
 

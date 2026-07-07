@@ -302,6 +302,7 @@ function switchTab(tabId) {
     }
     if (tabId === 'bi-equipamentos') renderBIList();
     if (tabId === 'retorno') renderRetornoTab();
+    if (tabId === 'resumo') window.renderResumoOperacao();
     if (tabId === 'modelo-custo') {
         const d1 = document.getElementById('mod-d1');
         const d2 = document.getElementById('mod-d2');
@@ -3637,3 +3638,234 @@ document.getElementById('ret-search')?.addEventListener('input', () => {
 document.getElementById('ret-tipo')?.addEventListener('change', window.renderRetornoTab);
 
 
+
+// ==========================================
+// ABA RESUMO DA OPERAÇÃO
+// ==========================================
+let chartResumoCusto = null;
+let chartResumoQtd = null;
+
+window.resumoSetFilter = (type) => {
+    const today = new Date();
+    const tzOffset = today.getTimezoneOffset() * 60000; 
+    let d1 = new Date(today.getTime() - tzOffset);
+    let d2 = new Date(today.getTime() - tzOffset);
+
+    if (type === 'today') {
+        // mantém hoje
+    } else if (type === 'yesterday') {
+        d1.setDate(d1.getDate() - 1);
+        d2.setDate(d2.getDate() - 1);
+    } else if (type === 'week') {
+        d1.setDate(d1.getDate() - 7);
+    } else if (type === 'month') {
+        d1.setDate(d1.getDate() - 30);
+    }
+    
+    document.getElementById('resumo-d1').value = d1.toISOString().split('T')[0];
+    document.getElementById('resumo-d2').value = d2.toISOString().split('T')[0];
+    window.renderResumoOperacao();
+};
+
+window.renderResumoOperacao = async () => {
+    try {
+        let d1 = document.getElementById('resumo-d1')?.value;
+        let d2 = document.getElementById('resumo-d2')?.value;
+        
+        // Se ambos vazios, puxa padrão de ontem
+        if (!d1 && !d2) {
+            const yesterday = new Date();
+            yesterday.setDate(yesterday.getDate() - 1);
+            const tzOffset = yesterday.getTimezoneOffset() * 60000;
+            const iso = new Date(yesterday.getTime() - tzOffset).toISOString().split('T')[0];
+            document.getElementById('resumo-d1').value = iso;
+            document.getElementById('resumo-d2').value = iso;
+            d1 = iso;
+            d2 = iso;
+        }
+        
+        const filtrarData = (ts) => {
+            if (!ts) return false;
+            const dt = ts.split('T')[0];
+            if (d1 && dt < d1) return false;
+            if (d2 && dt > d2) return false;
+            return true;
+        };
+
+        const [hRes, rRes, eRes] = await Promise.all([
+            supabase.from(getHistoricoTable()).select('*').in('tipo', ['saída', 'saida', 'retorno_garantia']),
+            supabase.from('revisados').select('*'),
+            supabase.from('equipamentos').select('selb, modelo')
+        ]);
+
+        const saídas = (hRes.data || []).filter(s => filtrarData(s.ts));
+        const revisados = window.currentSector === 'REMANU' ? [] : (rRes.data || []).filter(r => filtrarData(r.ts));
+        const equipamentos = eRes.data || [];
+
+        const eqMap = {};
+        equipamentos.forEach(e => {
+            eqMap[e.selb.toUpperCase().trim()] = e.modelo;
+        });
+
+        const byModel = {};
+        let totalCusto = 0;
+        let pecasCount = {}; // Para achar a peça mais consumida
+        
+        saídas.forEach(s => {
+            const selb = (s.selb || '').toUpperCase().trim();
+            if (!selb || selb === 'S/N' || selb === '0000') return;
+
+            if (selb === 'DEFE') {
+                // não conta em modelos
+                return;
+            }
+
+            const modelo = eqMap[selb] || 'MODELO NÃO IDENTIFICADO';
+            if (!byModel[modelo]) byModel[modelo] = { comPeca: new Set(), semPeca: new Set(), custo: 0 };
+            
+            if (s.code === 'SEMPEÇA' || s.code === 'SEMPECA') {
+                if (window.currentSector === 'REMANU' && s.revision_id) byModel[modelo].semPeca.add(s.revision_id);
+                else byModel[modelo].semPeca.add(selb);
+                return;
+            }
+
+            // Conta uso de peça
+            const signal = (s.tipo === 'retorno_garantia') ? -1 : 1;
+            if (s.code && s.code !== 'SEMPEÇA' && s.code !== 'SEMPECA') {
+                pecasCount[s.code] = pecasCount[s.code] || { desc: s.descricao, qty: 0 };
+                pecasCount[s.code].qty += ((s.qty || 1) * signal);
+            }
+
+            if (window.currentSector === 'REMANU' && s.revision_id) {
+                byModel[modelo].comPeca.add(s.revision_id);
+            } else {
+                byModel[modelo].comPeca.add(selb);
+            }
+            
+            const custoItem = (s.vlr_total || 0) * signal;
+            byModel[modelo].custo += custoItem;
+            totalCusto += custoItem;
+        });
+
+        // Revisados (Sem peça lab)
+        revisados.forEach(r => {
+            const selb = (r.selb || '').toUpperCase().trim();
+            if (!selb || selb === 'S/N' || selb === '0000') return;
+            const modelo = eqMap[selb] || 'MODELO NÃO IDENTIFICADO';
+            if (!byModel[modelo]) byModel[modelo] = { comPeca: new Set(), semPeca: new Set(), custo: 0 };
+            
+            if (!byModel[modelo].comPeca.has(selb)) {
+                byModel[modelo].semPeca.add(selb);
+            }
+        });
+
+        // Garante intersecção vazia
+        Object.values(byModel).forEach(d => {
+            d.comPeca.forEach(rev => d.semPeca.delete(rev));
+        });
+
+        let eqComPeca = 0;
+        let eqSemPeca = 0;
+        const rows = Object.entries(byModel).map(([modelo, d]) => {
+            const com = d.comPeca.size;
+            const sem = d.semPeca.size;
+            const totalAtend = com + sem;
+            eqComPeca += com;
+            eqSemPeca += sem;
+            return {
+                modelo,
+                atendimentos: totalAtend,
+                comPeca: com,
+                semPeca: sem,
+                custo: d.custo,
+                custoMedio: totalAtend > 0 ? d.custo / totalAtend : 0
+            };
+        }).filter(r => r.atendimentos > 0); // ignora se = 0
+        
+        let totalRevisados = eqComPeca + eqSemPeca;
+        let custoMedioGeral = totalRevisados > 0 ? totalCusto / totalRevisados : 0;
+        
+        // Top peca
+        let topPecaNome = "-";
+        let topPecaQtd = 0;
+        Object.values(pecasCount).forEach(p => {
+            if (p.qty > topPecaQtd) {
+                topPecaQtd = p.qty;
+                topPecaNome = p.desc;
+            }
+        });
+
+        // Atualizar Cards
+        document.getElementById('resumo-total-rev').textContent = totalRevisados;
+        document.getElementById('resumo-com-peca').textContent = eqComPeca;
+        document.getElementById('resumo-sem-peca').textContent = eqSemPeca;
+        
+        document.getElementById('resumo-custo-total').textContent = totalCusto.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        document.getElementById('resumo-custo-medio').textContent = custoMedioGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        
+        document.getElementById('resumo-modelos-unicos').textContent = rows.length;
+        document.getElementById('resumo-top-peca-nome').textContent = topPecaNome;
+        document.getElementById('resumo-top-peca-qtd').textContent = topPecaQtd;
+
+        // Renderizar Tabela
+        // ordena por revisados DESC
+        rows.sort((a,b) => b.atendimentos - a.atendimentos);
+        
+        const tbody = document.getElementById('resumo-tbody');
+        if(tbody) {
+            tbody.innerHTML = rows.map(r => `
+                <tr>
+                    <td style="font-weight:bold;">${r.modelo}</td>
+                    <td style="text-align:center;">${r.atendimentos}</td>
+                    <td style="text-align:center; color: var(--blue)">${r.comPeca}</td>
+                    <td style="text-align:center; color: var(--orange)">${r.semPeca}</td>
+                    <td style="text-align:right">${r.custo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                    <td style="text-align:right">${r.custoMedio.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
+                </tr>
+            `).join('');
+        }
+
+        // Gráficos (Top 10)
+        let topCusto = [...rows].sort((a,b) => b.custo - a.custo).slice(0, 10);
+        let topQtd = [...rows].sort((a,b) => b.atendimentos - a.atendimentos).slice(0, 10);
+
+        if (chartResumoCusto) chartResumoCusto.destroy();
+        if (chartResumoQtd) chartResumoQtd.destroy();
+
+        if (window.ApexCharts) {
+            chartResumoCusto = new ApexCharts(document.getElementById('chart-resumo-custo'), {
+                series: [{ name: 'Custo', data: topCusto.map(r => r.custo) }],
+                chart: { type: 'bar', height: 300, toolbar: { show: false }, fontFamily: 'Inter' },
+                colors: ['#E63946'],
+                plotOptions: { bar: { horizontal: true, borderRadius: 4, dataLabels: { position: 'top' } } },
+                dataLabels: {
+                    enabled: true,
+                    offsetX: 20,
+                    style: { fontSize: '10px', colors: ['#333'] },
+                    formatter: (val) => val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                },
+                xaxis: { categories: topCusto.map(r => r.modelo.substring(0, 20)), labels: { formatter: (val) => 'R$ ' + val } },
+                yaxis: { max: Math.max(...topCusto.map(r => r.custo)) * 1.2 }
+            });
+            chartResumoCusto.render();
+
+            chartResumoQtd = new ApexCharts(document.getElementById('chart-resumo-qtd'), {
+                series: [{ name: 'Revisados', data: topQtd.map(r => r.atendimentos) }],
+                chart: { type: 'bar', height: 300, toolbar: { show: false }, fontFamily: 'Inter' },
+                colors: ['#1D3557'],
+                plotOptions: { bar: { horizontal: true, borderRadius: 4, dataLabels: { position: 'top' } } },
+                dataLabels: {
+                    enabled: true,
+                    offsetX: 20,
+                    style: { fontSize: '10px', colors: ['#333'] }
+                },
+                xaxis: { categories: topQtd.map(r => r.modelo.substring(0, 20)) },
+                yaxis: { max: Math.max(...topQtd.map(r => r.atendimentos)) * 1.2 }
+            });
+            chartResumoQtd.render();
+        }
+
+    } catch (e) {
+        console.error("Erro renderResumoOperacao", e);
+    }
+};
