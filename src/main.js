@@ -1877,11 +1877,39 @@ window.renderRevisados = async () => {
 
     tbody.innerHTML = data.map(r => `
         <tr>
+            <td style="text-align: center;"><input type="checkbox" class="rev-chk" value="${r.id}"></td>
             <td style="font-size:0.8rem">${new Date(r.ts).toLocaleString('pt-BR')}</td>
             <td style="font-weight:bold; color:var(--green)">${r.selb}</td>
             <td style="color:var(--text-muted)">${r.user_email?.split('@')[0]}</td>
         </tr>
     `).join('');
+};
+
+window.toggleAllRevisados = (checked) => {
+    document.querySelectorAll('.rev-chk').forEach(c => c.checked = checked);
+};
+
+window.excluirRevisadosSelecionados = async () => {
+    const checks = document.querySelectorAll('.rev-chk:checked');
+    if (checks.length === 0) return alert('Nenhum registro selecionado.');
+    
+    if (!confirm(`Tem certeza que deseja EXCLUIR ${checks.length} registro(s) de revisão? Esta ação abaterá do gráfico da dashboard.`)) return;
+
+    const ids = Array.from(checks).map(c => parseInt(c.value));
+    
+    document.getElementById('revisados-status').innerHTML = '⌛ Excluindo...';
+    
+    const { error } = await supabase.from('revisados').delete().in('id', ids);
+    if (error) {
+        alert('Erro ao excluir: ' + error.message);
+        document.getElementById('revisados-status').innerHTML = '';
+    } else {
+        document.getElementById('revisados-status').innerHTML = `<span style="color:var(--green)">✅ ${checks.length} registros excluídos com sucesso!</span>`;
+        const selAll = document.getElementById('rev-sel-all');
+        if(selAll) selAll.checked = false;
+        renderRevisados();
+        renderMovDashboard(); // Atualiza painel caso impacte
+    }
 };
 
 window.processarRevisados = async () => {

@@ -306,11 +306,15 @@
       </div>
 
       <div class="card" style="margin-top: 20px; background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border);">
-        <h4 style="margin: 0 0 15px 0;">📋 Últimos Registros</h4>
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+          <h4 style="margin: 0;">📋 Últimos Registros</h4>
+          <button class="btn-admin" style="background: var(--red); padding: 5px 10px; font-size: 12px; height: auto;" onclick="window.excluirRevisadosSelecionados()">🗑️ Excluir Selecionados</button>
+        </div>
         <div class="table-wrap" style="max-height: 300px; overflow-y: auto;">
           <table class="dash-table">
             <thead>
               <tr>
+                <th style="width: 40px; text-align: center;"><input type="checkbox" id="rev-sel-all" onclick="window.toggleAllRevisados(this.checked)"></th>
                 <th>Data/Hora</th>
                 <th>SELB</th>
                 <th>Registrado por</th>
