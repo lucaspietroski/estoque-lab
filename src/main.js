@@ -1872,7 +1872,14 @@ window.renderRevisados = async () => {
     const tbody = document.getElementById('revisados-tbody');
     if (!tbody) return;
 
-    const { data } = await supabase.from('revisados').select('*').order('ts', { ascending: false }).limit(50);
+    const filtroData = document.getElementById('filtro-data-revisados')?.value;
+    let q = supabase.from('revisados').select('*').order('ts', { ascending: false });
+    if (filtroData) {
+        q = q.gte('ts', filtroData + 'T00:00:00Z').lte('ts', filtroData + 'T23:59:59Z');
+    } else {
+        q = q.limit(200);
+    }
+    const { data } = await q;
     if (!data) return;
 
     tbody.innerHTML = data.map(r => `

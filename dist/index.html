@@ -17,7 +17,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Fira+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-  <script type="module" crossorigin src="/assets/index-C4RG1rS4.js"></script>
+  <script type="module" crossorigin src="/assets/index-CN91xouC.js"></script>
   <link rel="stylesheet" crossorigin href="/assets/index-Tj5o7Hm3.css">
 </head>
 <body>
@@ -308,8 +308,11 @@
 
       <div class="card" style="margin-top: 20px; background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border);">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-          <h4 style="margin: 0;">📋 Últimos Registros</h4>
-          <button class="btn-admin" style="background: var(--red); padding: 5px 10px; font-size: 12px; height: auto;" onclick="window.excluirRevisadosSelecionados()">🗑️ Excluir Selecionados</button>
+          <h4 style="margin: 0;">📋 Registros de SELBs</h4>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <input type="date" id="filtro-data-revisados" style="padding: 5px; border-radius: 4px; border: 1px solid var(--border);" onchange="window.renderRevisados()">
+            <button class="btn-admin" style="background: var(--red); padding: 5px 10px; font-size: 12px; height: auto;" onclick="window.excluirRevisadosSelecionados()">🗑️ Excluir Selecionados</button>
+          </div>
         </div>
         <div class="table-wrap" style="max-height: 300px; overflow-y: auto;">
           <table class="dash-table">
