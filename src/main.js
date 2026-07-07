@@ -3711,12 +3711,25 @@ window.renderResumoOperacao = async () => {
         let totalCusto = 0;
         let pecasCount = {}; // Para achar a peça mais consumida
         
+        const validSelbsLab = new Set();
+        revisados.forEach(r => {
+            const selb = (r.selb || '').toUpperCase().trim();
+            if (selb && selb !== 'S/N' && selb !== '0000') {
+                validSelbsLab.add(selb);
+            }
+        });
+
         saídas.forEach(s => {
             const selb = (s.selb || '').toUpperCase().trim();
             if (!selb || selb === 'S/N' || selb === '0000') return;
 
             if (selb === 'DEFE') {
                 // não conta em modelos
+                return;
+            }
+
+            // SE FOR LAB: só conta se o SELB foi explicitamente marcado como revisado no dia (está na tabela revisados)
+            if (window.currentSector === 'LAB' && !validSelbsLab.has(selb)) {
                 return;
             }
 
