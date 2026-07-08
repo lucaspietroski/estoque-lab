@@ -3850,37 +3850,62 @@ window.renderResumoOperacao = async () => {
         if (chartResumoCusto) chartResumoCusto.destroy();
         if (chartResumoQtd) chartResumoQtd.destroy();
 
-        if (window.ApexCharts) {
-            chartResumoCusto = new ApexCharts(document.getElementById('chart-resumo-custo'), {
-                series: [{ name: 'Custo', data: topCusto.map(r => r.custo) }],
-                chart: { type: 'bar', height: 300, toolbar: { show: false }, fontFamily: 'Inter' },
-                colors: ['#E63946'],
-                plotOptions: { bar: { horizontal: true, borderRadius: 4, dataLabels: { position: 'top' } } },
-                dataLabels: {
-                    enabled: true,
-                    offsetX: 20,
-                    style: { fontSize: '10px', colors: ['#333'] },
-                    formatter: (val) => val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+        if (window.Chart) {
+            chartResumoCusto = new Chart(document.getElementById('chart-resumo-custo'), {
+                type: 'bar',
+                data: {
+                    labels: topCusto.map(r => r.modelo.substring(0, 25)),
+                    datasets: [{
+                        label: 'Custo Total (R$)',
+                        data: topCusto.map(r => r.custo),
+                        backgroundColor: '#E63946',
+                        borderRadius: 4
+                    }]
                 },
-                xaxis: { categories: topCusto.map(r => r.modelo.substring(0, 20)), labels: { formatter: (val) => 'R$ ' + val } },
-                yaxis: { max: Math.max(...topCusto.map(r => r.custo)) * 1.2 }
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.raw.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: {
+                                callback: function(value) { return 'R$ ' + value; }
+                            }
+                        }
+                    }
+                }
             });
-            chartResumoCusto.render();
 
-            chartResumoQtd = new ApexCharts(document.getElementById('chart-resumo-qtd'), {
-                series: [{ name: 'Revisados', data: topQtd.map(r => r.atendimentos) }],
-                chart: { type: 'bar', height: 300, toolbar: { show: false }, fontFamily: 'Inter' },
-                colors: ['#1D3557'],
-                plotOptions: { bar: { horizontal: true, borderRadius: 4, dataLabels: { position: 'top' } } },
-                dataLabels: {
-                    enabled: true,
-                    offsetX: 20,
-                    style: { fontSize: '10px', colors: ['#333'] }
+            chartResumoQtd = new Chart(document.getElementById('chart-resumo-qtd'), {
+                type: 'bar',
+                data: {
+                    labels: topQtd.map(r => r.modelo.substring(0, 25)),
+                    datasets: [{
+                        label: 'Máquinas Revisadas',
+                        data: topQtd.map(r => r.atendimentos),
+                        backgroundColor: '#1D3557',
+                        borderRadius: 4
+                    }]
                 },
-                xaxis: { categories: topQtd.map(r => r.modelo.substring(0, 20)) },
-                yaxis: { max: Math.max(...topQtd.map(r => r.atendimentos)) * 1.2 }
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    }
+                }
             });
-            chartResumoQtd.render();
         }
 
     } catch (e) {
