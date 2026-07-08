@@ -887,12 +887,13 @@
   <!-- ABA SMARTMANAGER PENDÊNCIAS                    -->
   <!-- ============================================== -->
   <div id="view-smartmanager" class="view">
-    <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 20px;">
-      <h2 style="margin:0; font-size: 20px; color: #6366f1;">🔗 Pendências SmartManager</h2>
-      <span style="font-size: 12px; color: #a1a1aa;">*Janela operacional: últimos 30 dias</span>
-    </div>
+    <div style="display: flex; flex-direction: column; height: 100%;">
+      <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 20px; flex-shrink: 0;">
+        <h2 style="margin:0; font-size: 20px; color: #6366f1;">🔗 Pendências SmartManager</h2>
+        <span style="font-size: 12px; color: #a1a1aa;">*Janela operacional: últimos 30 dias</span>
+      </div>
 
-    <div class="dash-cards" style="grid-template-columns: repeat(5, 1fr);">
+    <div class="dash-cards" style="grid-template-columns: repeat(5, 1fr); flex-shrink: 0;">
       <div class="dash-card">
         <div class="dash-card-label">PEÇAS PENDENTES</div>
         <div class="dash-card-value" id="sm-pecas-pendentes">0</div>
@@ -915,7 +916,7 @@
       </div>
     </div>
 
-    <div class="table-container" style="margin-top:20px;">
+    <div class="table-wrap" style="margin-top:20px; flex: 1; overflow-y: auto;">
       <table class="data-table">
         <thead>
           <tr>
@@ -930,6 +931,7 @@
           <!-- Rows geradas no JS -->
         </tbody>
       </table>
+    </div>
     </div>
   </div>
 
