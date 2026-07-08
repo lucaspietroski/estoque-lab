@@ -1001,6 +1001,7 @@ async function renderHistorico() {
                     </details>
                 </td>
                 <td></td>
+                <td></td>
             </tr>`;
         }
 
@@ -1021,6 +1022,9 @@ async function renderHistorico() {
             <td style="font-size: 0.85rem;">
                 <strong>${h.selb || ''}</strong>
                 ${h.descricao && h.descricao !== h.selb ? `<div style="font-size: 0.7rem; color: var(--text-muted); line-height:1.2">${h.descricao}</div>` : ''}
+            </td>
+            <td style="font-weight: 700; color: #6366f1; font-size: 14px;">
+                ${h.manager_sync ? h.os_manager : ''}
             </td>
             <td>
                 ${currentUser.email === 'lucas.araujo@selbetti.com.br' ? `<button class="btn-edit-hist" onclick="openAjusteHistorico('${h.id}')" title="Ajustar Registro">✏️</button>` : ''}
@@ -3993,7 +3997,7 @@ window.renderSmartManager = async () => {
 
             const tr = document.createElement('tr');
             tr.style.cursor = 'pointer';
-            tr.onclick = () => window.openSmartModal(g.selb);
+            tr.onclick = () => window.openSmartModal(g.selb, g.modelo);
             tr.innerHTML = `
                 <td style="text-align:center; font-size: 16px;">${statusIcon}</td>
                 <td style="font-weight: 700;">${g.selb}</td>
@@ -4023,7 +4027,7 @@ window.renderSmartManager = async () => {
     }
 };
 
-window.openSmartModal = (selb) => {
+window.openSmartModal = (selb, modeloNome) => {
     // Filtrar dados do SELB da lista que já foi carregada
     const items = smartManagerData.filter(i => (i.selb || '').toUpperCase().trim() === selb);
     if (items.length === 0) return;
@@ -4052,7 +4056,7 @@ window.openSmartModal = (selb) => {
     const osArray = Array.from(osSet);
 
     document.getElementById('sm-modal-selb').innerText = 'SELB ' + selb;
-    document.getElementById('sm-modal-modelo').innerText = (items[0].modelo_cache || 'VERIFICAR'); // simplificando se não achar eq
+    document.getElementById('sm-modal-modelo').innerText = modeloNome || 'VERIFICAR';
     document.getElementById('sm-modal-last-mov').innerText = lastMov ? formatDateBR(lastMov) : '-';
     document.getElementById('sm-modal-stats').innerText = `${items.length} (Sincronizadas: ${sincronizadas.length} | Pendentes: ${pendentes.length})`;
     document.getElementById('sm-modal-os-used').innerText = osArray.length > 0 ? osArray.join(', ') : 'Nenhuma';
