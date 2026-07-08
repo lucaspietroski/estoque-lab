@@ -289,6 +289,7 @@ function switchTab(tabId) {
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabId));
     document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === `view-${tabId}`));
     if (tabId === 'dashboard') updateDashboard();
+    if (tabId === 'smartmanager') window.renderSmartManager();
     if (tabId === 'estoque') {
         renderChips();
         renderEstoque();
@@ -995,7 +996,7 @@ async function renderHistorico() {
                     <details style="margin-top: 5px; cursor: pointer;">
                         <summary style="color: var(--primary); font-weight: 500; font-size: 0.75rem;">Ver Peças (${h.items.length})</summary>
                         <ul style="margin: 5px 0; padding-left: 15px; font-size: 0.7rem; color: var(--text-muted);">
-                            ${h.items.map(i => `<li>${i.code} (Qtd: ${i.qty}) - R$ ${window.getDisplayValue(i, 'vlr_total').toLocaleString('pt-BR', {minimumFractionDigits: 2})}</li>`).join('')}
+                            ${h.items.map(i => `<li style="margin-bottom:4px;">${i.code} (Qtd: ${i.qty}) - R$ ${window.getDisplayValue(i, 'vlr_total').toLocaleString('pt-BR', {minimumFractionDigits: 2})} ${i.manager_sync ? `<br><span style="color:#6366f1; font-weight:bold; font-size: 0.65rem;">🔗 OS ${i.os_manager}</span>` : ''}</li>`).join('')}
                         </ul>
                     </details>
                 </td>
@@ -3882,3 +3883,301 @@ window.renderResumoOperacao = async () => {
         console.error("Erro renderResumoOperacao", e);
     }
 };
+
+// ==========================================
+// ABA SMARTMANAGER PENDÊNCIAS
+// ==========================================
+const SMART_MANAGER_GO_LIVE_DATE = '2026-07-08T00:00:00-03:00';
+const SMART_MANAGER_WINDOW_DAYS = 30;
+let smartManagerData = [];
+
+window.renderSmartManager = async () => {
+    try {
+        const today = new Date();
+        const d30 = new Date();
+        d30.setDate(today.getDate() - SMART_MANAGER_WINDOW_DAYS);
+        const windowDate = d30.toISOString();
+        
+        // Determinar a data de corte efetiva: a mais recente entre Go-Live e 30 dias atrás
+        const limitDate = (windowDate > SMART_MANAGER_GO_LIVE_DATE) ? windowDate : SMART_MANAGER_GO_LIVE_DATE;
+
+        const table = window.currentSector === 'REMANU' ? 'historico_remanu' : getHistoricoTable();
+        const { data, error } = await supabase.from(table)
+            .select('*')
+            .in('tipo', ['saída', 'saida', 'retorno_garantia'])
+            .gte('ts', limitDate);
+
+        if (error) throw error;
+        smartManagerData = data || [];
+
+        // Fetch equipamentos for models
+        const { data: eqData } = await supabase.from('equipamentos').select('selb, modelo');
+        const eqMap = {};
+        (eqData || []).forEach(e => { eqMap[e.selb.toUpperCase().trim()] = e.modelo; });
+
+        let totalPendentes = 0;
+        let totalIntegradas = 0;
+        let selbsPendentesCount = 0;
+        let integracoesHoje = 0;
+        let pendenciaMaisAntigaTs = null;
+
+        const selbGroups = {};
+
+        const hojeStr = new Date().toISOString().split('T')[0];
+
+        smartManagerData.forEach(item => {
+            const selb = (item.selb || '').toUpperCase().trim();
+            if (!selb || selb === 'S/N' || selb === '0000' || selb === 'DEFE') return;
+
+            if (item.manager_sync) {
+                totalIntegradas++;
+                if (item.manager_sync_at && item.manager_sync_at.startsWith(hojeStr)) {
+                    integracoesHoje++;
+                }
+            } else {
+                totalPendentes++;
+                if (!pendenciaMaisAntigaTs || item.ts < pendenciaMaisAntigaTs) {
+                    pendenciaMaisAntigaTs = item.ts;
+                }
+            }
+
+            if (!selbGroups[selb]) {
+                selbGroups[selb] = {
+                    modelo: eqMap[selb] || 'NÃO IDENTIFICADO',
+                    lastMov: item.ts,
+                    items: [],
+                    pendentes: 0,
+                    sincronizadas: 0,
+                    osSet: new Set(),
+                    lastSyncAt: null,
+                    lastSyncUser: null
+                };
+            }
+
+            selbGroups[selb].items.push(item);
+            if (item.ts > selbGroups[selb].lastMov) selbGroups[selb].lastMov = item.ts;
+
+            if (item.manager_sync) {
+                selbGroups[selb].sincronizadas++;
+                if (item.os_manager) selbGroups[selb].osSet.add(item.os_manager);
+                if (!selbGroups[selb].lastSyncAt || item.manager_sync_at > selbGroups[selb].lastSyncAt) {
+                    selbGroups[selb].lastSyncAt = item.manager_sync_at;
+                    selbGroups[selb].lastSyncUser = item.manager_sync_user;
+                }
+            } else {
+                selbGroups[selb].pendentes++;
+            }
+        });
+
+        const tbody = document.getElementById('sm-table-body');
+        tbody.innerHTML = '';
+
+        const selbsList = Object.keys(selbGroups).map(selb => ({ selb, ...selbGroups[selb] }));
+        selbsList.sort((a, b) => b.lastMov.localeCompare(a.lastMov));
+
+        selbsList.forEach(g => {
+            if (g.pendentes > 0) selbsPendentesCount++;
+
+            let statusIcon = '🟢';
+            let situacao = 'Concluído';
+            let color = 'var(--text-light)';
+            if (g.pendentes > 0 && g.sincronizadas > 0) {
+                statusIcon = '🟡';
+                situacao = `${g.sincronizadas}/${g.sincronizadas + g.pendentes} sincronizadas`;
+                color = 'var(--orange)';
+            } else if (g.pendentes > 0 && g.sincronizadas === 0) {
+                statusIcon = '🔴';
+                situacao = `${g.pendentes} pendentes`;
+                color = 'var(--red)';
+            }
+
+            const tr = document.createElement('tr');
+            tr.style.cursor = 'pointer';
+            tr.onclick = () => window.openSmartModal(g.selb);
+            tr.innerHTML = `
+                <td style="text-align:center; font-size: 16px;">${statusIcon}</td>
+                <td style="font-weight: 700;">${g.selb}</td>
+                <td>${g.modelo}</td>
+                <td>${formatDateBR(g.lastMov)}</td>
+                <td style="color: ${color}; font-weight: 600;">${situacao}</td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        // Atualizar Cards
+        document.getElementById('sm-pecas-pendentes').innerText = totalPendentes;
+        document.getElementById('sm-pecas-integradas').innerText = totalIntegradas;
+        document.getElementById('sm-selbs-pendentes').innerText = selbsPendentesCount;
+        document.getElementById('sm-integracoes-hoje').innerText = integracoesHoje;
+        
+        let diasMaisAntiga = 0;
+        if (pendenciaMaisAntigaTs) {
+            const msAntiga = new Date(pendenciaMaisAntigaTs).getTime();
+            diasMaisAntiga = Math.floor((today.getTime() - msAntiga) / (1000 * 60 * 60 * 24));
+        }
+        document.getElementById('sm-pendencia-antiga').innerHTML = `${diasMaisAntiga} <span style="font-size:14px; color:#a1a1aa;">dias</span>`;
+
+    } catch (e) {
+        console.error(e);
+        alert('Erro ao carregar Pendências SmartManager.');
+    }
+};
+
+window.openSmartModal = (selb) => {
+    // Filtrar dados do SELB da lista que já foi carregada
+    const items = smartManagerData.filter(i => (i.selb || '').toUpperCase().trim() === selb);
+    if (items.length === 0) return;
+
+    const osSet = new Set();
+    const pendentes = [];
+    const sincronizadas = [];
+    let lastSyncAt = null;
+    let lastSyncUser = null;
+    let lastMov = null;
+
+    items.forEach(i => {
+        if (!lastMov || i.ts > lastMov) lastMov = i.ts;
+        if (i.manager_sync) {
+            sincronizadas.push(i);
+            if (i.os_manager) osSet.add(i.os_manager);
+            if (!lastSyncAt || i.manager_sync_at > lastSyncAt) {
+                lastSyncAt = i.manager_sync_at;
+                lastSyncUser = i.manager_sync_user;
+            }
+        } else {
+            pendentes.push(i);
+        }
+    });
+
+    const osArray = Array.from(osSet);
+
+    document.getElementById('sm-modal-selb').innerText = 'SELB ' + selb;
+    document.getElementById('sm-modal-modelo').innerText = (items[0].modelo_cache || 'VERIFICAR'); // simplificando se não achar eq
+    document.getElementById('sm-modal-last-mov').innerText = lastMov ? formatDateBR(lastMov) : '-';
+    document.getElementById('sm-modal-stats').innerText = `${items.length} (Sincronizadas: ${sincronizadas.length} | Pendentes: ${pendentes.length})`;
+    document.getElementById('sm-modal-os-used').innerText = osArray.length > 0 ? osArray.join(', ') : 'Nenhuma';
+
+    if (lastSyncAt) {
+        document.getElementById('sm-modal-last-sync').innerHTML = `Última sincronização<br><strong style="color:white">${formatDateBR(lastSyncAt)} - ${lastSyncUser || 'Auto'}</strong>`;
+    } else {
+        document.getElementById('sm-modal-last-sync').innerHTML = `Última sincronização<br>-`;
+    }
+
+    const sBody = document.getElementById('sm-modal-synced-body');
+    sBody.innerHTML = '';
+    sincronizadas.forEach(i => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td>${i.code}</td>
+            <td>${i.descricao || ''}</td>
+            <td>${i.qty}</td>
+            <td>${formatDateBR(i.manager_sync_at)}</td>
+            <td style="font-weight: 700; color: #6366f1;">${i.os_manager || ''}</td>
+        `;
+        sBody.appendChild(tr);
+    });
+
+    const pBody = document.getElementById('sm-modal-pending-body');
+    pBody.innerHTML = '';
+    pendentes.forEach(i => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td style="font-weight:bold;">${i.code}</td>
+            <td>${i.descricao || ''}</td>
+            <td>${i.qty}</td>
+            <td>${formatDateBR(i.ts)}</td>
+        `;
+        pBody.appendChild(tr);
+    });
+
+    const osInput = document.getElementById('sm-modal-os-input');
+    osInput.value = '';
+    osInput.dataset.selb = selb;
+    
+    // Auto-preenchimento
+    if (osArray.length === 1) {
+        osInput.value = osArray[0];
+    }
+
+    document.getElementById('modal-smartmanager').style.display = 'flex';
+};
+
+window.vincularPendenciasSmart = async () => {
+    const selb = document.getElementById('sm-modal-os-input').dataset.selb;
+    const osVal = document.getElementById('sm-modal-os-input').value.trim();
+
+    if (!osVal || osVal.length !== 8) {
+        alert('Por favor, informe uma OS válida com exatos 8 números.');
+        return;
+    }
+
+    const items = smartManagerData.filter(i => (i.selb || '').toUpperCase().trim() === selb);
+    const pendentes = items.filter(i => !i.manager_sync);
+    const sincronizadas = items.filter(i => i.manager_sync);
+
+    if (pendentes.length === 0) {
+        alert('Não existem pendências para vincular neste SELB.');
+        return;
+    }
+
+    // Validação Inteligente: Mesma peça já foi vinculada à mesma OS neste SELB?
+    let hasDuplicate = false;
+    let duplicateCode = '';
+    for (let p of pendentes) {
+        if (sincronizadas.some(s => s.code === p.code && s.os_manager === osVal)) {
+            hasDuplicate = true;
+            duplicateCode = p.code;
+            break;
+        }
+    }
+
+    if (hasDuplicate) {
+        const conf = confirm(`Atenção: A peça ${duplicateCode} já foi vinculada anteriormente à OS ${osVal} neste SELB.\n\nDeseja vinculá-la novamente mesmo assim?`);
+        if (!conf) return;
+    }
+
+    const idsToUpdate = pendentes.map(p => p.id);
+    const table = window.currentSector === 'REMANU' ? 'historico_remanu' : getHistoricoTable();
+
+    try {
+        const tsNow = new Date().toISOString();
+        const { error } = await supabase.from(table).update({
+            os_manager: osVal,
+            manager_sync: true,
+            manager_sync_at: tsNow,
+            manager_sync_user: currentUser.email
+        }).in('id', idsToUpdate);
+
+        if (error) throw error;
+
+        // Atualizar aba Histórico caso esteja renderizada e dar feedback visual
+        alert('Pendências vinculadas com sucesso!');
+        document.getElementById('modal-smartmanager').style.display = 'none';
+        
+        // Refresh local array
+        pendentes.forEach(p => {
+            p.manager_sync = true;
+            p.os_manager = osVal;
+            p.manager_sync_at = tsNow;
+            p.manager_sync_user = currentUser.email;
+        });
+
+        window.renderSmartManager();
+        if (typeof window.renderHistorico === 'function') window.renderHistorico();
+
+    } catch (e) {
+        console.error(e);
+        alert('Erro ao vincular OS.');
+    }
+};
+
+// Funcao auxiliar de formatacao (se não houver no main)
+function formatDateBR(isoString) {
+    if (!isoString) return '';
+    try {
+        const d = new Date(isoString);
+        return d.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+    } catch {
+        return isoString;
+    }
+}

@@ -89,6 +89,7 @@
     <button class="tab-btn" data-tab="retorno">🔄 Retorno (Reversa)</button>
     <button class="tab-btn" data-tab="auditoria" id="tab-btn-auditoria" style="display:none">🔍 Auditoria</button>
     <button class="tab-btn" data-tab="resumo">📈 Resumo da Operação</button>
+    <button class="tab-btn" data-tab="smartmanager" style="color: #6366f1; font-weight: 700;">🔗 Pendências SmartManager</button>
     <button class="tab-btn" data-tab="sec-audit" id="tab-btn-sec-audit" style="display:none; color: var(--orange); font-weight: 800;">🔒 Audit Corporativa</button>
   </div>
 
@@ -880,6 +881,105 @@
   </div>
 
   <!-- VIEW SEC AUDIT (AUDITORIA CORPORATIVA ETAPA 1) -->
+  <!-- ============================================== -->
+  <!-- ABA SMARTMANAGER PENDÊNCIAS                    -->
+  <!-- ============================================== -->
+  <div id="view-smartmanager" class="view">
+    <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 20px;">
+      <h2 style="margin:0; font-size: 20px; color: #6366f1;">🔗 Pendências SmartManager</h2>
+      <span style="font-size: 12px; color: #a1a1aa;">*Janela operacional: últimos 30 dias</span>
+    </div>
+
+    <div class="dash-cards" style="grid-template-columns: repeat(5, 1fr);">
+      <div class="dash-card">
+        <div class="dash-card-label">PEÇAS PENDENTES</div>
+        <div class="dash-card-value" id="sm-pecas-pendentes">0</div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-label">PEÇAS INTEGRADAS</div>
+        <div class="dash-card-value" id="sm-pecas-integradas">0</div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-label">SELBS PENDENTES</div>
+        <div class="dash-card-value" id="sm-selbs-pendentes">0</div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-label">INTEGRAÇÕES HOJE</div>
+        <div class="dash-card-value" id="sm-integracoes-hoje">0</div>
+      </div>
+      <div class="dash-card">
+        <div class="dash-card-label">PENDÊNCIA MAIS ANTIGA</div>
+        <div class="dash-card-value" id="sm-pendencia-antiga">0 <span style="font-size:14px; color:#a1a1aa;">dias</span></div>
+      </div>
+    </div>
+
+    <div class="table-container" style="margin-top:20px;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>SELB</th>
+            <th>Modelo</th>
+            <th>Última Movimentação</th>
+            <th>Situação</th>
+          </tr>
+        </thead>
+        <tbody id="sm-table-body">
+          <!-- Rows geradas no JS -->
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- MODAL SMARTMANAGER -->
+  <div id="modal-smartmanager" class="modal">
+    <div class="modal-content" style="max-width: 800px;">
+      <span class="close-btn" onclick="document.getElementById('modal-smartmanager').style.display='none'">&times;</span>
+      
+      <div style="background: var(--bg-dark); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between;">
+          <h2 id="sm-modal-selb" style="margin: 0; color: #6366f1;">SELB XXXXX</h2>
+          <span id="sm-modal-last-sync" style="font-size: 12px; color: #a1a1aa; text-align: right;">Última sincronização<br>-</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; margin-top: 10px; font-size: 14px; color: var(--text-light);">
+          <div>
+            <strong>Modelo:</strong> <span id="sm-modal-modelo">-</span><br>
+            <strong>Última movimentação:</strong> <span id="sm-modal-last-mov">-</span>
+          </div>
+          <div>
+            <strong>Peças:</strong> <span id="sm-modal-stats">-</span><br>
+            <strong>OS já utilizadas neste SELB:</strong> <span id="sm-modal-os-used">-</span>
+          </div>
+        </div>
+      </div>
+
+      <h3 style="margin-top: 0;">🟢 Peças já Sincronizadas</h3>
+      <div class="table-container" style="max-height: 200px; margin-bottom: 20px;">
+        <table class="data-table">
+          <thead><tr><th>Código</th><th>Descrição</th><th>Qtd</th><th>Data Sinc</th><th>OS SmartManager</th></tr></thead>
+          <tbody id="sm-modal-synced-body"></tbody>
+        </table>
+      </div>
+
+      <h3 style="margin-top: 0; color: var(--orange);">🔴 Peças Pendentes</h3>
+      <div class="table-container" style="max-height: 200px; margin-bottom: 20px;">
+        <table class="data-table">
+          <thead><tr><th>Código</th><th>Descrição</th><th>Qtd</th><th>Data da Baixa</th></tr></thead>
+          <tbody id="sm-modal-pending-body"></tbody>
+        </table>
+      </div>
+
+      <div style="display: flex; gap: 15px; align-items: flex-end; background: #1f2937; padding: 15px; border-radius: 8px;">
+        <div style="flex: 1;">
+          <label>OS SmartManager (8 números)</label>
+          <input type="text" id="sm-modal-os-input" maxlength="8" placeholder="Ex: 14322471" oninput="this.value = this.value.replace(/[^0-9]/g, '')">
+        </div>
+        <button class="btn btn-primary" onclick="window.vincularPendenciasSmart()" style="height: 42px;">Vincular Pendências</button>
+      </div>
+
+    </div>
+  </div>
+
   <div id="view-sec-audit" class="view">
     <div style="display: flex; flex-direction: column; height: 100%; background: white;">
         
