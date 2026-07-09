@@ -3699,6 +3699,7 @@ document.getElementById('ret-tipo')?.addEventListener('change', window.renderRet
 // ==========================================
 let chartResumoCusto = null;
 let chartResumoQtd = null;
+let chartResumoCustoMedio = null;
 
 window.resumoSetFilter = (type) => {
     const today = new Date();
@@ -3895,9 +3896,11 @@ window.renderResumoOperacao = async () => {
 
         // Gráficos (Top 10)
         let topCusto = [...rows].sort((a,b) => b.custo - a.custo).slice(0, 10);
+        let topCustoMedio = [...rows].sort((a,b) => b.custoMedio - a.custoMedio).slice(0, 10);
         let topQtd = [...rows].sort((a,b) => b.atendimentos - a.atendimentos).slice(0, 10);
 
         if (chartResumoCusto) chartResumoCusto.destroy();
+        if (chartResumoCustoMedio) chartResumoCustoMedio.destroy();
         if (chartResumoQtd) chartResumoQtd.destroy();
 
         if (window.Chart) {
@@ -3914,6 +3917,51 @@ window.renderResumoOperacao = async () => {
                         label: 'Custo Total (R$)',
                         data: topCusto.map(r => r.custo),
                         backgroundColor: '#E63946',
+                        borderRadius: 4
+                    }]
+                },
+                options: {
+                    indexAxis: 'y',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    layout: { padding: { right: 80 } },
+                    plugins: {
+                        legend: { display: false },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return context.raw.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                                }
+                            }
+                        },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'right',
+                            font: { weight: 'bold', size: 11, family: 'Inter' },
+                            color: '#333',
+                            formatter: function(value) {
+                                return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            ticks: {
+                                callback: function(value) { return 'R$ ' + value; }
+                            }
+                        }
+                    }
+                }
+            });
+
+            chartResumoCustoMedio = new Chart(document.getElementById('chart-resumo-custo-medio'), {
+                type: 'bar',
+                data: {
+                    labels: topCustoMedio.map(r => r.modelo.substring(0, 50)),
+                    datasets: [{
+                        label: 'Custo Médio (R$)',
+                        data: topCustoMedio.map(r => r.custoMedio),
+                        backgroundColor: '#F4A261',
                         borderRadius: 4
                     }]
                 },
