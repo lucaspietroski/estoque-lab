@@ -940,6 +940,7 @@ async function renderHistorico() {
     const { data: rawData } = await q;
     if (!rawData) return;
     const data = rawData.filter(h => {
+        if (h.tipo === 'sm_obs') return false;
         if (h.code === 'SEMPEÇA' || h.code === 'SEMPECA') {
             return h.tipo === 'saída' || h.tipo === 'saida' || h.tipo === 'REVISÃO';
         }
@@ -1557,6 +1558,7 @@ window.renderMovDashboard = async () => {
     const { data: rawData } = await q;
     if (!rawData) return;
     const data = rawData.filter(h => {
+        if (h.tipo === 'sm_obs') return false;
         if (h.code === 'SEMPEÇA' || h.code === 'SEMPECA') {
             return h.tipo === 'saída' || h.tipo === 'saida' || h.tipo === 'REVISÃO';
         }
@@ -2033,7 +2035,10 @@ window.processarRevisados = async () => {
     const duplicateCount = duplicatesInInput + duplicatesInDb;
 
     if (newSelbs.length === 0) {
-        status.innerHTML = `<span style="color:var(--orange)">⚠️ ${duplicateCount} SELB(s) já registrado(s). Nenhum novo adicionado.</span>`;
+        let det = [];
+        if (duplicatesInDb > 0) det.push(`${duplicatesInDb} já estavam no banco`);
+        if (duplicatesInInput > 0) det.push(`${duplicatesInInput} repetidos na sua lista`);
+        status.innerHTML = `<span style="color:var(--orange)">⚠️ Nenhum novo adicionado. (${det.join(' e ')})</span>`;
         return;
     }
 
@@ -2049,7 +2054,12 @@ window.processarRevisados = async () => {
         status.innerHTML = `<span style="color:var(--red)">❌ Erro: ${error.message}</span>`;
     } else {
         let msg = `✅ ${newSelbs.length} incluídos!`;
-        if (duplicateCount > 0) msg += ` <span style="color:var(--orange); font-size: 11px;">(${duplicateCount} duplicados ignorados)</span>`;
+        if (duplicateCount > 0) {
+            let det = [];
+            if (duplicatesInDb > 0) det.push(`${duplicatesInDb} do banco`);
+            if (duplicatesInInput > 0) det.push(`${duplicatesInInput} da lista`);
+            msg += ` <span style="color:var(--orange); font-size: 11px;">(Ignorados: ${det.join(' e ')})</span>`;
+        }
         status.innerHTML = `<span style="color:var(--green)">${msg}</span>`;
         textarea.value = '';
         renderRevisados();
@@ -2074,7 +2084,7 @@ window.renderModeloCusto = async () => {
 
         // Carregar Dados
         const [hRes, rRes, eRes] = await Promise.all([
-            supabase.from(getHistoricoTable()).select('*').in('tipo', ['saída', 'saida', 'retorno_garantia']),
+            supabase.from(getHistoricoTable()).select('*').in('tipo', ['saída', 'saida', 'retorno_garantia', 'sm_obs']),
             supabase.from('revisados').select('*'),
             supabase.from('equipamentos').select('selb, modelo')
         ]);
@@ -3787,7 +3797,7 @@ window.renderResumoOperacao = async () => {
         };
 
         const [hRes, rRes, eRes] = await Promise.all([
-            supabase.from(getHistoricoTable()).select('*').in('tipo', ['saída', 'saida', 'retorno_garantia']),
+            supabase.from(getHistoricoTable()).select('*').in('tipo', ['saída', 'saida', 'retorno_garantia', 'sm_obs']),
             supabase.from('revisados').select('*'),
             supabase.from('equipamentos').select('selb, modelo')
         ]);
@@ -4162,7 +4172,7 @@ window.renderSmartManager = async () => {
         const table = window.currentSector === 'REMANU' ? 'historico_remanu' : getHistoricoTable();
         const { data, error } = await supabase.from(table)
             .select('*')
-            .in('tipo', ['saída', 'saida', 'retorno_garantia'])
+            .in('tipo', ['saída', 'saida', 'retorno_garantia', 'sm_obs'])
             .gte('ts', limitDate);
 
         if (error) throw error;
@@ -4271,7 +4281,7 @@ window.renderSmartManager = async () => {
                 <td>${g.modelo}</td>
                 <td>${formatDateBR(g.lastMov)}</td>
                 <td style="color: ${color}; font-weight: 600;">${situacao}</td>
-            <td style="color: var(--text-muted); font-size: 0.8rem;" id="obs-col-${g.selb}">${localStorage.getItem('sm_obs_' + g.selb) || ''}</td>
+            <td style="color: var(--text-muted); font-size: 0.8rem;" id="obs-col-${g.selb}">${g.obs || ''}</td>
             `;
             tbody.appendChild(tr);
         });
@@ -4372,7 +4382,8 @@ window.openSmartModal = (selb, modeloNome) => {
     }
 
     const obsInput = document.getElementById('sm-modal-obs-input');
-    obsInput.value = localStorage.getItem('sm_obs_' + selb) || '';
+    const smObsItem = items.filter(i => i.tipo === 'sm_obs').sort((a,b) => b.ts.localeCompare(a.ts))[0];
+    obsInput.value = smObsItem ? smObsItem.descricao : '';
     
     document.getElementById('modal-smartmanager').style.display = 'flex';
 };
@@ -4524,26 +4535,52 @@ window.openResumoModelo = (modeloNome) => {
     };
 };
 
-window.saveSmObs = () => {
+window.saveSmObs = async () => {
     const selb = document.getElementById('sm-modal-os-input').dataset.selb;
     const obs = document.getElementById('sm-modal-obs-input').value.trim();
-    if (obs) {
-        localStorage.setItem('sm_obs_' + selb, obs);
-    } else {
-        localStorage.removeItem('sm_obs_' + selb);
-    }
-    const td = document.getElementById('obs-col-' + selb);
-    if (td) td.innerText = obs;
-    
-    // Feedback visual rapido
     const btn = document.querySelector('button[onclick="window.saveSmObs()"]');
+    
     if (btn) {
-        const oldText = btn.innerText;
-        btn.innerText = 'Salvo! ✓';
-        btn.style.background = 'var(--green)';
-        setTimeout(() => {
-            btn.innerText = oldText;
-            btn.style.background = '#4f46e5';
-        }, 1500);
+        btn.innerText = 'Salvando...';
+        btn.disabled = true;
+    }
+
+    try {
+        const table = window.currentSector === 'REMANU' ? 'historico_remanu' : getHistoricoTable();
+        const { error } = await supabase.from(table).insert({
+            tipo: 'sm_obs',
+            selb: selb,
+            descricao: obs,
+            qty: 0,
+            vlr_unit: 0,
+            vlr_total: 0,
+            user_email: currentUser?.email || 'anonimo',
+            ts: new Date().toISOString()
+        });
+        if (error) throw error;
+
+        // Atualiza UI
+        const td = document.getElementById('obs-col-' + selb);
+        if (td) td.innerText = obs;
+        
+        // Remove old obs for this selb from memory array and push new one
+        smartManagerData = smartManagerData.filter(i => !(i.tipo === 'sm_obs' && i.selb === selb));
+        smartManagerData.push({ tipo: 'sm_obs', selb: selb, descricao: obs, ts: new Date().toISOString() });
+        
+        if (btn) {
+            btn.innerText = 'Salvo! ✓';
+            btn.style.background = 'var(--green)';
+            setTimeout(() => {
+                btn.innerText = 'Salvar Obs';
+                btn.style.background = '#4f46e5';
+                btn.disabled = false;
+            }, 1500);
+        }
+    } catch(e) {
+        alert("Erro ao salvar observação no banco: " + e.message);
+        if (btn) {
+            btn.innerText = 'Salvar Obs';
+            btn.disabled = false;
+        }
     }
 };
