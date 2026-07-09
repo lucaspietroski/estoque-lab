@@ -3769,13 +3769,14 @@ window.renderResumoOperacao = async () => {
         let minIso = "2000-01-01T00:00:00.000Z";
         let maxIso = "2100-01-01T00:00:00.000Z";
         if (isLab) {
-            const d1Date = d1 ? new Date(d1) : new Date();
+            const d1Date = d1 ? new Date(d1 + 'T00:00:00') : new Date();
             d1Date.setHours(0, 0, 0, 0);
             d1Date.setDate(d1Date.getDate() - 30);
             minIso = d1Date.toISOString();
             
-            const d2Date = d2 ? new Date(d2) : new Date();
+            const d2Date = d2 ? new Date(d2 + 'T00:00:00') : new Date();
             d2Date.setHours(23, 59, 59, 999);
+            d2Date.setDate(d2Date.getDate() + 1); // +1 dia no futuro para garantir que pegue baixas que caíram pro dia seguinte
             maxIso = d2Date.toISOString();
         }
 
