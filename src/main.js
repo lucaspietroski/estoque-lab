@@ -3901,10 +3901,15 @@ window.renderResumoOperacao = async () => {
         if (chartResumoQtd) chartResumoQtd.destroy();
 
         if (window.Chart) {
+            // Registrar plugin globalmente caso não esteja (o CDN 2.0.0 auto-registra, mas só por segurança)
+            if (typeof ChartDataLabels !== 'undefined') {
+                Chart.register(ChartDataLabels);
+            }
+
             chartResumoCusto = new Chart(document.getElementById('chart-resumo-custo'), {
                 type: 'bar',
                 data: {
-                    labels: topCusto.map(r => r.modelo.substring(0, 25)),
+                    labels: topCusto.map(r => r.modelo.substring(0, 50)),
                     datasets: [{
                         label: 'Custo Total (R$)',
                         data: topCusto.map(r => r.custo),
@@ -3916,6 +3921,7 @@ window.renderResumoOperacao = async () => {
                     indexAxis: 'y',
                     responsive: true,
                     maintainAspectRatio: false,
+                    layout: { padding: { right: 80 } },
                     plugins: {
                         legend: { display: false },
                         tooltip: {
@@ -3923,6 +3929,15 @@ window.renderResumoOperacao = async () => {
                                 label: function(context) {
                                     return context.raw.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
                                 }
+                            }
+                        },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'right',
+                            font: { weight: 'bold', size: 11, family: 'Inter' },
+                            color: '#333',
+                            formatter: function(value) {
+                                return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
                             }
                         }
                     },
@@ -3939,7 +3954,7 @@ window.renderResumoOperacao = async () => {
             chartResumoQtd = new Chart(document.getElementById('chart-resumo-qtd'), {
                 type: 'bar',
                 data: {
-                    labels: topQtd.map(r => r.modelo.substring(0, 25)),
+                    labels: topQtd.map(r => r.modelo.substring(0, 50)),
                     datasets: [{
                         label: 'Máquinas Revisadas',
                         data: topQtd.map(r => r.atendimentos),
@@ -3951,8 +3966,15 @@ window.renderResumoOperacao = async () => {
                     indexAxis: 'y',
                     responsive: true,
                     maintainAspectRatio: false,
+                    layout: { padding: { right: 40 } },
                     plugins: {
-                        legend: { display: false }
+                        legend: { display: false },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'right',
+                            font: { weight: 'bold', size: 12, family: 'Inter' },
+                            color: '#333'
+                        }
                     }
                 }
             });
