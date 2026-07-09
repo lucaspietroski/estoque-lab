@@ -1333,11 +1333,11 @@
         <input type="text" class="modal-input" id="ajuste-obs" placeholder="Ex: Operador registrou SELB errado">
     </div>
 
-    <div style="display: flex; gap: 10px;">
-      <button class="btn-cancel" onclick="closeAjusteHistorico()" style="flex: 1;">Cancelar</button>
-      <button class="btn-confirm" onclick="anularRegistroHistorico()" style="flex: 1; background: var(--red);">Anular Registro</button>
-      <button class="btn-confirm" onclick="desmembrarRegistroHistorico()" style="flex: 1; background: var(--blue);">Desmembrada</button>
-      <button class="btn-confirm" onclick="saveAjusteHistorico()" style="flex: 2; background: var(--orange);">Confirmar Ajuste</button>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+      <button class="btn-cancel" onclick="closeAjusteHistorico()">Cancelar</button>
+      <button class="btn-confirm" onclick="anularRegistroHistorico()" style="background: var(--red);">Anular Registro</button>
+      <button class="btn-confirm" onclick="desmembrarRegistroHistorico()" style="background: var(--blue);">Desmembrada</button>
+      <button class="btn-confirm" onclick="saveAjusteHistorico()" style="background: var(--orange);">Confirmar Ajuste</button>
     </div>
     <div id="ajuste-status" style="margin-top: 15px; font-size: 13px; text-align: center;"></div>
   </div>

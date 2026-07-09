@@ -2017,16 +2017,20 @@ window.processarRevisados = async () => {
     const { data: existingData, error: checkError } = await supabase
         .from('revisados')
         .select('selb')
-        .in('selb', selbs);
+        .in('selb', selbs)
+        .gte('ts', selbData + 'T00:00:00Z')
+        .lte('ts', selbData + 'T23:59:59Z');
 
     if (checkError) {
         status.innerHTML = `<span style="color:var(--red)">❌ Erro ao verificar duplicidades: ${checkError.message}</span>`;
         return;
     }
 
+    const duplicatesInInput = selbsRaw.length - selbs.length;
     const existingSelbs = new Set(existingData.map(row => row.selb.toUpperCase()));
     const newSelbs = selbs.filter(s => !existingSelbs.has(s));
-    const duplicateCount = selbs.length - newSelbs.length;
+    const duplicatesInDb = selbs.length - newSelbs.length;
+    const duplicateCount = duplicatesInInput + duplicatesInDb;
 
     if (newSelbs.length === 0) {
         status.innerHTML = `<span style="color:var(--orange)">⚠️ ${duplicateCount} SELB(s) já registrado(s). Nenhum novo adicionado.</span>`;
