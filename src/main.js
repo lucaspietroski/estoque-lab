@@ -1938,6 +1938,15 @@ window.renderRevisados = async () => {
     const { data } = await q;
     if (!data) return;
 
+    const totalEl = document.getElementById('total-selbs-revisados');
+    if (totalEl) {
+        if (filtroData) {
+            totalEl.textContent = `(${data.length} filtrados)`;
+        } else {
+            totalEl.textContent = `(${data.length} últimos)`;
+        }
+    }
+
     tbody.innerHTML = data.map(r => `
         <tr>
             <td style="text-align: center;"><input type="checkbox" class="rev-chk" value="${r.id}"></td>
@@ -1996,14 +2005,35 @@ window.processarRevisados = async () => {
     // -------------------------
 
     status.innerHTML = '⌛ Gravando...';
-    const selbs = raw.split(/[\n,;]+/).map(s => s.trim().toUpperCase()).filter(s => s.length >= 2);
+    const selbsRaw = raw.split(/[\n,;]+/).map(s => s.trim().toUpperCase()).filter(s => s.length >= 2);
+    const selbs = [...new Set(selbsRaw)]; // Deduplicate input
     
     if (selbs.length === 0) {
         status.innerHTML = '❌ Nenhum SELB válido detectado.';
         return;
     }
 
-    const records = selbs.map(s => ({
+    // Check existing
+    const { data: existingData, error: checkError } = await supabase
+        .from('revisados')
+        .select('selb')
+        .in('selb', selbs);
+
+    if (checkError) {
+        status.innerHTML = `<span style="color:var(--red)">❌ Erro ao verificar duplicidades: ${checkError.message}</span>`;
+        return;
+    }
+
+    const existingSelbs = new Set(existingData.map(row => row.selb.toUpperCase()));
+    const newSelbs = selbs.filter(s => !existingSelbs.has(s));
+    const duplicateCount = selbs.length - newSelbs.length;
+
+    if (newSelbs.length === 0) {
+        status.innerHTML = `<span style="color:var(--orange)">⚠️ ${duplicateCount} SELB(s) já registrado(s). Nenhum novo adicionado.</span>`;
+        return;
+    }
+
+    const records = newSelbs.map(s => ({
         selb: s,
         user_email: currentUser?.email || 'anonimo',
         ts: selbData + 'T12:00:00Z' // Usa meio-dia para evitar problemas de fuso
@@ -2014,7 +2044,9 @@ window.processarRevisados = async () => {
     if (error) {
         status.innerHTML = `<span style="color:var(--red)">❌ Erro: ${error.message}</span>`;
     } else {
-        status.innerHTML = `<span style="color:var(--green)">✅ ${selbs.length} SELBs registrados!</span>`;
+        let msg = `✅ ${newSelbs.length} incluídos!`;
+        if (duplicateCount > 0) msg += ` <span style="color:var(--orange); font-size: 11px;">(${duplicateCount} duplicados ignorados)</span>`;
+        status.innerHTML = `<span style="color:var(--green)">${msg}</span>`;
         textarea.value = '';
         renderRevisados();
     }
@@ -4195,7 +4227,20 @@ window.renderSmartManager = async () => {
         tbody.innerHTML = '';
 
         const selbsList = Object.keys(selbGroups).map(selb => ({ selb, ...selbGroups[selb] }));
-        selbsList.sort((a, b) => b.lastMov.localeCompare(a.lastMov));
+        selbsList.sort((a, b) => {
+            const aPending = a.pendentes > 0;
+            const bPending = b.pendentes > 0;
+            if (aPending && !bPending) return -1;
+            if (!aPending && bPending) return 1;
+            
+            if (aPending && bPending) {
+                // Both pending: oldest first
+                return a.lastMov.localeCompare(b.lastMov);
+            } else {
+                // Both concluded: newest first (so recent completions stay visible)
+                return b.lastMov.localeCompare(a.lastMov);
+            }
+        });
 
         selbsList.forEach(g => {
             if (g.pendentes > 0) selbsPendentesCount++;
@@ -4222,6 +4267,7 @@ window.renderSmartManager = async () => {
                 <td>${g.modelo}</td>
                 <td>${formatDateBR(g.lastMov)}</td>
                 <td style="color: ${color}; font-weight: 600;">${situacao}</td>
+            <td style="color: var(--text-muted); font-size: 0.8rem;" id="obs-col-${g.selb}">${localStorage.getItem('sm_obs_' + g.selb) || ''}</td>
             `;
             tbody.appendChild(tr);
         });
@@ -4321,6 +4367,9 @@ window.openSmartModal = (selb, modeloNome) => {
         osInput.value = osArray[0];
     }
 
+    const obsInput = document.getElementById('sm-modal-obs-input');
+    obsInput.value = localStorage.getItem('sm_obs_' + selb) || '';
+    
     document.getElementById('modal-smartmanager').style.display = 'flex';
 };
 
@@ -4469,4 +4518,28 @@ window.openResumoModelo = (modeloNome) => {
             modal.style.display = 'none';
         }
     };
+};
+
+window.saveSmObs = () => {
+    const selb = document.getElementById('sm-modal-os-input').dataset.selb;
+    const obs = document.getElementById('sm-modal-obs-input').value.trim();
+    if (obs) {
+        localStorage.setItem('sm_obs_' + selb, obs);
+    } else {
+        localStorage.removeItem('sm_obs_' + selb);
+    }
+    const td = document.getElementById('obs-col-' + selb);
+    if (td) td.innerText = obs;
+    
+    // Feedback visual rapido
+    const btn = document.querySelector('button[onclick="window.saveSmObs()"]');
+    if (btn) {
+        const oldText = btn.innerText;
+        btn.innerText = 'Salvo! ✓';
+        btn.style.background = 'var(--green)';
+        setTimeout(() => {
+            btn.innerText = oldText;
+            btn.style.background = '#4f46e5';
+        }, 1500);
+    }
 };

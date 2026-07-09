@@ -312,9 +312,10 @@
 
       <div class="card" style="margin-top: 20px; background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border);">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-          <h4 style="margin: 0;">📋 Registros de SELBs</h4>
+          <h4 style="margin: 0;">📋 Registros de SELBs <span id="total-selbs-revisados" style="font-size: 13px; color: var(--text-muted); font-weight: normal; margin-left: 10px;"></span></h4>
           <div style="display: flex; gap: 10px; align-items: center;">
             <input type="date" id="filtro-data-revisados" style="padding: 5px; border-radius: 4px; border: 1px solid var(--border);" onchange="window.renderRevisados()">
+            <button class="btn-admin" style="background: #475569; padding: 5px 10px; font-size: 12px; height: auto;" onclick="document.getElementById('rev-sel-all').click()">☑️ Sel. Todos</button>
             <button class="btn-admin" style="background: var(--red); padding: 5px 10px; font-size: 12px; height: auto;" onclick="window.excluirRevisadosSelecionados()">🗑️ Excluir Selecionados</button>
           </div>
         </div>
@@ -931,6 +932,7 @@
             <th>Modelo</th>
             <th>Última Movimentação</th>
             <th>Situação</th>
+            <th>Obs</th>
           </tr>
         </thead>
         <tbody id="sm-table-body">
@@ -978,10 +980,19 @@
         </table>
       </div>
 
-      <div style="display: flex; gap: 15px; align-items: flex-end; background: #1f2937; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
-        <div style="flex: 1;">
-          <div class="modal-label" style="color:white;">OS SmartManager (8 números)</div>
-          <input type="text" id="sm-modal-os-input" class="modal-input" maxlength="8" placeholder="Ex: 14322471" oninput="this.value = this.value.replace(/[^0-9]/g, '')" style="margin:0;">
+      <div style="background: #1f2937; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+        <div style="display: flex; gap: 15px; align-items: flex-end; margin-bottom: 15px;">
+          <div style="flex: 1;">
+            <div class="modal-label" style="color:white;">OS SmartManager (8 números)</div>
+            <input type="text" id="sm-modal-os-input" class="modal-input" maxlength="8" placeholder="Ex: 14322471" oninput="this.value = this.value.replace(/[^0-9]/g, '')" style="margin:0;">
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: flex-end;">
+          <div style="flex: 1;">
+            <div class="modal-label" style="color:#a1a1aa; font-size: 11px;">Observação Interna (Salvo neste navegador)</div>
+            <input type="text" id="sm-modal-obs-input" class="modal-input" placeholder="Ex: Faltou peça X, validar amanhã..." style="margin:0; background: #374151; color: white; border: 1px solid #4b5563;">
+          </div>
+          <button class="btn-admin" style="background: #4f46e5; height: 38px; padding: 0 15px;" onclick="window.saveSmObs()">Salvar Obs</button>
         </div>
       </div>
 
