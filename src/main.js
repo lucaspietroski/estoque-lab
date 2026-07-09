@@ -2141,6 +2141,7 @@ window.renderModeloCusto = async () => {
         });
 
         const rows = Object.entries(byModel).map(([modelo, d]) => {
+            d.pecasUsadas = d.pecasUsadas || {};
             const totalAtend = d.comPeca.size + d.semPeca.size;
             const economiaReal = (d.vlrNovaRef || 0) - d.custo;
             const economiaPct = (d.vlrNovaRef || 0) > 0 ? (economiaReal / d.vlrNovaRef) * 100 : 0;
@@ -2218,7 +2219,8 @@ window.renderModeloCusto = async () => {
             window.topModelData = top;
             window.bottomModelData = bottom;
 
-            // Atualizar Cards KPI Premium
+
+        // Atualizar Cards KPI Premium
             document.getElementById('mod-kpi-modelos').textContent = rows.length;
             document.getElementById('mod-kpi-modelos-label').textContent = `MODELOS ATENDIDOS (${totalAtend} MÁQUINAS)`;
             document.getElementById('mod-kpi-total').textContent = fmt(totalCusto);
@@ -3823,7 +3825,7 @@ window.renderResumoOperacao = async () => {
             }
 
             const modelo = eqMap[selb] || 'MODELO NÃO IDENTIFICADO';
-            if (!byModel[modelo]) byModel[modelo] = { comPeca: new Set(), semPeca: new Set(), custo: 0, qtdPecas: 0 };
+            if (!byModel[modelo]) byModel[modelo] = { comPeca: new Set(), semPeca: new Set(), custo: 0, qtdPecas: 0, pecasUsadas: {} };
             
             if (s.code === 'SEMPEÇA' || s.code === 'SEMPECA') {
                 if (window.currentSector === 'REMANU' && s.revision_id) byModel[modelo].semPeca.add(s.revision_id);
@@ -3837,6 +3839,13 @@ window.renderResumoOperacao = async () => {
                 pecasCount[s.code] = pecasCount[s.code] || { desc: s.descricao, qty: 0 };
                 pecasCount[s.code].qty += ((s.qty || 1) * signal);
                 byModel[modelo].qtdPecas += ((s.qty || 1) * signal);
+                if (s.descricao) {
+                    if (!byModel[modelo].pecasUsadas[s.descricao]) {
+                        byModel[modelo].pecasUsadas[s.descricao] = { qty: 0, vlr_unit: s.vlr_unit || 0 };
+                    }
+                    byModel[modelo].pecasUsadas[s.descricao].qty += ((s.qty || 1) * signal);
+                    if ((s.vlr_unit || 0) > 0) byModel[modelo].pecasUsadas[s.descricao].vlr_unit = s.vlr_unit;
+                }
             }
 
             if (window.currentSector === 'REMANU' && s.revision_id) {
@@ -3855,7 +3864,7 @@ window.renderResumoOperacao = async () => {
             const selb = (r.selb || '').toUpperCase().trim();
             if (!selb || selb === 'S/N' || selb === '0000') return;
             const modelo = eqMap[selb] || 'MODELO NÃO IDENTIFICADO';
-            if (!byModel[modelo]) byModel[modelo] = { comPeca: new Set(), semPeca: new Set(), custo: 0, qtdPecas: 0 };
+            if (!byModel[modelo]) byModel[modelo] = { comPeca: new Set(), semPeca: new Set(), custo: 0, qtdPecas: 0, pecasUsadas: {} };
             
             if (!byModel[modelo].comPeca.has(selb)) {
                 byModel[modelo].semPeca.add(selb);
@@ -3881,11 +3890,13 @@ window.renderResumoOperacao = async () => {
                 comPeca: com,
                 semPeca: sem,
                 qtdPecas: d.qtdPecas || 0,
+                pecasUsadas: d.pecasUsadas || {},
                 custo: d.custo,
                 custoMedio: totalAtend > 0 ? d.custo / totalAtend : 0
             };
         }).filter(r => r.atendimentos > 0); // ignora se = 0
         
+        window.lastResumoRows = rows;
         let totalRevisados = eqComPeca + eqSemPeca;
         let custoMedioGeral = totalRevisados > 0 ? totalCusto / totalRevisados : 0;
         
@@ -3915,21 +3926,28 @@ window.renderResumoOperacao = async () => {
         // ordena por revisados DESC
         rows.sort((a,b) => b.atendimentos - a.atendimentos);
         
-                const formatModeloNome = (nome) => {
-            if (!nome || typeof nome !== 'string') return nome;
-            if (nome === 'MODELO NÃO IDENTIFICADO') return nome;
-            const palavras = nome.trim().split(' ');
-            if (palavras.length > 1) {
-                palavras.shift();
-                return palavras.join(' ');
+                        const wrapLabel = (nome) => {
+            if (!nome) return '';
+            const MAX_LINE_LEN = 28;
+            if (nome.length <= MAX_LINE_LEN) {
+                return [nome];
             }
-            return nome;
+            let splitIdx = nome.lastIndexOf(' ', MAX_LINE_LEN);
+            if (splitIdx === -1) splitIdx = MAX_LINE_LEN;
+            
+            let line1 = nome.substring(0, splitIdx);
+            let line2 = nome.substring(splitIdx + 1);
+            
+            if (line2.length > MAX_LINE_LEN) {
+                line2 = line2.substring(0, MAX_LINE_LEN - 3) + '...';
+            }
+            return [line1, line2];
         };
         const tbody = document.getElementById('resumo-tbody');
         if(tbody) {
             tbody.innerHTML = rows.map(r => `
                 <tr>
-                    <td style="font-weight:bold; color:#000; font-size: 0.85em;">${formatModeloNome(r.modelo)}</td>
+                    <td style="font-weight:bold; color:#000; font-size: 0.85em;">${r.modelo}</td>
                     <td style="text-align:center;">${r.atendimentos}</td>
                     <td style="text-align:center; color: var(--blue)">${r.comPeca}</td>
                     <td style="text-align:center; color: var(--orange)">${r.semPeca}</td>
@@ -3958,7 +3976,7 @@ window.renderResumoOperacao = async () => {
             chartResumoCusto = new Chart(document.getElementById('chart-resumo-custo'), {
                 type: 'bar',
                 data: {
-                    labels: topCusto.map(r => formatModeloNome(r.modelo).substring(0, 50)),
+                    labels: topCusto.map(r => wrapLabel(r.modelo)),
                     datasets: [{
                         label: 'Custo Total (R$)',
                         data: topCusto.map(r => r.custo),
@@ -3970,7 +3988,7 @@ window.renderResumoOperacao = async () => {
                     indexAxis: 'y',
                     responsive: true,
                     maintainAspectRatio: false,
-                    layout: { padding: { right: 80 } },
+                    layout: { padding: { left: 5, right: 80 } },
                     plugins: {
                         legend: { display: false },
                         tooltip: {
@@ -3990,10 +4008,24 @@ window.renderResumoOperacao = async () => {
                             }
                         }
                     },
+onClick: (e, activeElements) => {
+                        if (activeElements.length > 0) {
+                            const index = activeElements[0].index;
+                            const modelData = topCusto[index];
+                            if (modelData) window.openResumoModelo(modelData.modelo);
+                        }
+                    },
                     scales: {
                         x: {
                             ticks: {
                                 callback: function(value) { return 'R$ ' + value; }
+                            }
+                        },
+                        y: {
+                            ticks: {
+                                font: { family: 'Inter', size: 12, weight: 'bold' },
+                                autoSkip: false,
+                                color: '#000'
                             }
                         }
                     }
@@ -4003,7 +4035,7 @@ window.renderResumoOperacao = async () => {
             chartResumoCustoMedio = new Chart(document.getElementById('chart-resumo-custo-medio'), {
                 type: 'bar',
                 data: {
-                    labels: topCustoMedio.map(r => formatModeloNome(r.modelo).substring(0, 50)),
+                    labels: topCustoMedio.map(r => wrapLabel(r.modelo)),
                     datasets: [{
                         label: 'Custo Médio (R$)',
                         data: topCustoMedio.map(r => r.custoMedio),
@@ -4040,38 +4072,33 @@ window.renderResumoOperacao = async () => {
                             ticks: {
                                 callback: function(value) { return 'R$ ' + value; }
                             }
+                        },
+                        y: {
+                            ticks: {
+                                font: { family: 'Inter', size: 12, weight: 'bold' },
+                                autoSkip: false,
+                                color: '#000'
+                            }
                         }
                     }
                 }
             });
 
-            chartResumoQtd = new Chart(document.getElementById('chart-resumo-qtd'), {
-                type: 'bar',
-                data: {
-                    labels: topQtd.map(r => formatModeloNome(r.modelo).substring(0, 50)),
-                    datasets: [{
-                        label: 'Máquinas Revisadas',
-                        data: topQtd.map(r => r.atendimentos),
-                        backgroundColor: '#1D3557',
-                        borderRadius: 4
-                    }]
-                },
-                options: {
-                    indexAxis: 'y',
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    layout: { padding: { right: 40 } },
-                    plugins: {
-                        legend: { display: false },
-                        datalabels: {
-                            anchor: 'end',
-                            align: 'right',
-                            font: { weight: 'bold', size: 12, family: 'Inter' },
-                            color: '#333'
-                        }
-                    }
-                }
-            });
+            const renderListQtd = () => {
+                const el = document.getElementById('list-resumo-qtd');
+                if (!el) return;
+                el.innerHTML = topQtd.map(item => `
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 8px;">
+                        <div style="font-weight: bold; color: #000; font-size: 13px; max-width: 80%; line-height: 1.3;">
+                            ${item.modelo}
+                        </div>
+                        <div style="font-weight: bold; font-size: 15px; color: #333; text-align: right;">
+                            ${item.atendimentos}
+                        </div>
+                    </div>
+                `).join('');
+            };
+            renderListQtd();
         }
 
     } catch (e) {
@@ -4376,3 +4403,70 @@ function formatDateBR(isoString) {
         return isoString;
     }
 }
+
+
+window.openResumoModelo = (modeloNome) => {
+    if (!window.lastResumoRows) return;
+    
+    const row = window.lastResumoRows.find(r => r.modelo === modeloNome);
+    if (!row) return;
+
+    // Find original data object
+    let originalData = null;
+    // Assuming byModel logic is isolated, we can use the row mapping
+    const comPeca = row.comPeca || 0;
+    const semPeca = row.semPeca || 0;
+    const totalMaquinas = row.atendimentos || 0;
+    const pecasTotal = row.qtdPecas || 0;
+    const custoGeral = row.custo || 0;
+    
+    const custoMedioGeral = totalMaquinas > 0 ? custoGeral / totalMaquinas : 0;
+    const custoMedioComPeca = comPeca > 0 ? custoGeral / comPeca : 0;
+    const mediaPecas = totalMaquinas > 0 ? pecasTotal / totalMaquinas : 0;
+
+    document.getElementById('modal-resumo-title').textContent = modeloNome;
+    document.getElementById('modal-resumo-com-peca').textContent = comPeca;
+    document.getElementById('modal-resumo-sem-peca').textContent = semPeca;
+    document.getElementById('modal-resumo-total-maquinas').textContent = totalMaquinas;
+    document.getElementById('modal-resumo-pecas-total').textContent = pecasTotal;
+    
+    document.getElementById('modal-resumo-custo-geral').textContent = custoMedioGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    document.getElementById('modal-resumo-custo-com-peca').textContent = custoMedioComPeca.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+    document.getElementById('modal-resumo-media-pecas').textContent = mediaPecas.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    document.getElementById('modal-resumo-custo-total').textContent = custoGeral.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+    // Render part list
+    const tbody = document.getElementById('modal-resumo-lista-pecas');
+    // pecasUsadas passed into row somehow?
+    // Let's modify row mapping earlier to include pecasUsadas
+    
+    let pecasHtml = '';
+    if (row.pecasUsadas && Object.keys(row.pecasUsadas).length > 0) {
+        const sortedPecas = Object.entries(row.pecasUsadas).sort((a,b) => (b[1].qty !== undefined ? b[1].qty : b[1]) - (a[1].qty !== undefined ? a[1].qty : a[1]));
+        pecasHtml = sortedPecas.map(([nome, data]) => {
+            let q = typeof data === 'object' ? data.qty : data;
+            let vlr = typeof data === 'object' ? data.vlr_unit : 0;
+            let vlrStr = vlr > 0 ? (vlr).toLocaleString('pt-BR', {style: 'currency', currency: 'BRL'}) : '—';
+            return `
+            <tr style="border-bottom: 1px solid #eee;">
+                <td style="padding: 12px 20px; font-size: 13px; color: #333; white-space: normal; word-wrap: break-word;">${nome}</td>
+                <td style="padding: 12px 20px; font-size: 13px; color: #666; text-align: right; white-space: nowrap;">${vlrStr} /un</td>
+                <td style="padding: 12px 20px; font-size: 14px; font-weight: bold; text-align: right; color: var(--blue); white-space: nowrap;">${q} un</td>
+            </tr>
+        `;}).join('');
+    } else {
+        pecasHtml = '<tr><td colspan="2" style="padding: 20px; text-align: center; color: #999;">Nenhuma peça registrada neste modelo.</td></tr>';
+    }
+    
+    tbody.innerHTML = pecasHtml;
+
+    // Show modal and hide click outside handler
+    const modal = document.getElementById('modal-resumo-modelo');
+    modal.style.display = 'flex';
+    
+    modal.onclick = (e) => {
+        if (e.target === modal) {
+            modal.style.display = 'none';
+        }
+    };
+};
