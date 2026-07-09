@@ -3754,8 +3754,46 @@ window.renderResumoOperacao = async () => {
             supabase.from('equipamentos').select('selb, modelo')
         ]);
 
-        const saídas = (hRes.data || []).filter(s => filtrarData(s.ts));
-        const revisados = window.currentSector === 'REMANU' ? [] : (rRes.data || []).filter(r => filtrarData(r.ts));
+        const isLab = window.currentSector === 'LAB';
+        const revisados = isLab ? (rRes.data || []).filter(r => filtrarData(r.ts)) : [];
+        
+        const validSelbsLab = new Set();
+        revisados.forEach(r => {
+            const selb = (r.selb || '').toUpperCase().trim();
+            if (selb && selb !== 'S/N' && selb !== '0000') {
+                validSelbsLab.add(selb);
+            }
+        });
+
+        // Janela retroativa de 30 dias para pegar peças de máquinas que demoraram na bancada
+        let minIso = "2000-01-01T00:00:00.000Z";
+        let maxIso = "2100-01-01T00:00:00.000Z";
+        if (isLab) {
+            const d1Date = d1 ? new Date(d1) : new Date();
+            d1Date.setHours(0, 0, 0, 0);
+            d1Date.setDate(d1Date.getDate() - 30);
+            minIso = d1Date.toISOString();
+            
+            const d2Date = d2 ? new Date(d2) : new Date();
+            d2Date.setHours(23, 59, 59, 999);
+            maxIso = d2Date.toISOString();
+        }
+
+        const saídas = (hRes.data || []).filter(s => {
+            if (!isLab) {
+                // Remanu continua filtrando a baixa no período exato
+                return filtrarData(s.ts);
+            } else {
+                const selb = (s.selb || '').toUpperCase().trim();
+                // Se é LAB e o SELB foi revisado no período, aceita peças até 30 dias antes do filtro
+                if (validSelbsLab.has(selb)) {
+                    if (s.ts >= minIso && s.ts <= maxIso) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        });
         const equipamentos = eRes.data || [];
 
         const eqMap = {};
