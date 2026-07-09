@@ -3823,7 +3823,7 @@ window.renderResumoOperacao = async () => {
             }
 
             const modelo = eqMap[selb] || 'MODELO NÃO IDENTIFICADO';
-            if (!byModel[modelo]) byModel[modelo] = { comPeca: new Set(), semPeca: new Set(), custo: 0 };
+            if (!byModel[modelo]) byModel[modelo] = { comPeca: new Set(), semPeca: new Set(), custo: 0, qtdPecas: 0 };
             
             if (s.code === 'SEMPEÇA' || s.code === 'SEMPECA') {
                 if (window.currentSector === 'REMANU' && s.revision_id) byModel[modelo].semPeca.add(s.revision_id);
@@ -3836,6 +3836,7 @@ window.renderResumoOperacao = async () => {
             if (s.code && s.code !== 'SEMPEÇA' && s.code !== 'SEMPECA') {
                 pecasCount[s.code] = pecasCount[s.code] || { desc: s.descricao, qty: 0 };
                 pecasCount[s.code].qty += ((s.qty || 1) * signal);
+                byModel[modelo].qtdPecas += ((s.qty || 1) * signal);
             }
 
             if (window.currentSector === 'REMANU' && s.revision_id) {
@@ -3854,7 +3855,7 @@ window.renderResumoOperacao = async () => {
             const selb = (r.selb || '').toUpperCase().trim();
             if (!selb || selb === 'S/N' || selb === '0000') return;
             const modelo = eqMap[selb] || 'MODELO NÃO IDENTIFICADO';
-            if (!byModel[modelo]) byModel[modelo] = { comPeca: new Set(), semPeca: new Set(), custo: 0 };
+            if (!byModel[modelo]) byModel[modelo] = { comPeca: new Set(), semPeca: new Set(), custo: 0, qtdPecas: 0 };
             
             if (!byModel[modelo].comPeca.has(selb)) {
                 byModel[modelo].semPeca.add(selb);
@@ -3879,6 +3880,7 @@ window.renderResumoOperacao = async () => {
                 atendimentos: totalAtend,
                 comPeca: com,
                 semPeca: sem,
+                qtdPecas: d.qtdPecas || 0,
                 custo: d.custo,
                 custoMedio: totalAtend > 0 ? d.custo / totalAtend : 0
             };
@@ -3921,6 +3923,7 @@ window.renderResumoOperacao = async () => {
                     <td style="text-align:center;">${r.atendimentos}</td>
                     <td style="text-align:center; color: var(--blue)">${r.comPeca}</td>
                     <td style="text-align:center; color: var(--orange)">${r.semPeca}</td>
+                    <td style="text-align:center;">${r.qtdPecas}</td>
                     <td style="text-align:right">${r.custo.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
                     <td style="text-align:right">${r.custoMedio.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</td>
                 </tr>
