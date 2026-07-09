@@ -1120,6 +1120,56 @@ window.saveAjusteHistorico = async () => {
     }, 1500);
 };
 
+window.desmembrarRegistroHistorico = async () => {
+    const id = document.getElementById('ajuste-id').value;
+    const obs = document.getElementById('ajuste-obs').value.trim();
+    const status = document.getElementById('ajuste-status');
+
+    if (!confirm("⚠️ ATENÇÃO: Tem certeza que deseja registrar como DESMEMBRADA?\nA peça retornará ao estoque com saldo positivo e o registro original não será mais considerado nos custos.")) return;
+
+    status.innerHTML = '⌛ Processando desmembramento...';
+
+    // 1. Pegar registro original
+    const { data: original } = await supabase.from(getHistoricoTable()).select('*').eq('id', id).single();
+    if (!original) return;
+
+    // 2. Reverte o estoque (voltar para o estoque)
+    const factor = (original.tipo === 'saída' || original.tipo === 'saida') ? 1 : -1;
+    const { data: stOld } = await supabase.from(getEstoqueTable()).select('qty').eq('code', original.code).single();
+    await supabase.from(getEstoqueTable()).upsert({ code: original.code, qty: (stOld?.qty || 0) + (original.qty * factor) });
+
+    // 3. Marca como DESMEMBRADA
+    const { error: errUpdate } = await supabase.from(getHistoricoTable()).update({
+        tipo: 'DESMEMBRADA',
+        descricao: `DESMEMBRADA: ${obs} (Original: ${original.tipo})`
+    }).eq('id', id);
+
+    if (errUpdate) {
+        status.innerHTML = '❌ Erro ao processar: ' + errUpdate.message;
+        return;
+    }
+
+    // 4. Cria registro de auditoria (TIPO ENTRADA)
+    await supabase.from(getHistoricoTable()).insert({
+        tipo: 'entrada',
+        code: original.code,
+        qty: original.qty,
+        vlr_unit: original.vlr_unit,
+        vlr_total: original.vlr_total,
+        selb: original.selb,
+        descricao: `RETORNO POR DESMEMBRAMENTO DE MÁQUINA${obs ? ' - ' + obs : ''}`,
+        user_email: currentUser.email,
+        ts: new Date().toISOString()
+    });
+
+    status.innerHTML = '<span style="color:var(--blue)">✅ Peça retornada ao estoque (Desmembrada)!</span>';
+    setTimeout(() => {
+        closeAjusteHistorico();
+        renderHistorico();
+        updateDashboard();
+    }, 1500);
+};
+
 window.anularRegistroHistorico = async () => {
     const id = document.getElementById('ajuste-id').value;
     const obs = document.getElementById('ajuste-obs').value.trim();
