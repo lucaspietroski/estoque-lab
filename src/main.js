@@ -3805,13 +3805,7 @@ window.renderResumoOperacao = async () => {
         let totalCusto = 0;
         let pecasCount = {}; // Para achar a peça mais consumida
         
-        const validSelbsLab = new Set();
-        revisados.forEach(r => {
-            const selb = (r.selb || '').toUpperCase().trim();
-            if (selb && selb !== 'S/N' && selb !== '0000') {
-                validSelbsLab.add(selb);
-            }
-        });
+
 
         saídas.forEach(s => {
             const selb = (s.selb || '').toUpperCase().trim();
