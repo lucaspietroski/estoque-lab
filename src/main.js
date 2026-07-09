@@ -3915,11 +3915,21 @@ window.renderResumoOperacao = async () => {
         // ordena por revisados DESC
         rows.sort((a,b) => b.atendimentos - a.atendimentos);
         
+                const formatModeloNome = (nome) => {
+            if (!nome || typeof nome !== 'string') return nome;
+            if (nome === 'MODELO NÃO IDENTIFICADO') return nome;
+            const palavras = nome.trim().split(' ');
+            if (palavras.length > 1) {
+                palavras.shift();
+                return palavras.join(' ');
+            }
+            return nome;
+        };
         const tbody = document.getElementById('resumo-tbody');
         if(tbody) {
             tbody.innerHTML = rows.map(r => `
                 <tr>
-                    <td style="font-weight:bold;">${r.modelo}</td>
+                    <td style="font-weight:bold; color:#000; font-size: 0.85em;">${formatModeloNome(r.modelo)}</td>
                     <td style="text-align:center;">${r.atendimentos}</td>
                     <td style="text-align:center; color: var(--blue)">${r.comPeca}</td>
                     <td style="text-align:center; color: var(--orange)">${r.semPeca}</td>
@@ -3948,7 +3958,7 @@ window.renderResumoOperacao = async () => {
             chartResumoCusto = new Chart(document.getElementById('chart-resumo-custo'), {
                 type: 'bar',
                 data: {
-                    labels: topCusto.map(r => r.modelo.substring(0, 50)),
+                    labels: topCusto.map(r => formatModeloNome(r.modelo).substring(0, 50)),
                     datasets: [{
                         label: 'Custo Total (R$)',
                         data: topCusto.map(r => r.custo),
@@ -3993,7 +4003,7 @@ window.renderResumoOperacao = async () => {
             chartResumoCustoMedio = new Chart(document.getElementById('chart-resumo-custo-medio'), {
                 type: 'bar',
                 data: {
-                    labels: topCustoMedio.map(r => r.modelo.substring(0, 50)),
+                    labels: topCustoMedio.map(r => formatModeloNome(r.modelo).substring(0, 50)),
                     datasets: [{
                         label: 'Custo Médio (R$)',
                         data: topCustoMedio.map(r => r.custoMedio),
@@ -4038,7 +4048,7 @@ window.renderResumoOperacao = async () => {
             chartResumoQtd = new Chart(document.getElementById('chart-resumo-qtd'), {
                 type: 'bar',
                 data: {
-                    labels: topQtd.map(r => r.modelo.substring(0, 50)),
+                    labels: topQtd.map(r => formatModeloNome(r.modelo).substring(0, 50)),
                     datasets: [{
                         label: 'Máquinas Revisadas',
                         data: topQtd.map(r => r.atendimentos),
