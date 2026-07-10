@@ -250,7 +250,7 @@ async function updateUIForAuth() {
         btnLoginArea.style.display = 'none';
 
         // Busca permissões do usuário
-        const { data: perm } = await supabase.from('user_permissions').select('*').eq('email', currentUser.email).single();
+        let { data: perm, error: permError } = await supabase.from('user_permissions').select('*').eq('email', currentUser.email).single();
         
         let allowedScreens = ["dashboard", "estoque", "historico", "movimentacoes", "modelo-custo", "retorno", "resumo", "smartmanager"];
         let isAdmin = false;
@@ -259,6 +259,12 @@ async function updateUIForAuth() {
         if (isLucas) {
             isAdmin = true;
             allowedScreens.push('auditoria', 'sec-audit');
+        }
+
+        // Auto-cadastra o usuário se a tabela existir mas ele não estiver lá
+        if (permError && permError.code === 'PGRST116') {
+            await supabase.from('user_permissions').insert([{ email: currentUser.email, is_admin: isAdmin, allowed_screens: allowedScreens }]);
+            perm = { email: currentUser.email, is_admin: isAdmin, allowed_screens: allowedScreens };
         }
 
         if (perm) {
@@ -4184,28 +4190,42 @@ onClick: (e, activeElements) => {
 // ==========================================
 // ABA SMARTMANAGER PENDÊNCIAS
 // ==========================================
-const SMART_MANAGER_GO_LIVE_DATE = '2026-07-08T00:00:00-03:00';
-const SMART_MANAGER_WINDOW_DAYS = 30;
 let smartManagerData = [];
+
+const SMART_MANAGER_GO_LIVE_DATE = '2026-07-08T00:00:00-03:00';
 
 window.renderSmartManager = async () => {
     try {
+        const table = window.currentSector === 'REMANU' ? 'historico_remanu' : getHistoricoTable();
+        
         const today = new Date();
         const d30 = new Date();
-        d30.setDate(today.getDate() - SMART_MANAGER_WINDOW_DAYS);
+        d30.setDate(today.getDate() - 30);
         const windowDate = d30.toISOString();
         
-        // Determinar a data de corte efetiva: a mais recente entre Go-Live e 30 dias atrás
-        const limitDate = (windowDate > SMART_MANAGER_GO_LIVE_DATE) ? windowDate : SMART_MANAGER_GO_LIVE_DATE;
-
-        const table = window.currentSector === 'REMANU' ? 'historico_remanu' : getHistoricoTable();
-        const { data, error } = await supabase.from(table)
-            .select('*')
-            .in('tipo', ['saída', 'saida', 'retorno_garantia', 'sm_obs'])
-            .gte('ts', limitDate);
-
-        if (error) throw error;
-        smartManagerData = data || [];
+        let allData = [];
+        let page = 0;
+        const pageSize = 1000;
+        
+        while (true) {
+            const { data, error } = await supabase.from(table)
+                .select('*')
+                .in('tipo', ['saída', 'saida', 'SAÍDA', 'SAIDA', 'retorno_garantia', 'RETORNO_GARANTIA', 'sm_obs'])
+                .gte('ts', windowDate)
+                .range(page * pageSize, (page + 1) * pageSize - 1);
+                
+            if (error) throw error;
+            
+            if (data && data.length > 0) {
+                allData = allData.concat(data);
+                if (data.length < pageSize) break;
+                page++;
+            } else {
+                break;
+            }
+        }
+        
+        smartManagerData = allData || [];
 
         // Fetch equipamentos for models
         const { data: eqData } = await supabase.from('equipamentos').select('selb, modelo');
@@ -4222,21 +4242,20 @@ window.renderSmartManager = async () => {
 
         const hojeStr = new Date().toISOString().split('T')[0];
 
+        const activeSelbs = new Set();
+        smartManagerData.forEach(item => {
+            if (item.ts >= SMART_MANAGER_GO_LIVE_DATE && item.tipo !== 'sm_obs') {
+                const selb = (item.selb || '').toUpperCase().trim();
+                if (selb && selb !== 'S/N' && selb !== '0000' && selb !== 'DEFE') {
+                    activeSelbs.add(selb);
+                }
+            }
+        });
+
         smartManagerData.forEach(item => {
             const selb = (item.selb || '').toUpperCase().trim();
             if (!selb || selb === 'S/N' || selb === '0000' || selb === 'DEFE') return;
-
-            if (item.manager_sync) {
-                totalIntegradas++;
-                if (item.manager_sync_at && item.manager_sync_at.startsWith(hojeStr)) {
-                    integracoesHoje++;
-                }
-            } else {
-                totalPendentes++;
-                if (!pendenciaMaisAntigaTs || item.ts < pendenciaMaisAntigaTs) {
-                    pendenciaMaisAntigaTs = item.ts;
-                }
-            }
+            if (!activeSelbs.has(selb)) return; // Ignora se o SELB não tem movimento pós Go-Live
 
             if (!selbGroups[selb]) {
                 selbGroups[selb] = {
@@ -4247,22 +4266,42 @@ window.renderSmartManager = async () => {
                     sincronizadas: 0,
                     osSet: new Set(),
                     lastSyncAt: null,
-                    lastSyncUser: null
+                    lastSyncUser: null,
+                    obs: ''
                 };
             }
 
             selbGroups[selb].items.push(item);
             if (item.ts > selbGroups[selb].lastMov) selbGroups[selb].lastMov = item.ts;
 
+            if (item.tipo === 'sm_obs') {
+                if (!selbGroups[selb].obs || item.ts >= selbGroups[selb].lastMov) {
+                    selbGroups[selb].obs = item.descricao;
+                }
+                return;
+            }
+
+            const q = Number(item.qty || 1);
+
             if (item.manager_sync) {
-                selbGroups[selb].sincronizadas++;
+                totalIntegradas += q;
+                if (item.manager_sync_at && item.manager_sync_at.startsWith(hojeStr)) {
+                    integracoesHoje += q;
+                }
+                selbGroups[selb].sincronizadas += q;
                 if (item.os_manager) selbGroups[selb].osSet.add(item.os_manager);
+                
                 if (!selbGroups[selb].lastSyncAt || item.manager_sync_at > selbGroups[selb].lastSyncAt) {
                     selbGroups[selb].lastSyncAt = item.manager_sync_at;
                     selbGroups[selb].lastSyncUser = item.manager_sync_user;
                 }
             } else {
-                selbGroups[selb].pendentes++;
+                totalPendentes += q;
+                selbGroups[selb].pendentes += q;
+                
+                if (!pendenciaMaisAntigaTs || item.ts < pendenciaMaisAntigaTs) {
+                    pendenciaMaisAntigaTs = item.ts;
+                }
             }
         });
 
@@ -4348,6 +4387,7 @@ window.openSmartModal = (selb, modeloNome) => {
 
     items.forEach(i => {
         if (!lastMov || i.ts > lastMov) lastMov = i.ts;
+        if (i.tipo === 'sm_obs') return;
         if (i.manager_sync) {
             sincronizadas.push(i);
             if (i.os_manager) osSet.add(i.os_manager);
@@ -4365,7 +4405,13 @@ window.openSmartModal = (selb, modeloNome) => {
     document.getElementById('sm-modal-selb').innerText = 'SELB ' + selb;
     document.getElementById('sm-modal-modelo').innerText = modeloNome || 'VERIFICAR';
     document.getElementById('sm-modal-last-mov').innerText = lastMov ? formatDateBR(lastMov) : '-';
-    document.getElementById('sm-modal-stats').innerText = `${items.length} (Sincronizadas: ${sincronizadas.length} | Pendentes: ${pendentes.length})`;
+    let sumPendentes = 0;
+    pendentes.forEach(i => sumPendentes += Number(i.qty || 1));
+    let sumSincronizadas = 0;
+    sincronizadas.forEach(i => sumSincronizadas += Number(i.qty || 1));
+    let totalPecas = sumPendentes + sumSincronizadas;
+
+    document.getElementById('sm-modal-stats').innerText = `${totalPecas} (Sincronizadas: ${sumSincronizadas} | Pendentes: ${sumPendentes})`;
     document.getElementById('sm-modal-os-used').innerText = osArray.length > 0 ? osArray.join(', ') : 'Nenhuma';
 
     if (lastSyncAt) {
@@ -4482,7 +4528,7 @@ window.vincularPendenciasSmart = async () => {
 
     } catch (e) {
         console.error(e);
-        alert('Erro ao vincular OS.');
+        alert('Erro ao vincular OS: ' + (e.message || JSON.stringify(e)));
     }
 };
 
