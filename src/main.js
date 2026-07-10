@@ -242,32 +242,64 @@ async function doModalLogin() {
 }
 
 
-function updateUIForAuth() {
+async function updateUIForAuth() {
     if (currentUser) {
         authScreen.style.display = 'none';
         appShell.style.display = 'flex';
         btnLogout.style.display = 'inline-flex';
         btnLoginArea.style.display = 'none';
-        if (currentUser.email.endsWith('@selbetti.com.br')) {
-            adminBadge.style.display = 'inline-flex';
-            const secAuditTab = document.getElementById('tab-btn-sec-audit');
-            if (secAuditTab) secAuditTab.style.display = 'inline-block';
-        }
+
+        // Busca permissões do usuário
+        const { data: perm } = await supabase.from('user_permissions').select('*').eq('email', currentUser.email).single();
         
+        let allowedScreens = ["dashboard", "estoque", "historico", "movimentacoes", "modelo-custo", "retorno", "resumo", "smartmanager"];
+        let isAdmin = false;
+
         const isLucas = currentUser.email === 'lucas.araujo@selbetti.com.br';
+        if (isLucas) {
+            isAdmin = true;
+            allowedScreens.push('auditoria', 'sec-audit');
+        }
+
+        if (perm) {
+            allowedScreens = perm.allowed_screens || allowedScreens;
+            isAdmin = perm.is_admin || isLucas;
+        }
+
+        if (isAdmin || currentUser.email.endsWith('@selbetti.com.br')) {
+            adminBadge.style.display = 'inline-flex';
+        }
+
+        // Esconder e mostrar abas
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            if (allowedScreens.includes(btn.dataset.tab)) {
+                btn.style.display = ''; // Reverte ao padrao do css
+            } else {
+                btn.style.display = 'none';
+            }
+        });
+
+        const btnPerm = document.getElementById('btn-admin-permissoes');
+        if (btnPerm) btnPerm.style.display = isAdmin ? 'flex' : 'none';
+
         const remanuOnlyUsers = ['carlos.nogueira@selbetti.com.br', 'andrio.rockenbach@selbetti.com.br', 'bernardo.voit@selbetti.com.br'];
         const isRemanuOnly = remanuOnlyUsers.includes(currentUser.email);
 
         const ss = document.getElementById('sector-switcher');
         if (ss) ss.style.display = isLucas ? 'inline-flex' : 'none';
-        
-        const tabAudit = document.getElementById('tab-btn-auditoria');
-        if (tabAudit) tabAudit.style.display = isLucas ? 'inline-flex' : 'none';
 
         if (isRemanuOnly) {
             window.changeSector('REMANU');
             if (adminBadge) adminBadge.style.display = 'none'; // Bloqueia configs globais
         }
+
+        // Ativar a primeira aba visível se nenhuma estiver ou a atual estiver oculta
+        const activeBtn = document.querySelector('.tab-btn.active');
+        if (!activeBtn || activeBtn.style.display === 'none') {
+            const firstVisible = document.querySelector('.tab-btn:not([style*="display: none"])');
+            if (firstVisible) window.switchTab(firstVisible.dataset.tab);
+        }
+
     } else {
         authScreen.style.display = 'flex';
         appShell.style.display = 'none';
@@ -277,9 +309,6 @@ function updateUIForAuth() {
         
         const ss = document.getElementById('sector-switcher');
         if (ss) ss.style.display = 'none';
-        
-        const tabAudit = document.getElementById('tab-btn-auditoria');
-        if (tabAudit) tabAudit.style.display = 'none';
     }
 }
 
@@ -4549,6 +4578,7 @@ window.saveSmObs = async () => {
         const table = window.currentSector === 'REMANU' ? 'historico_remanu' : getHistoricoTable();
         const { error } = await supabase.from(table).insert({
             tipo: 'sm_obs',
+            code: 'SEMPEÇA',
             selb: selb,
             descricao: obs,
             qty: 0,
@@ -4581,6 +4611,108 @@ window.saveSmObs = async () => {
         if (btn) {
             btn.innerText = 'Salvar Obs';
             btn.disabled = false;
+        }
+    }
+};
+
+// --- GESTÃO DE PERMISSÕES ---
+window.openPermissoesModal = async () => {
+    document.getElementById('admin-menu-overlay').classList.remove('open');
+    document.getElementById('modal-permissions').classList.add('open');
+    document.getElementById('perm-edit-section').style.display = 'none';
+    await carregarUsuariosPermissoes();
+};
+
+window.closePermissoesModal = () => {
+    document.getElementById('modal-permissions').classList.remove('open');
+};
+
+async function carregarUsuariosPermissoes() {
+    const tbody = document.getElementById('tbody-permissions');
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">Carregando...</td></tr>';
+    
+    const { data, error } = await supabase.from('user_permissions').select('*').order('email');
+    if (error) {
+        tbody.innerHTML = `<tr><td colspan="3" style="color:red;text-align:center;">Erro: ${error.message}</td></tr>`;
+        return;
+    }
+
+    if (!data || data.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">Nenhum usuário cadastrado.</td></tr>';
+        return;
+    }
+
+    tbody.innerHTML = data.map(u => `
+        <tr>
+            <td>${u.email}</td>
+            <td style="text-align:center;">
+                <input type="checkbox" onchange="window.toggleAdminStatus('${u.email}', this.checked)" ${u.is_admin ? 'checked' : ''} ${u.email === 'lucas.araujo@selbetti.com.br' ? 'disabled' : ''}>
+            </td>
+            <td style="text-align:center;">
+                <button class="btn-admin" style="padding: 4px 8px; font-size: 11px;" onclick="window.editUserPerms('${u.email}', '${encodeURIComponent(JSON.stringify(u.allowed_screens))}')">✏️ Editar Telas</button>
+            </td>
+        </tr>
+    `).join('');
+}
+
+window.addPermUser = async () => {
+    const emailInput = document.getElementById('perm-new-email');
+    const email = emailInput.value.trim().toLowerCase();
+    if (!email || !email.includes('@')) return alert('E-mail inválido.');
+    
+    const { error } = await supabase.from('user_permissions').insert([{ email }]);
+    if (error && error.code !== '23505') { // ignora erro de duplicação
+        alert('Erro ao adicionar: ' + error.message);
+    } else {
+        emailInput.value = '';
+        await carregarUsuariosPermissoes();
+    }
+};
+
+window.toggleAdminStatus = async (email, isAdmin) => {
+    const { error } = await supabase.from('user_permissions').update({ is_admin: isAdmin }).eq('email', email);
+    if (error) {
+        alert('Erro ao atualizar status: ' + error.message);
+        await carregarUsuariosPermissoes(); // reverte visualmente
+    }
+};
+
+let editingUserEmail = '';
+window.editUserPerms = (email, screensJson) => {
+    editingUserEmail = email;
+    const screens = JSON.parse(decodeURIComponent(screensJson));
+    document.getElementById('perm-edit-title').textContent = `Editando: ${email}`;
+    document.getElementById('perm-edit-section').style.display = 'block';
+    
+    // Obter todas as abas disponíveis no HTML
+    const todasAbas = Array.from(document.querySelectorAll('.tab-btn')).map(b => ({
+        id: b.dataset.tab,
+        label: b.textContent.trim()
+    }));
+
+    const container = document.getElementById('perm-checkboxes');
+    container.innerHTML = todasAbas.map(aba => `
+        <label style="display:flex; align-items:center; gap:8px; font-size:13px;">
+            <input type="checkbox" value="${aba.id}" class="perm-screen-check" ${screens.includes(aba.id) ? 'checked' : ''}>
+            ${aba.label}
+        </label>
+    `).join('');
+};
+
+window.savePermAbas = async () => {
+    if (!editingUserEmail) return;
+    const checks = document.querySelectorAll('.perm-screen-check:checked');
+    const allowed = Array.from(checks).map(c => c.value);
+    
+    const { error } = await supabase.from('user_permissions').update({ allowed_screens: allowed }).eq('email', editingUserEmail);
+    if (error) {
+        alert('Erro ao salvar telas: ' + error.message);
+    } else {
+        document.getElementById('perm-edit-section').style.display = 'none';
+        await carregarUsuariosPermissoes();
+        // Se a edição foi no próprio usuário logado, atualiza a UI
+        if (editingUserEmail === currentUser?.email) {
+            updateUIForAuth();
         }
     }
 };

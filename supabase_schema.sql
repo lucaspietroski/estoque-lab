@@ -65,3 +65,22 @@ CREATE POLICY "Escrita para todos autenticados" ON history FOR INSERT TO authent
 
 CREATE POLICY "Leitura livre para autenticados" ON costs FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Escrita para admins" ON costs FOR ALL TO authenticated USING (auth.jwt() ->> 'email' LIKE '%@estoque-laboratorio.local');
+
+-- 7. Tabela de Permissões de Usuários
+CREATE TABLE IF NOT EXISTS user_permissions (
+    email TEXT PRIMARY KEY,
+    allowed_screens JSONB DEFAULT '["dashboard", "estoque", "historico", "movimentacoes", "modelo-custo", "retorno", "smartmanager"]',
+    is_admin BOOLEAN DEFAULT false,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE user_permissions ENABLE ROW LEVEL SECURITY;
+
+-- Qualquer usuário autenticado pode ler as permissões (necessário para a interface carregar)
+CREATE POLICY "Leitura livre para autenticados" ON user_permissions FOR SELECT TO authenticated USING (true);
+
+-- Apenas o administrador principal ou outros administradores podem editar/inserir permissões
+CREATE POLICY "Escrita para admins de permissao" ON user_permissions FOR ALL TO authenticated USING (
+    (auth.jwt() ->> 'email' = 'lucas.araujo@selbetti.com.br') OR
+    EXISTS (SELECT 1 FROM user_permissions WHERE email = auth.jwt() ->> 'email' AND is_admin = true)
+);
