@@ -4770,3 +4770,148 @@ window.savePermAbas = async () => {
         }
     }
 };
+
+
+// --- AUDITORIA DE MODELOS DESCONHECIDOS ---
+window.openAuditModelos = () => {
+    if (typeof window.closeAdminMenu === 'function') window.closeAdminMenu();
+    const modal = document.getElementById('modal-audit-modelos');
+    if (modal) modal.classList.add('open');
+    window.loadAuditModelos();
+};
+
+window.closeAuditModelos = () => {
+    const modal = document.getElementById('modal-audit-modelos');
+    if (modal) modal.classList.remove('open');
+};
+
+window.loadAuditModelos = async () => {
+    const tbody = document.getElementById('tbody-audit-modelos');
+    const statusEl = document.getElementById('audit-modelos-status');
+    const btnSave = document.getElementById('btn-save-audit-modelos');
+    const datalist = document.getElementById('modelos-existentes-list');
+    
+    if (!tbody || !statusEl || !btnSave) return;
+
+    tbody.innerHTML = '<tr><td colspan="2" style="text-align: center; padding: 20px;">Carregando dados (isso pode demorar alguns segundos)...</td></tr>';
+    statusEl.innerHTML = 'Buscando histórico...';
+    btnSave.disabled = true;
+
+    try {
+        let allSelbs = new Set();
+        const historicoTables = ['historico', 'historico_remanu'];
+        
+        for (const t of historicoTables) {
+            let page = 0;
+            let count = 2000;
+            let fetching = true;
+            while (fetching) {
+                const { data, error } = await supabase.from(t).select('selb').range(page * count, (page + 1) * count - 1);
+                if (error) {
+                    console.error("Erro fetch " + t, error);
+                    fetching = false;
+                } else if (!data || data.length === 0) {
+                    fetching = false;
+                } else {
+                    data.forEach(r => {
+                        const s = (r.selb || '').trim().toUpperCase();
+                        if (s && s.length === 4 && s !== '0000' && s !== 'DEFE') allSelbs.add(s);
+                    });
+                    page++;
+                }
+            }
+        }
+
+        statusEl.innerHTML = 'Buscando base de equipamentos...';
+        
+        const { data: eqData, error: eqErr } = await supabase.from('equipamentos').select('selb, modelo');
+        if (eqErr) throw eqErr;
+        
+        const knownSelbs = new Set();
+        const modelosUnicos = new Set();
+        
+        (eqData || []).forEach(e => {
+            const s = (e.selb || '').toUpperCase().trim();
+            if (s) knownSelbs.add(s);
+            if (e.modelo && e.modelo.toUpperCase() !== 'NÃO IDENTIFICADO') {
+                modelosUnicos.add(e.modelo.trim().toUpperCase());
+            }
+        });
+
+        if (datalist) {
+            datalist.innerHTML = Array.from(modelosUnicos).sort().map(m => `<option value="${m}">`).join('');
+        }
+
+        const missingSelbs = Array.from(allSelbs).filter(s => !knownSelbs.has(s)).sort();
+
+        if (missingSelbs.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="2" style="text-align: center; padding: 20px; color: var(--green); font-weight: bold;">✅ Todos os SELBs do sistema estão identificados!</td></tr>';
+            statusEl.innerHTML = '';
+        } else {
+            tbody.innerHTML = missingSelbs.map(selb => `
+                <tr>
+                    <td style="padding: 8px; border-bottom: 1px solid var(--border); font-weight: bold; color: var(--blue); width: 25%;">${selb}</td>
+                    <td style="padding: 8px; border-bottom: 1px solid var(--border);">
+                        <input type="text" class="modal-input audit-modelo-input" data-selb="${selb}" placeholder="Digite ou selecione..." list="modelos-existentes-list" style="margin: 0; padding: 8px 10px; font-size: 13px; width: 100%;">
+                    </td>
+                </tr>
+            `).join('');
+            statusEl.innerHTML = `<span style="color: var(--red);">${missingSelbs.length} SELB(s) órfão(s) encontrado(s)</span>`;
+            btnSave.disabled = false;
+        }
+
+    } catch (e) {
+        tbody.innerHTML = `<tr><td colspan="2" style="text-align: center; padding: 20px; color: red;">Erro ao buscar dados: ${e.message}</td></tr>`;
+        statusEl.innerHTML = '';
+    }
+};
+
+window.saveAuditModelos = async () => {
+    const inputs = document.querySelectorAll('.audit-modelo-input');
+    const toSave = [];
+    
+    inputs.forEach(input => {
+        const val = input.value.trim().toUpperCase();
+        if (val) {
+            toSave.push({
+                selb: input.dataset.selb,
+                modelo: val
+            });
+        }
+    });
+
+    if (toSave.length === 0) {
+        alert("Preencha ao menos um modelo para salvar.");
+        return;
+    }
+
+    const btnSave = document.getElementById('btn-save-audit-modelos');
+    const statusEl = document.getElementById('audit-modelos-status');
+    
+    btnSave.disabled = true;
+    btnSave.innerText = 'Salvando...';
+
+    try {
+        for (let i = 0; i < toSave.length; i += 500) {
+            const chunk = toSave.slice(i, i + 500);
+            const { error } = await supabase.from('equipamentos').upsert(chunk);
+            if (error) throw error;
+        }
+
+        statusEl.innerHTML = `<span style="color: var(--green);">✅ ${toSave.length} modelo(s) atualizado(s) com sucesso!</span>`;
+        btnSave.innerText = 'Salvo! ✓';
+        
+        setTimeout(() => {
+            btnSave.innerText = 'Salvar Modelos Preenchidos';
+            window.loadAuditModelos();
+            if (typeof window.renderSmartManager === 'function' && document.getElementById('view-smartmanager')?.classList.contains('active')) {
+                window.renderSmartManager();
+            }
+        }, 1500);
+
+    } catch (e) {
+        alert("Erro ao salvar modelos: " + e.message);
+        btnSave.disabled = false;
+        btnSave.innerText = 'Salvar Modelos Preenchidos';
+    }
+};

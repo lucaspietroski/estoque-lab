@@ -1244,6 +1244,7 @@
         <button class="btn-admin" style="width: 100%; justify-content: center;" onclick="window.switchTab('bi-equipamentos'); closeAdminMenu();">📁 Importar Base BI (WMS)</button>
         <button class="btn-admin" style="width: 100%; justify-content: center;" onclick="window.switchTab('revisados'); closeAdminMenu();">🛠️ Registrar SELBs Revisados</button>
         <button class="btn-admin" style="width: 100%; justify-content: center; background: #0ea5e9; color: white;" onclick="openManualSELBModal()">🔗 Vincular SELB Manualmente</button>
+        <button class="btn-admin" style="width: 100%; justify-content: center; background: #f59e0b; color: white;" onclick="window.openAuditModelos()">🔎 Auditoria de Modelos</button>
         <button class="btn-admin" style="width: 100%; justify-content: center; background: #10b981;" onclick="gerarBackupCompleto()">📦 Gerar Backup Completo (JSON)</button>
         <button class="btn-admin" style="width: 100%; justify-content: center; background: #22c55e; color: white;" onclick="openCadastroPecaModal()">➕ Cadastrar Nova Peça</button>
         <button class="btn-admin" id="btn-admin-permissoes" style="width: 100%; justify-content: center; background: #8b5cf6; color: white; display: none;" onclick="window.openPermissoesModal()">🛡️ Gerenciar Permissões</button>
@@ -1305,6 +1306,41 @@
       <button class="btn-confirm" onclick="saveManualSELB()" style="flex: 2;">Salvar Vínculo</button>
     </div>
     <div id="manual-selb-status" style="margin-top: 15px; font-size: 13px; text-align: center;"></div>
+  </div>
+</div>
+
+
+<!-- MODAL AUDITORIA DE MODELOS DESCONHECIDOS -->
+<div class="modal-overlay" id="modal-audit-modelos">
+  <div class="modal-box" style="max-width: 600px;">
+    <h3 style="color: var(--orange); margin-bottom: 5px;">🔎 Auditoria de Modelos Desconhecidos</h3>
+    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;">
+        Lista de todos os SELBs que tiveram movimentação no estoque mas não possuem modelo identificado. Preencha os modelos e clique em Salvar para atualizar o banco.
+    </p>
+
+    <datalist id="modelos-existentes-list"></datalist>
+
+    <div style="max-height: 400px; overflow-y: auto; margin-bottom: 20px; border: 1px solid var(--border); border-radius: 8px;">
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead style="position: sticky; top: 0; background: var(--surface2); z-index: 1;">
+                <tr>
+                    <th style="padding: 10px; text-align: left; border-bottom: 1px solid var(--border); width: 30%;">SELB</th>
+                    <th style="padding: 10px; text-align: left; border-bottom: 1px solid var(--border);">Modelo Correto</th>
+                </tr>
+            </thead>
+            <tbody id="tbody-audit-modelos">
+                <tr><td colspan="2" style="text-align: center; padding: 20px;">Carregando dados...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <div id="audit-modelos-status" style="font-size: 13px; font-weight: bold;"></div>
+      <div style="display: flex; gap: 10px;">
+        <button class="btn-cancel" onclick="window.closeAuditModelos()">Cancelar</button>
+        <button class="btn-confirm" onclick="window.saveAuditModelos()" id="btn-save-audit-modelos" style="background: var(--orange);">Salvar Modelos Preenchidos</button>
+      </div>
+    </div>
   </div>
 </div>
 
