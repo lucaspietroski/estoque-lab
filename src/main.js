@@ -2153,7 +2153,7 @@ window.renderModeloCusto = async () => {
         // Saídas (Com Peça e Tratamento Especial de Sem Peça)
         saídas.filter(s => filtrarData(s.ts)).forEach(s => {
             const selb = (s.selb || '').toUpperCase().trim();
-            if (!selb || selb === 'S/N' || selb === '0000') return;
+            if (!selb || selb.length !== 4 || selb === '0000') return;
 
             if (selb === 'DEFE') {
                 const signal = (s.tipo === 'retorno_garantia') ? -1 : 1;
@@ -2208,7 +2208,7 @@ window.renderModeloCusto = async () => {
         // Revisados (Sem Peça ou Complemento)
         revisados.filter(r => filtrarData(r.ts)).forEach(r => {
             const selb = (r.selb || '').toUpperCase().trim();
-            if (!selb || selb === 'S/N' || selb === '0000') return;
+            if (!selb || selb.length !== 4 || selb === '0000') return;
 
             const modelo = eqMap[selb] || 'MODELO NÃO IDENTIFICADO (' + selb + ')';
             if (query && !modelo.includes(query)) return;
@@ -3847,7 +3847,7 @@ window.renderResumoOperacao = async () => {
         const validSelbsLab = new Set();
         revisados.forEach(r => {
             const selb = (r.selb || '').toUpperCase().trim();
-            if (selb && selb !== 'S/N' && selb !== '0000') {
+            if (selb && selb.length === 4 && selb !== '0000') {
                 validSelbsLab.add(selb);
             }
         });
@@ -3897,7 +3897,7 @@ window.renderResumoOperacao = async () => {
 
         saídas.forEach(s => {
             const selb = (s.selb || '').toUpperCase().trim();
-            if (!selb || selb === 'S/N' || selb === '0000') return;
+            if (!selb || selb.length !== 4 || selb === '0000') return;
 
             if (selb === 'DEFE') {
                 // não conta em modelos
@@ -3947,7 +3947,7 @@ window.renderResumoOperacao = async () => {
         // Revisados (Sem peça lab)
         revisados.forEach(r => {
             const selb = (r.selb || '').toUpperCase().trim();
-            if (!selb || selb === 'S/N' || selb === '0000') return;
+            if (!selb || selb.length !== 4 || selb === '0000') return;
             const modelo = eqMap[selb] || 'MODELO NÃO IDENTIFICADO';
             if (!byModel[modelo]) byModel[modelo] = { comPeca: new Set(), semPeca: new Set(), custo: 0, qtdPecas: 0, pecasUsadas: {} };
             
@@ -4258,7 +4258,7 @@ window.renderSmartManager = async () => {
 
         smartManagerData.forEach(item => {
             const selb = (item.selb || '').toUpperCase().trim();
-            if (!selb || selb === 'S/N' || selb === '0000' || selb === 'DEFE') return;
+            if (!selb || selb.length !== 4 || selb === '0000' || selb === 'DEFE') return;
             if (!activeSelbs.has(selb)) return; // Ignora se o SELB não tem movimento pós Go-Live
 
             if (!selbGroups[selb]) {
