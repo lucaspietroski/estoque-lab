@@ -252,7 +252,7 @@ async function updateUIForAuth() {
         // Busca permissões do usuário
         let { data: perm, error: permError } = await supabase.from('user_permissions').select('*').eq('email', currentUser.email).single();
         
-        let allowedScreens = ["dashboard", "estoque", "historico", "movimentacoes", "modelo-custo", "retorno", "resumo", "smartmanager"];
+        let allowedScreens = ["dashboard", "estoque", "historico", "movimentacoes", "modelo-custo", "retorno", "resumo", "smartmanager", "btn-sector-lab"];
         let isAdmin = false;
 
         const isLucas = currentUser.email === 'lucas.araujo@selbetti.com.br';
@@ -270,6 +270,7 @@ async function updateUIForAuth() {
         if (perm) {
             allowedScreens = perm.allowed_screens || allowedScreens;
             isAdmin = perm.is_admin || isLucas;
+            window.currentUserIsAdmin = isAdmin;
         }
 
         if (isAdmin || currentUser.email.endsWith('@selbetti.com.br')) {
@@ -292,7 +293,10 @@ async function updateUIForAuth() {
         const isRemanuOnly = remanuOnlyUsers.includes(currentUser.email);
 
         const ss = document.getElementById('sector-switcher');
-        if (ss) ss.style.display = isLucas ? 'inline-flex' : 'none';
+        if (ss) ss.style.display = (isAdmin || allowedScreens.includes('btn-sector-remanu')) ? 'flex' : 'none';
+
+        const gearBtn = document.getElementById('btn-reset-gear');
+        if (gearBtn) gearBtn.style.display = (isAdmin || allowedScreens.includes('btn-reset-gear')) ? 'inline-block' : 'none';
 
         if (isRemanuOnly) {
             window.changeSector('REMANU');
@@ -894,8 +898,8 @@ window.syncHistoricoCustos = async (code, newPrice) => {
 };
 
 async function savePriceModal() {
-    if (!currentUser || currentUser.email !== 'lucas.araujo@selbetti.com.br') {
-        alert('❌ Permissão negada! Apenas o usuário lucas.araujo@selbetti.com.br pode realizar ajustes manuais.');
+    if (!currentUser || (!window.currentUserIsAdmin && currentUser.email !== 'lucas.araujo@selbetti.com.br')) {
+        alert('❌ Permissão negada! Apenas administradores podem realizar ajustes manuais.');
         return;
     }
 
@@ -1063,7 +1067,7 @@ async function renderHistorico() {
                 ${h.manager_sync ? h.os_manager : ''}
             </td>
             <td>
-                ${currentUser.email === 'lucas.araujo@selbetti.com.br' ? `<button class="btn-edit-hist" onclick="openAjusteHistorico('${h.id}')" title="Ajustar Registro">✏️</button>` : ''}
+                ${(window.currentUserIsAdmin || currentUser.email === 'lucas.araujo@selbetti.com.br') ? `<button class="btn-edit-hist" onclick="openAjusteHistorico('${h.id}')" title="Ajustar Registro">✏️</button>` : ''}
             </td>
         </tr>`;
     }).join('');
@@ -3374,8 +3378,8 @@ window.exportarPlanilhaAuditoria = () => {
 
 // --- CADASTRO DE PEÇA NOVA ---
 window.openCadastroPecaModal = () => {
-    if (!currentUser || currentUser.email !== 'lucas.araujo@selbetti.com.br') {
-        alert('❌ Permissão negada! Apenas o administrador pode cadastrar peças novas.');
+    if (!currentUser || (!window.currentUserIsAdmin && currentUser.email !== 'lucas.araujo@selbetti.com.br')) {
+        alert('❌ Permissão negada! Apenas administradores podem cadastrar peças novas.');
         return;
     }
     document.getElementById('cad-code').value = '';
@@ -3405,8 +3409,8 @@ window.closeCadastroPecaModal = () => {
 };
 
 window.saveCadastroPeca = async () => {
-    if (!currentUser || currentUser.email !== 'lucas.araujo@selbetti.com.br') {
-        alert('❌ Permissão negada! Apenas o administrador pode cadastrar peças novas.');
+    if (!currentUser || (!window.currentUserIsAdmin && currentUser.email !== 'lucas.araujo@selbetti.com.br')) {
+        alert('❌ Permissão negada! Apenas administradores podem cadastrar peças novas.');
         return;
     }
 
@@ -4735,6 +4739,10 @@ window.editUserPerms = (email, screensJson) => {
         id: b.dataset.tab,
         label: b.textContent.trim()
     }));
+    
+    todasAbas.push({ id: 'btn-reset-gear', label: '⚙️ Menu Corporativo' });
+    todasAbas.push({ id: 'btn-sector-lab', label: '🔬 Setor Laboratório' });
+    todasAbas.push({ id: 'btn-sector-remanu', label: '🔄 Setor Remanufatura' });
 
     const container = document.getElementById('perm-checkboxes');
     container.innerHTML = todasAbas.map(aba => `
