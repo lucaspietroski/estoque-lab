@@ -1349,21 +1349,18 @@ window.doImportProtheus = () => {
     window.switchTab('entrada-xml');
 };
 window.processarXML = async (file) => {
-    const reader = new FileReader();
-    reader.onload = async (e) => {
+    if (!file) return;
+    const isXML = file.name.toLowerCase().endsWith('.xml');
+
+    const processParsedRows = async (rowsData) => {
         try {
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(e.target.result, "application/xml");
-            const rows = Array.from(doc.querySelectorAll('Row'));
+            if (!rowsData || !rowsData.length) { alert('Nenhuma linha encontrada no arquivo.'); return; }
 
-            if (!rows.length) { alert('Nenhuma linha encontrada no XML.'); return; }
-
-            // 1. Busca o número do pedido globalmente nas primeiras 15 linhas do XML
+            // 1. Busca o número do pedido globalmente nas primeiras 15 linhas
             let globalPedido = '';
-            for (let ri = 0; ri < Math.min(rows.length, 15); ri++) {
-                const cells = rows[ri].querySelectorAll('Cell');
-                for (const cell of cells) {
-                    const txt = cell.querySelector('Data')?.textContent.trim() || '';
+            for (let ri = 0; ri < Math.min(rowsData.length, 15); ri++) {
+                const cells = rowsData[ri];
+                for (const txt of cells) {
                     const upperTxt = txt.toUpperCase();
                     if (upperTxt.includes('PEDIDO') || upperTxt.includes('PED.COMPRA') || upperTxt.includes('PED. COMPRA')) {
                         const match = txt.match(/(?:PEDIDO|PED\.COMPRA|PED\. COMPRA)(?:\s+(?:DE\s+COMPRA|Nº|NUM\.?|N\.?))?[\s.:#-]+([A-Z0-9]+)/i);
@@ -1379,9 +1376,9 @@ window.processarXML = async (file) => {
             let colProduto = -1, colQtd = -1, colVlrUnit = -1, colPedido = -1;
             let dataStartIdx = -1;
 
-            for (let ri = 0; ri < Math.min(rows.length, 100); ri++) {
-                const cells = rows[ri].querySelectorAll('Cell');
-                const texts = Array.from(cells).map(c => c.querySelector('Data')?.textContent.trim().toUpperCase() || '');
+            for (let ri = 0; ri < Math.min(rowsData.length, 100); ri++) {
+                const cells = rowsData[ri];
+                const texts = cells.map(c => c.toUpperCase());
                 if (texts.some(t => t.includes('PRODUTO') || t === 'COD. PRODUTO')) {
                     texts.forEach((t, i) => {
                         if (t.includes('PRODUTO') && colProduto < 0) colProduto = i;
@@ -1400,11 +1397,11 @@ window.processarXML = async (file) => {
             }
 
             const itemsMap = {};
-            for (let ri = dataStartIdx; ri < rows.length; ri++) {
-                const cells = rows[ri].querySelectorAll('Cell');
+            for (let ri = dataStartIdx; ri < rowsData.length; ri++) {
+                const cells = rowsData[ri];
                 if (cells.length < 3) continue;
 
-                const getCell = (idx) => idx >= 0 && idx < cells.length ? (cells[idx].querySelector('Data')?.textContent.trim() || '') : '';
+                const getCell = (idx) => idx >= 0 && idx < cells.length ? cells[idx] : '';
 
                 const rawCode = getCell(colProduto).toUpperCase().replace(/\s+/g, '');
                 if (!rawCode || rawCode.length < 2 || rawCode.includes('PRODUTO') || rawCode === 'TOTAL') continue;
@@ -1413,10 +1410,10 @@ window.processarXML = async (file) => {
                 const qty = parseFloat(qtdRaw) || 0;
                 if (qty <= 0) continue;
 
-                const vlrUnit = parseFloat(getCell(colVlrUnit).replace(',', '.').replace(/[^0-9.]/g, '')) || 0;
+                const rawVlr = getCell(colVlrUnit);
+                const vlrUnit = parseFloat(rawVlr.replace(',', '.').replace(/[^0-9.]/g, '')) || 0;
 
-                // Captura o número do pedido por linha (se existir a coluna) ou usa o global
-                const rowPedido = colPedido >= 0 ? getCell(colPedido).trim() : '';
+                const rowPedido = colPedido >= 0 ? getCell(colPedido) : '';
                 const orderNum = rowPedido || globalPedido || '';
 
                 if (!itemsMap[rawCode]) {
@@ -1434,12 +1431,7 @@ window.processarXML = async (file) => {
             const targetSector = document.querySelector('input[name="xml-sector"]:checked').value;
             const sectorName = targetSector === 'REMANU' ? 'Remanufatura' : 'Laboratório';
 
-            // Armazena na memória para a confirmação
-            window.pendingXmlImport = {
-                keys,
-                itemsMap,
-                targetSector
-            };
+            window.pendingXmlImport = { keys, itemsMap, targetSector };
 
             document.getElementById('xml-preview-sector-label').textContent = sectorName;
             document.getElementById('xml-preview-count').textContent = keys.length;
@@ -1447,17 +1439,14 @@ window.processarXML = async (file) => {
             const tbody = document.getElementById('xml-preview-tbody');
             tbody.innerHTML = '<tr><td colspan="5" style="text-align:center">⌛ Buscando descrições no banco...</td></tr>';
             
-            // Abre o modal
             document.getElementById('xml-preview-modal').classList.add('open');
 
-            // Busca as descrições em lote para exibir na prévia
             let html = '';
             for (const code of keys) {
                 const item = itemsMap[code];
                 const { data: pCheck } = await supabase.from('parts').select('descricao').eq('code', code).maybeSingle();
-                const desc = pCheck?.descricao ? pCheck.descricao : `PEÇA IMPORTADA VIA XML (${code})`;
+                const desc = pCheck?.descricao ? pCheck.descricao : `PEÇA IMPORTADA VIA ARQUIVO (${code})`;
                 
-                // Armazena a descrição encontrada para evitar buscar de novo depois
                 item.descInfo = desc;
                 item.isNew = !pCheck;
 
@@ -1473,17 +1462,56 @@ window.processarXML = async (file) => {
             }
 
             tbody.innerHTML = html;
-            
-            // Limpa o input file para permitir selecionar o mesmo arquivo novamente se o usuário cancelar
             document.getElementById('xml-file-input').value = '';
 
         } catch (err) {
             console.error(err);
-            alert('Erro ao ler XML: ' + err.message);
+            alert('Erro ao processar dados do arquivo: ' + err.message);
             document.getElementById('xml-file-input').value = '';
         }
     };
-    reader.readAsText(file, "ISO-8859-1");
+
+    if (isXML) {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(e.target.result, "application/xml");
+                const rows = Array.from(doc.querySelectorAll('Row'));
+                
+                const rowsData = rows.map(row => {
+                    const cells = row.querySelectorAll('Cell');
+                    return Array.from(cells).map(c => c.querySelector('Data')?.textContent.trim() || '');
+                });
+                
+                await processParsedRows(rowsData);
+            } catch (err) {
+                console.error(err);
+                alert('Erro ao ler XML: ' + err.message);
+                document.getElementById('xml-file-input').value = '';
+            }
+        };
+        reader.readAsText(file, "ISO-8859-1");
+    } else {
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = window.XLSX.read(data, { type: 'array' });
+                const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                const xlsxRows = window.XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: '' });
+                
+                const rowsData = xlsxRows.map(row => row.map(cell => String(cell).trim()));
+                
+                await processParsedRows(rowsData);
+            } catch (err) {
+                console.error(err);
+                alert('Erro ao ler arquivo: ' + err.message);
+                document.getElementById('xml-file-input').value = '';
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    }
 };
 
 window.fecharModalXML = () => {
