@@ -3586,7 +3586,8 @@ window.addRetornoItem = async () => {
     }
 
     // Buscar peça no estoque/custos
-    const { data: est } = await supabase.from(getEstoqueTable()).select('descricao, qty').eq('code', code).maybeSingle();
+    const { data: est } = await supabase.from(getEstoqueTable()).select('qty').eq('code', code).maybeSingle();
+    const { data: part } = await supabase.from('parts').select('descricao').eq('code', code).maybeSingle();
     const { data: custo } = await supabase.from('custos').select('last_cost').eq('code', code).maybeSingle();
 
     if (!est) {
@@ -3594,11 +3595,13 @@ window.addRetornoItem = async () => {
         return;
     }
 
+    const descricao = part?.descricao || code;
+
     // Se for SOBRA, valida o saldo existente
     if (tipo === 'retorno_sobra') {
         const currentQtyInCart = retornoItems.filter(i => i.code === code).reduce((acc, curr) => acc + curr.qty, 0);
         if (est.qty < (qty + currentQtyInCart)) {
-            alert(`❌ Saldo Insuficiente para Sobra!\n\nA peça ${code} (${est.descricao}) possui apenas ${est.qty} no estoque. Você está tentando devolver ${qty + currentQtyInCart}.`);
+            alert(`❌ Saldo Insuficiente para Sobra!\n\nA peça ${code} (${descricao}) possui apenas ${est.qty} no estoque. Você está tentando devolver ${qty + currentQtyInCart}.`);
             return;
         }
     }
@@ -3608,7 +3611,7 @@ window.addRetornoItem = async () => {
 
     retornoItems.push({
         code,
-        descricao: est.descricao,
+        descricao: descricao,
         qty,
         vlrUnit: valUnit,
         vlrTotal
