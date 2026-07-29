@@ -556,42 +556,205 @@
 
   <!-- VIEW EQUIPAMENTOS (ADMIN) -->
   <div id="view-bi-equipamentos" class="view">
-    <div class="mov-container">
-      <div class="mov-header">
-        <h2>📋 Base de Equipamentos (BI)</h2>
+    <div class="mov-container" style="max-width: 1400px; margin: 0 auto;">
+      <div class="mov-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+        <div>
+            <h2>📋 Auditoria e Qualidade da Base (BI)</h2>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 5px;">Gerencie e audite todos os equipamentos importados</p>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <button id="bi-mode-equipamentos" class="btn btn-primary" onclick="setBIMode('equipamentos')" style="display:flex; align-items:center; gap:8px;">
+                <span>📋</span> Lista Individual
+            </button>
+            <button id="bi-mode-auditoria" class="btn btn-secondary" onclick="setBIMode('auditoria')" style="display:flex; align-items:center; gap:8px;">
+                <span>☑</span> Agrupar por Modelo
+            </button>
+        </div>
       </div>
 
-      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 20px;">
-        <div class="card" style="background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border);">
-          <h4 style="margin: 0 0 10px 0;">📂 Importar Base BI</h4>
-          <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 20px;">Col. A: SELB | Col. C: Modelo | Col. D: Descrição</p>
-          <div id="bi-drop-area" style="border: 2px dashed var(--border); padding: 30px; text-align: center; border-radius: 8px; cursor: pointer;" onclick="document.getElementById('bi-file-input').click()">
-            <span style="font-size: 40px;">📁</span>
-            <p style="font-size: 13px; margin-top: 10px; font-weight: 600;">Clique para selecionar .xlsx do BI</p>
-            <input type="file" id="bi-file-input" accept=".xlsx, .xls" style="display:none" onchange="processarBI(this.files[0])">
-          </div>
-          <div id="bi-status" style="margin-top: 15px; font-size: 12px; font-weight: bold; text-align: center;"></div>
+      <!-- DASHBOARD CARDS -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 20px;">
+        <div class="card" style="background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border); display: flex; align-items: center; gap: 15px;">
+            <div style="font-size: 30px; background: var(--bg-hover); padding: 15px; border-radius: 10px;">📦</div>
+            <div>
+                <h4 style="margin: 0; color: var(--text-muted); font-size: 0.9rem;">Total de Equipamentos</h4>
+                <div id="bi-dash-total" style="font-size: 1.5rem; font-weight: bold; margin-top: 5px; color: var(--text);">0</div>
+            </div>
+        </div>
+        <div class="card" style="background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border); display: flex; align-items: center; gap: 15px;">
+            <div style="font-size: 30px; background: var(--bg-hover); padding: 15px; border-radius: 10px;">🖥️</div>
+            <div>
+                <h4 style="margin: 0; color: var(--text-muted); font-size: 0.9rem;">Modelos Distintos</h4>
+                <div id="bi-dash-modelos" style="font-size: 1.5rem; font-weight: bold; margin-top: 5px; color: var(--blue);">0</div>
+            </div>
+        </div>
+        <div class="card" style="background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--red-light); display: flex; align-items: center; gap: 15px;">
+            <div style="font-size: 30px; background: #ffebeb; padding: 15px; border-radius: 10px;">⚠️</div>
+            <div>
+                <h4 style="margin: 0; color: var(--red); font-size: 0.9rem;">Modelos Suspeitos</h4>
+                <div id="bi-dash-suspeitos" style="font-size: 1.5rem; font-weight: bold; margin-top: 5px; color: var(--red);">0</div>
+            </div>
+        </div>
+      </div>
+
+      <!-- MAIN CONTENT GRID -->
+      <div style="display: grid; grid-template-columns: 300px 1fr; gap: 20px;">
+        
+        <!-- SIDEBAR IMPORT & FILTERS -->
+        <div style="display: flex; flex-direction: column; gap: 20px;">
+            <div class="card" style="background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border);">
+                <h4 style="margin: 0 0 10px 0;">📂 Importar Base BI</h4>
+                <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 20px;">Col. A: SELB | Col. C: Modelo | Col. D: Descrição</p>
+                <div id="bi-drop-area" style="border: 2px dashed var(--border); padding: 20px; text-align: center; border-radius: 8px; cursor: pointer;" onclick="document.getElementById('bi-file-input').click()">
+                    <span style="font-size: 30px;">📁</span>
+                    <p style="font-size: 13px; margin-top: 10px; font-weight: 600;">Selecione .xlsx do BI</p>
+                    <input type="file" id="bi-file-input" accept=".xlsx, .xls" style="display:none" onchange="processarBI(this.files[0])">
+                </div>
+                <div id="bi-status" style="margin-top: 15px; font-size: 12px; font-weight: bold; text-align: center;"></div>
+            </div>
+
+            <div class="card" style="background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border);">
+                <h4 style="margin: 0 0 15px 0;">🎯 Filtros Rápidos</h4>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 0.9rem; cursor: pointer;">
+                        <input type="radio" name="bi_filter" value="all" checked onchange="renderBIList()"> 
+                        Todos os registros
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 0.9rem; cursor: pointer; color: var(--red);">
+                        <input type="radio" name="bi_filter" value="suspects" onchange="renderBIList()"> 
+                        ⚠️ Somente Modelos Suspeitos
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 0.9rem; cursor: pointer;">
+                        <input type="radio" name="bi_filter" value="excel" onchange="renderBIList()"> 
+                        📊 Somente Importação Excel
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 0.9rem; cursor: pointer;">
+                        <input type="radio" name="bi_filter" value="empty_desc" onchange="renderBIList()"> 
+                        📝 Somente Descrição Vazia
+                    </label>
+                </div>
+            </div>
+            
+            <button class="btn btn-secondary" onclick="abrirHistoricoCorrecoes()" style="width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px;">
+                <span>🕒</span> Histórico de Correções
+            </button>
         </div>
 
-        <div class="card" style="background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border);">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-            <h4 style="margin: 0;">Equipamentos Cadastrados <span id="equip-total-count" style="color:var(--text-muted); font-size: 0.85rem; font-weight: normal;">(0)</span></h4>
-            <input type="text" id="equip-search-input" placeholder="🔍 Buscar SELB ou Modelo..." style="padding: 8px; border-radius: 6px; border: 1px solid var(--border); width: 200px;" oninput="renderBIList()">
+        <!-- TABLE AREA -->
+        <div class="card" style="background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border); display: flex; flex-direction: column;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+            <h4 style="margin: 0;">Registros Encontrados <span id="equip-total-count" style="color:var(--text-muted); font-size: 0.85rem; font-weight: normal;">(0)</span></h4>
+            <input type="text" id="equip-search-input" placeholder="🔍 Buscar SELB ou Modelo..." style="padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); width: 300px; font-size: 0.9rem;" oninput="debounceBIModeRender()">
           </div>
-          <div class="table-wrap" style="max-height: 400px; overflow-y: auto;">
-            <table class="dash-table">
+          
+          <div class="table-wrap" style="flex: 1; min-height: 400px; max-height: 600px; overflow-y: auto;">
+            <!-- TABELA MODO INDIVIDUAL -->
+            <table class="dash-table" id="bi-table-individual">
               <thead>
                 <tr>
                   <th>SELB</th>
                   <th>Modelo</th>
                   <th>Descrição</th>
+                  <th style="width: 100px; text-align: center;">Ações</th>
                 </tr>
               </thead>
               <tbody id="equip-tbody"></tbody>
             </table>
+            <!-- TABELA MODO AGRUPADO -->
+            <table class="dash-table" id="bi-table-agrupado" style="display: none;">
+              <thead>
+                <tr>
+                  <th>Modelo</th>
+                  <th style="text-align: center;">Qtd. Equipamentos</th>
+                  <th style="text-align: center;">Situação</th>
+                  <th style="width: 150px; text-align: center;">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="equip-tbody-agrupado"></tbody>
+            </table>
           </div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- MODAL EDIÇÃO INDIVIDUAL -->
+  <div id="modal-edicao-individual" class="modal">
+    <div class="modal-content" style="max-width: 400px;">
+        <span class="close-modal" onclick="fecharModalIndividual()">&times;</span>
+        <h3 style="margin-top: 0; color: var(--blue);">✏️ Editar Equipamento</h3>
+        
+        <div style="margin-bottom: 15px;">
+            <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 5px;">SELB:</label>
+            <input type="text" id="modal-ind-selb" class="input-padrao" style="width: 100%;" disabled>
+        </div>
+
+        <div style="margin-bottom: 15px;">
+            <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 5px;">Modelo:</label>
+            <input type="text" id="modal-ind-modelo" class="input-padrao" style="width: 100%;">
+        </div>
+        
+        <div style="margin-bottom: 20px;">
+            <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 5px;">Descrição:</label>
+            <input type="text" id="modal-ind-desc" class="input-padrao" style="width: 100%;">
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+            <button class="btn btn-secondary" onclick="fecharModalIndividual()">Cancelar</button>
+            <button class="btn btn-primary" onclick="salvarEdicaoIndividual()">Salvar</button>
+        </div>
+    </div>
+  </div>
+
+  <!-- MODAL EDIÇÃO EM MASSA -->
+  <div id="modal-edicao-massa" class="modal">
+    <div class="modal-content" style="max-width: 500px;">
+        <span class="close-modal" onclick="fecharModalMassa()">&times;</span>
+        <h3 style="margin-top: 0; color: var(--blue);">✏️ Correção em Lote</h3>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px;">Você está prestes a alterar centenas de equipamentos simultaneamente.</p>
+        
+        <div style="background: var(--bg-hover); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px;">Modelo Atual (Antigo):</div>
+            <div id="modal-massa-modelo-antigo" style="font-weight: bold; font-size: 1.1rem; color: var(--red);">---</div>
+            
+            <div style="margin-top: 15px; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px;">Equipamentos Afetados:</div>
+            <div id="modal-massa-qtd" style="font-weight: bold; font-size: 1.1rem;">0</div>
+        </div>
+
+        <div style="margin-bottom: 20px;">
+            <label style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 8px;">Novo Modelo Corrigido:</label>
+            <input type="text" id="modal-massa-modelo-novo" class="input-padrao" placeholder="Digite o nome correto do modelo" style="width: 100%; font-size: 1rem; padding: 10px;">
+        </div>
+
+        <div style="display: flex; justify-content: flex-end; gap: 10px;">
+            <button class="btn btn-secondary" onclick="fecharModalMassa()">Cancelar</button>
+            <button class="btn btn-primary" onclick="salvarEdicaoMassa()">Salvar Correção</button>
+        </div>
+    </div>
+  </div>
+
+  <!-- MODAL HISTÓRICO DE CORREÇÕES -->
+  <div id="modal-historico-correcoes" class="modal">
+    <div class="modal-content" style="max-width: 800px;">
+        <span class="close-modal" onclick="fecharModalHistoricoCorrecoes()">&times;</span>
+        <h3 style="margin-top: 0; color: var(--blue);">🕒 Histórico de Correções (Auditoria)</h3>
+        
+        <div class="table-wrap" style="max-height: 400px; overflow-y: auto; margin-top: 20px;">
+            <table class="dash-table">
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>Usuário</th>
+                        <th style="text-align: center;">Afetados</th>
+                        <th>De (Antigo)</th>
+                        <th>Para (Novo)</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-historico-correcoes">
+                    <tr><td colspan="5" style="text-align:center;">Carregando histórico...</td></tr>
+                </tbody>
+            </table>
+        </div>
     </div>
   </div>
 

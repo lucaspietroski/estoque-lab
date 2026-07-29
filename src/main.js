@@ -1833,11 +1833,14 @@ window.processarBI = async (file) => {
                 const row = rows[i] || [];
                 const rowTexts = row.map(c => String(c || '').trim().toUpperCase());
                 
+                // Encontrar o índice da coluna Modelo/Produto
+                let mIdx = rowTexts.findIndex(t => t === 'MODELO' || t === 'PRODUTO');
+                if (mIdx === -1) {
+                    mIdx = rowTexts.findIndex(t => (t.includes('MODELO') || t.includes('PRODUTO')) && !t.includes('CÓDIGO') && !t.includes('CODIGO'));
+                }
+                
                 // Encontrar o índice da coluna SELB
                 const sIdx = rowTexts.findIndex(t => t === 'SELB' || t === 'CÓDIGO' || t === 'CODIGO' || t.includes('SELB'));
-                
-                // Encontrar o índice da coluna Modelo/Produto
-                const mIdx = rowTexts.findIndex(t => t === 'MODELO' || t === 'PRODUTO' || t.includes('MODELO') || t.includes('PRODUTO'));
 
                 if (sIdx >= 0 && mIdx >= 0) {
                     headerRowIndex = i;
@@ -4801,12 +4804,16 @@ window.loadAuditModelos = async () => {
         let allSelbs = new Set();
         const historicoTables = ['historico', 'historico_remanu'];
         
-        for (const t of historicoTables) {
+        const dateLimit = new Date();
+        dateLimit.setDate(dateLimit.getDate() - 30);
+        const dateIso = dateLimit.toISOString();
+
+        for (const t of [...historicoTables, 'revisados']) {
             let page = 0;
             let count = 2000;
             let fetching = true;
             while (fetching) {
-                const { data, error } = await supabase.from(t).select('selb').range(page * count, (page + 1) * count - 1);
+                const { data, error } = await supabase.from(t).select('selb').gte('ts', dateIso).range(page * count, (page + 1) * count - 1);
                 if (error) {
                     console.error("Erro fetch " + t, error);
                     fetching = false;
@@ -4832,8 +4839,9 @@ window.loadAuditModelos = async () => {
         
         (eqData || []).forEach(e => {
             const s = (e.selb || '').toUpperCase().trim();
-            if (s) knownSelbs.add(s);
-            if (e.modelo && e.modelo.toUpperCase() !== 'NÃO IDENTIFICADO') {
+            const m = (e.modelo || '').toUpperCase().trim();
+            if (s && m && m !== 'NÃO IDENTIFICADO' && m !== 'MODELO NÃO IDENTIFICADO') {
+                knownSelbs.add(s);
                 modelosUnicos.add(e.modelo.trim().toUpperCase());
             }
         });
