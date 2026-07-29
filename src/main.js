@@ -1615,14 +1615,14 @@ window.renderMovDashboard = async () => {
 
         if (h.tipo === 'entrada') { totIn += qty; vlrIn += vlr; }
         else if (h.tipo === 'saída' || h.tipo === 'saida') { totOut += qty; vlrOut += vlr; }
-        else if (h.tipo === 'retorno_sobra') { totIn -= qty; vlrIn -= vlr; }
+        else if (h.tipo === 'retorno_sobra' || h.tipo === 'retorno_garantia_estoque') { totIn -= qty; vlrIn -= vlr; }
         else if (h.tipo === 'retorno_garantia') { totOut -= qty; vlrOut -= vlr; vlrIn -= vlr; }
 
         if (dt !== 'Sem Data') {
             if (!daily[dt]) daily[dt] = { in: 0, out: 0, vlrIn: 0, vlrOut: 0 };
             if (h.tipo === 'entrada') { daily[dt].in += qty; daily[dt].vlrIn += vlr; }
             else if (h.tipo === 'saída' || h.tipo === 'saida') { daily[dt].out += qty; daily[dt].vlrOut += vlr; }
-            else if (h.tipo === 'retorno_sobra') { daily[dt].in -= qty; daily[dt].vlrIn -= vlr; }
+            else if (h.tipo === 'retorno_sobra' || h.tipo === 'retorno_garantia_estoque') { daily[dt].in -= qty; daily[dt].vlrIn -= vlr; }
             else if (h.tipo === 'retorno_garantia') { daily[dt].out -= qty; daily[dt].vlrOut -= vlr; daily[dt].vlrIn -= vlr; }
 
             const dateObj = new Date(h.ts);
@@ -3531,13 +3531,13 @@ window.buscarPecaPorDescRetorno = async (term) => {
     }
     
     const formattedTerm = window.formatSearchQuery(term);
-    const { data } = await supabase.from(getEstoqueTable()).select('code, descricao, qty').ilike('descricao', `%${formattedTerm}%`).limit(15);
+    const { data } = await supabase.from('parts').select('code, descricao').ilike('descricao', `%${formattedTerm}%`).limit(15);
     
     if (data && data.length > 0) {
         box.innerHTML = data.map(p => `
             <div style="padding: 8px 12px; border-bottom: 1px solid var(--border); cursor: pointer;" 
                  onclick="document.getElementById('retorno-peca').value='${p.code}'; document.getElementById('retorno-pecas-sugestoes').style.display='none'; document.getElementById('retorno-busca-desc').value='${p.descricao}';">
-                <strong>${p.code}</strong> - ${p.descricao} (Estoque: ${p.qty})
+                <strong>${p.code}</strong> - ${p.descricao}
             </div>
         `).join('');
         box.style.display = 'block';
@@ -3666,8 +3666,8 @@ window.confirmarRetorno = async () => {
         const obsFinal = obs ? `OS: ${os} - ${obs}` : `OS: ${os}`;
 
         for (const item of retornoItems) {
-            // Se for sobra, subtrai o estoque (pois a peça está saindo do lab de volta pra logistica)
-            if (tipo === 'retorno_sobra') {
+            // Se for sobra ou garantia_estoque, subtrai o estoque (pois a peça está saindo do lab de volta pra logistica)
+            if (tipo === 'retorno_sobra' || tipo === 'retorno_garantia_estoque') {
                 const { data: cur } = await supabase.from(getEstoqueTable()).select('qty').eq('code', item.code).single();
                 const newQty = (cur?.qty || 0) - item.qty;
                 if (newQty < 0) throw new Error(`Saldo negativo gerado para ${item.code}! Operação cancelada.`);
@@ -3717,7 +3717,7 @@ window.renderRetornoTab = async () => {
     const search = document.getElementById('ret-search')?.value.trim();
     const tipo = document.getElementById('ret-tipo')?.value;
 
-    let q = supabase.from(getHistoricoTable()).select('*').in('tipo', ['retorno_sobra', 'retorno_garantia']).order('ts', { ascending: false });
+    let q = supabase.from(getHistoricoTable()).select('*').in('tipo', ['retorno_sobra', 'retorno_garantia', 'retorno_garantia_estoque']).order('ts', { ascending: false });
     
     if (tipo) q = q.eq('tipo', tipo);
     if (search) {

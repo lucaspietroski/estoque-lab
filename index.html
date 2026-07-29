@@ -523,8 +523,9 @@
             <div class="modal-label">Tipo</div>
             <select id="ret-tipo" class="modal-input" style="margin:0; width:150px;">
               <option value="">Todos</option>
-              <option value="retorno_sobra">Sobra</option>
-              <option value="retorno_garantia">Garantia</option>
+              <option value="retorno_sobra">Sobra (Intacta)</option>
+              <option value="retorno_garantia">Garantia (SELB)</option>
+              <option value="retorno_garantia_estoque">Garantia (Estoque)</option>
             </select>
           </div>
         </div>
@@ -1303,6 +1304,7 @@
       <select id="retorno-tipo-select" class="modal-input" style="margin: 0;" onchange="window.toggleRetornoFields()">
         <option value="retorno_sobra">Sobra (Peça intacta do estoque)</option>
         <option value="retorno_garantia">Garantia (Peça com defeito baixada num SELB)</option>
+        <option value="retorno_garantia_estoque">Garantia (Peça com defeito no estoque / Não utilizada)</option>
       </select>
     </div>
 
