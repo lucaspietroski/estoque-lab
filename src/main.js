@@ -3712,13 +3712,12 @@ window.confirmarRetorno = async () => {
             const histPayload = {
                 tipo: tipo,
                 code: item.code,
-                descricao: item.descricao,
+                descricao: `${item.descricao} | OBS: ${obsFinal}`,
                 qty: item.qty,
                 vlr_unit: item.vlrUnit,
                 vlr_total: item.vlrTotal,
                 user_email: currentUser.email,
-                ts: ts,
-                observacao: obsFinal
+                ts: ts
             };
             
             if (tipo === 'retorno_garantia') {
@@ -3753,7 +3752,7 @@ window.renderRetornoTab = async () => {
     if (tipo) q = q.eq('tipo', tipo);
     if (search) {
         const sq = window.formatSearchQuery(search);
-        q = q.or(`code.ilike.%${sq}%,descricao.ilike.%${sq}%,selb.ilike.%${sq}%,observacao.ilike.%${sq}%`);
+        q = q.or(`code.ilike.%${sq}%,descricao.ilike.%${sq}%,selb.ilike.%${sq}%`);
     }
 
     const { data } = await q;
@@ -3775,8 +3774,8 @@ window.renderRetornoTab = async () => {
     tbody.innerHTML = data.map(d => {
         const dt = new Date(d.ts).toLocaleString('pt-BR');
         let osVal = '-';
-        if (d.observacao && d.observacao.includes('OS: ')) {
-            const m = d.observacao.match(/OS:\s*(\d+)/);
+        if (d.descricao && d.descricao.includes('OBS: OS: ')) {
+            const m = d.descricao.match(/OBS: OS:\s*(\d+)/);
             if (m) osVal = m[1];
         }
         
