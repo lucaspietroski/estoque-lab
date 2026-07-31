@@ -2924,17 +2924,19 @@ window.biparItemAuditoria = async (code) => {
             activeAuditItems[code].saldo_fisico += 1;
             activeAuditItems[code].last_scanned = Date.now();
         } else {
-            // Item Extra (não existia no estoque teórico)
-            // Buscar descrição geral no banco
-            let desc = 'Peça Extra (Não cadastrada no setor)';
+            // Item Extra (não existia no estoque teórico deste setor)
+            // Buscar descrição geral no banco para ver se a peça existe no sistema
             const { data: pData } = await supabase.from('parts').select('descricao').eq('code', code).maybeSingle();
-            if (pData?.descricao) {
-                desc = pData.descricao;
+            
+            if (!pData || !pData.descricao) {
+                // Peça não existe no sistema! Provavelmente um bip incorreto.
+                alert(`❌ Código "${code}" inválido ou não cadastrado no sistema.\nO item não será adicionado à auditoria.`);
+                return;
             }
 
             activeAuditItems[code] = {
                 codigo: code,
-                descricao: desc,
+                descricao: pData.descricao,
                 saldo_teorico: 0,
                 saldo_fisico: 1,
                 divergencia: 1,
