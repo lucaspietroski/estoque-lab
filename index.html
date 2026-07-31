@@ -644,7 +644,11 @@
         <!-- TABLE AREA -->
         <div class="card" style="background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border); display: flex; flex-direction: column;">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
-            <h4 style="margin: 0;">Registros Encontrados <span id="equip-total-count" style="color:var(--text-muted); font-size: 0.85rem; font-weight: normal;">(0)</span></h4>
+            <h4 style="margin: 0; display: flex; align-items: center; gap: 10px;">
+                Registros Encontrados <span id="equip-total-count" style="color:var(--text-muted); font-size: 0.85rem; font-weight: normal;">(0)</span>
+                <button id="btn-edit-selecionados" class="btn btn-primary" style="display: none; padding: 4px 10px; font-size: 12px;" onclick="window.abrirEdicaoSelecionados()">✏️ Editar (<span id="qtd-selecionados">0</span>)</button>
+                <button id="btn-del-selecionados" class="btn" style="display: none; padding: 4px 10px; font-size: 12px; background: var(--red); color: white; border-color: var(--red);" onclick="window.excluirSelecionadosBI()">🗑️ Excluir</button>
+            </h4>
             <input type="text" id="equip-search-input" placeholder="🔍 Buscar SELB ou Modelo..." style="padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); width: 300px; font-size: 0.9rem;" oninput="debounceBIModeRender()">
           </div>
           
@@ -653,6 +657,7 @@
             <table class="dash-table" id="bi-table-individual">
               <thead>
                 <tr>
+                  <th style="width: 40px; text-align: center;"><input type="checkbox" id="bi-check-all" onchange="window.toggleAllBI()"></th>
                   <th>SELB</th>
                   <th>Modelo</th>
                   <th>Descrição</th>
@@ -680,64 +685,74 @@
   </div>
 
   <!-- MODAL EDIÇÃO INDIVIDUAL -->
-  <div id="modal-edicao-individual" class="modal" style="display: none;">
-    <div class="modal-content" style="max-width: 400px;">
-        <span class="close-modal" onclick="fecharModalIndividual()">&times;</span>
+  <div id="modal-edicao-individual" class="modal-overlay" style="display: none;">
+    <div class="modal-box" style="width: 400px;">
         <h3 style="margin-top: 0; color: var(--blue);">✏️ Editar Equipamento</h3>
         
-        <div style="margin-bottom: 15px;">
-            <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 5px;">SELB:</label>
-            <input type="text" id="modal-ind-selb" class="input-padrao" style="width: 100%;" disabled>
-        </div>
+        <div class="modal-label">SELB:</div>
+        <input type="text" id="modal-ind-selb" class="modal-input" disabled>
 
-        <div style="margin-bottom: 15px;">
-            <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 5px;">Modelo:</label>
-            <input type="text" id="modal-ind-modelo" class="input-padrao" style="width: 100%;">
-        </div>
+        <div class="modal-label">Modelo:</div>
+        <input type="text" id="modal-ind-modelo" class="modal-input">
         
-        <div style="margin-bottom: 20px;">
-            <label style="display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 5px;">Descrição:</label>
-            <input type="text" id="modal-ind-desc" class="input-padrao" style="width: 100%;">
-        </div>
+        <div class="modal-label">Descrição:</div>
+        <input type="text" id="modal-ind-desc" class="modal-input">
 
-        <div style="display: flex; justify-content: flex-end; gap: 10px;">
-            <button class="btn btn-secondary" onclick="fecharModalIndividual()">Cancelar</button>
-            <button class="btn btn-primary" onclick="salvarEdicaoIndividual()">Salvar</button>
+        <div class="modal-btns">
+            <button class="btn-cancel" onclick="fecharModalIndividual()">Cancelar</button>
+            <button class="btn-confirm" onclick="salvarEdicaoIndividual()">Salvar</button>
         </div>
     </div>
   </div>
 
   <!-- MODAL EDIÇÃO EM MASSA -->
-  <div id="modal-edicao-massa" class="modal" style="display: none;">
-    <div class="modal-content" style="max-width: 500px;">
-        <span class="close-modal" onclick="fecharModalMassa()">&times;</span>
+  <div id="modal-edicao-massa" class="modal-overlay" style="display: none;">
+    <div class="modal-box" style="width: 500px;">
         <h3 style="margin-top: 0; color: var(--blue);">✏️ Correção em Lote</h3>
         <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px;">Você está prestes a alterar centenas de equipamentos simultaneamente.</p>
         
         <div style="background: var(--bg-hover); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-            <div style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px;">Modelo Atual (Antigo):</div>
-            <div id="modal-massa-modelo-antigo" style="font-weight: bold; font-size: 1.1rem; color: var(--red);">---</div>
+            <div class="modal-label">Modelo Atual (Antigo):</div>
+            <div id="modal-massa-modelo-antigo" style="font-weight: bold; font-size: 1.1rem; color: var(--red); margin-bottom: 10px;">---</div>
             
-            <div style="margin-top: 15px; font-size: 0.8rem; color: var(--text-muted); margin-bottom: 5px;">Equipamentos Afetados:</div>
+            <div class="modal-label">Equipamentos Afetados:</div>
             <div id="modal-massa-qtd" style="font-weight: bold; font-size: 1.1rem;">0</div>
         </div>
 
-        <div style="margin-bottom: 20px;">
-            <label style="display: block; font-size: 0.9rem; font-weight: 600; margin-bottom: 8px;">Novo Modelo Corrigido:</label>
-            <input type="text" id="modal-massa-modelo-novo" class="input-padrao" placeholder="Digite o nome correto do modelo" style="width: 100%; font-size: 1rem; padding: 10px;">
+        <div class="modal-label">Novo Modelo Corrigido:</div>
+        <input type="text" id="modal-massa-modelo-novo" class="modal-input" placeholder="Digite o nome correto do modelo" style="font-size: 1rem; padding: 10px;">
+
+        <div class="modal-btns">
+            <button class="btn-cancel" onclick="fecharModalMassa()">Cancelar</button>
+            <button class="btn-confirm" onclick="salvarEdicaoMassa()">Salvar Correção</button>
+        </div>
+    </div>
+  </div>
+
+  <!-- MODAL EDIÇÃO SELECIONADOS -->
+  <div id="modal-edicao-selecionados" class="modal-overlay" style="display: none;">
+    <div class="modal-box" style="width: 500px;">
+        <h3 style="margin-top: 0; color: var(--blue);">✏️ Editar Selecionados</h3>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px;">Você está prestes a alterar o modelo de equipamentos selecionados manualmente.</p>
+        
+        <div style="background: var(--bg-hover); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+            <div class="modal-label">Equipamentos Selecionados:</div>
+            <div id="modal-selecionados-qtd" style="font-weight: bold; font-size: 1.1rem; color: var(--blue);">0</div>
         </div>
 
-        <div style="display: flex; justify-content: flex-end; gap: 10px;">
-            <button class="btn btn-secondary" onclick="fecharModalMassa()">Cancelar</button>
-            <button class="btn btn-primary" onclick="salvarEdicaoMassa()">Salvar Correção</button>
+        <div class="modal-label">Novo Modelo para Todos:</div>
+        <input type="text" id="modal-selecionados-modelo" class="modal-input" placeholder="Digite o nome correto do modelo" style="font-size: 1rem; padding: 10px;">
+
+        <div class="modal-btns">
+            <button class="btn-cancel" onclick="window.fecharModalSelecionados()">Cancelar</button>
+            <button class="btn-confirm" onclick="window.salvarEdicaoSelecionados()">Salvar Correção</button>
         </div>
     </div>
   </div>
 
   <!-- MODAL HISTÓRICO DE CORREÇÕES -->
-  <div id="modal-historico-correcoes" class="modal" style="display: none;">
-    <div class="modal-content" style="max-width: 800px;">
-        <span class="close-modal" onclick="fecharModalHistoricoCorrecoes()">&times;</span>
+  <div id="modal-historico-correcoes" class="modal-overlay" style="display: none;">
+    <div class="modal-box" style="width: 800px; max-width: 95vw;">
         <h3 style="margin-top: 0; color: var(--blue);">🕒 Histórico de Correções (Auditoria)</h3>
         
         <div class="table-wrap" style="max-height: 400px; overflow-y: auto; margin-top: 20px;">
@@ -755,6 +770,9 @@
                     <tr><td colspan="5" style="text-align:center;">Carregando histórico...</td></tr>
                 </tbody>
             </table>
+        </div>
+        <div class="modal-btns" style="margin-top: 20px;">
+            <button class="btn-cancel" onclick="fecharModalHistoricoCorrecoes()">Fechar</button>
         </div>
     </div>
   </div>

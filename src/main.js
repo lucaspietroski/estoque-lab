@@ -4953,3 +4953,549 @@ window.saveAuditModelos = async () => {
         btnSave.innerText = 'Salvar Modelos Preenchidos';
     }
 };
+
+// ==========================================
+// MÓDULO BI: AUDITORIA E QUALIDADE DA BASE
+// ==========================================
+window.biDataCache = [];
+window.biSelectedItems = new Set();
+window.biCurrentMode = 'equipamentos'; // 'equipamentos' ou 'auditoria'
+window.biSearchTimeout = null;
+
+window.setBIMode = (mode) => {
+    window.biCurrentMode = mode;
+    const btnInd = document.getElementById('bi-mode-equipamentos');
+    const btnGrp = document.getElementById('bi-mode-auditoria');
+    
+    if (mode === 'equipamentos') {
+        btnInd.classList.replace('btn-secondary', 'btn-primary');
+        btnGrp.classList.replace('btn-primary', 'btn-secondary');
+        document.getElementById('bi-table-individual').style.display = 'table';
+        document.getElementById('bi-table-agrupado').style.display = 'none';
+    } else {
+        btnInd.classList.replace('btn-primary', 'btn-secondary');
+        btnGrp.classList.replace('btn-secondary', 'btn-primary');
+        document.getElementById('bi-table-individual').style.display = 'none';
+        document.getElementById('bi-table-agrupado').style.display = 'table';
+    }
+    
+    window.renderBIList();
+};
+
+window.debounceBIModeRender = () => {
+    clearTimeout(window.biSearchTimeout);
+    window.biSearchTimeout = setTimeout(() => {
+        window.renderBIList();
+    }, 500);
+};
+
+window.loadBIDataCache = async () => {
+    try {
+        const statusEl = document.getElementById('equip-total-count');
+        if(statusEl) statusEl.innerHTML = '(Carregando...)';
+        
+        let allData = [];
+        let from = 0;
+        const step = 1000;
+        let hasMore = true;
+        
+        while (hasMore) {
+            const { data, error } = await supabase.from('equipamentos')
+                .select('selb, modelo, descricao')
+                .range(from, from + step - 1);
+            
+            if (error) throw error;
+            if (data.length > 0) {
+                allData = allData.concat(data);
+                from += step;
+            }
+            if (data.length < step) {
+                hasMore = false;
+            }
+        }
+        
+        window.biDataCache = allData;
+        window.renderBIList();
+    } catch (e) {
+        console.error("Erro ao carregar cache BI:", e);
+        if(document.getElementById('equip-total-count')) document.getElementById('equip-total-count').innerHTML = '<span style="color:red">(Erro)</span>';
+    }
+};
+
+window.renderBIList = () => {
+    if (!window.biDataCache || window.biDataCache.length === 0) {
+        if (document.getElementById('equip-total-count') && document.getElementById('equip-total-count').innerText !== '(Carregando...)') {
+            window.loadBIDataCache();
+            return;
+        }
+    }
+    
+    const searchStr = (document.getElementById('equip-search-input')?.value || '').toLowerCase();
+    const filterRadio = document.querySelector('input[name="bi_filter"]:checked')?.value || 'all';
+    
+    // Apply Filters
+    let filtered = window.biDataCache;
+    
+    if (filterRadio === 'suspects') {
+        filtered = filtered.filter(e => {
+            const mod = (e.modelo || '').toLowerCase();
+            const desc = (e.descricao || '').toLowerCase();
+            return !e.descricao || 
+                   desc.includes('excel') || 
+                   desc.includes('importa') || 
+                   mod.includes('excel') ||
+                   mod.length < 3;
+        });
+    } else if (filterRadio === 'excel') {
+        filtered = filtered.filter(e => (e.descricao || '').toLowerCase().includes('excel'));
+    } else if (filterRadio === 'empty_desc') {
+        filtered = filtered.filter(e => !e.descricao || e.descricao.trim() === '');
+    }
+    
+    // Apply Search
+    if (searchStr) {
+        filtered = filtered.filter(e => 
+            (e.selb && e.selb.toLowerCase().includes(searchStr)) || 
+            (e.modelo && e.modelo.toLowerCase().includes(searchStr))
+        );
+    }
+    
+    if(document.getElementById('equip-total-count')) document.getElementById('equip-total-count').innerText = `(${filtered.length})`;
+    
+    window.biSelectedItems.clear();
+    const checkAll = document.getElementById('bi-check-all');
+    if (checkAll) checkAll.checked = false;
+    if (typeof window.updateBISelectionUI === 'function') window.updateBISelectionUI();
+
+    // Render Individual View
+    if (window.biCurrentMode === 'equipamentos') {
+        const tbody = document.getElementById('equip-tbody');
+        if(!tbody) return;
+        const limitRender = filtered.slice(0, 1000); // Limita a 1000 para não travar o DOM
+        
+        if (limitRender.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding: 20px; color: var(--text-muted);">Nenhum equipamento encontrado com estes filtros.</td></tr>';
+        } else {
+            tbody.innerHTML = limitRender.map(e => `
+                <tr>
+                    <td style="text-align: center;"><input type="checkbox" class="bi-check-item" value="${e.selb}" onchange="window.toggleBIItem(this)"></td>
+                    <td style="font-weight: bold; color: var(--blue);">${e.selb || '-'}</td>
+                    <td>${e.modelo || '-'}</td>
+                    <td style="font-size: 12px;">${e.descricao || '-'}</td>
+                    <td style="text-align: center; display: flex; gap: 4px; justify-content: center;">
+                        <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" onclick="window.abrirEdicaoIndividual('${e.selb}', '${e.modelo || ''}', '${(e.descricao || '').replace(/'/g, "\\'")}')">✏️ Editar</button>
+                        <button class="btn" style="padding: 4px 8px; font-size: 12px; background: var(--red); color: white; border: none; border-radius: 4px; cursor: pointer;" onclick="window.excluirIndividualBI('${e.selb}')">🗑️</button>
+                    </td>
+                </tr>
+            `).join('');
+            
+            if (filtered.length > 1000) {
+                tbody.innerHTML += `<tr><td colspan="5" style="text-align:center; padding: 10px; color: var(--text-muted); font-size: 12px;">Exibindo 1.000 de ${filtered.length} resultados. Use a busca para visualizar mais.</td></tr>`;
+            }
+        }
+    } 
+    // Render Grouped View
+    else {
+        const groups = {};
+        filtered.forEach(e => {
+            const m = e.modelo || 'SEM MODELO';
+            if (!groups[m]) groups[m] = { count: 0, sample: e.descricao || '', isSuspect: false };
+            groups[m].count++;
+            
+            const desc = (e.descricao || '').toLowerCase();
+            if (!e.descricao || desc.includes('excel') || desc.includes('importa') || m.toLowerCase().includes('excel') || m.length < 3) {
+                groups[m].isSuspect = true;
+            }
+        });
+        
+        const sortedGroups = Object.keys(groups).map(k => ({
+            modelo: k,
+            ...groups[k]
+        })).sort((a, b) => b.count - a.count);
+        
+        const tbody = document.getElementById('equip-tbody-agrupado');
+        if(!tbody) return;
+        const limitRender = sortedGroups.slice(0, 1000);
+        
+        if (limitRender.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding: 20px; color: var(--text-muted);">Nenhum modelo encontrado.</td></tr>';
+        } else {
+            tbody.innerHTML = limitRender.map(g => `
+                <tr>
+                    <td style="font-weight: bold;">${g.modelo}</td>
+                    <td style="text-align: center; font-weight: bold; color: var(--blue);">${g.count}</td>
+                    <td style="text-align: center;">
+                        ${g.isSuspect 
+                            ? '<span style="background: #ffebeb; color: var(--red); padding: 4px 8px; border-radius: 4px; font-size: 10px;">⚠️ Suspeito</span>' 
+                            : '<span style="background: #e6f4ea; color: #10b981; padding: 4px 8px; border-radius: 4px; font-size: 10px;">✅ OK</span>'
+                        }
+                    </td>
+                    <td style="text-align: center; display: flex; gap: 4px; justify-content: center;">
+                        <button class="btn btn-secondary" style="padding: 4px 8px; font-size: 12px;" onclick="window.abrirCorrecaoLote('${g.modelo}', ${g.count})">📝 Correção em Lote</button>
+                        <button class="btn" style="padding: 4px 8px; font-size: 12px; background: var(--red); color: white; border: none; border-radius: 4px; cursor: pointer;" onclick="window.excluirLoteBI('${g.modelo}', ${g.count})">🗑️ Excluir Lote</button>
+                    </td>
+                </tr>
+            `).join('');
+            
+            if (sortedGroups.length > 1000) {
+                tbody.innerHTML += `<tr><td colspan="4" style="text-align:center; padding: 10px; color: var(--text-muted); font-size: 12px;">Exibindo 1.000 de ${sortedGroups.length} modelos. Use a busca para filtrar.</td></tr>`;
+            }
+        }
+    }
+    
+    window.updateBIMetrics();
+};
+
+window.updateBIMetrics = () => {
+    if (!window.biDataCache) return;
+    
+    if(document.getElementById('bi-dash-total')) document.getElementById('bi-dash-total').innerText = window.biDataCache.length.toLocaleString();
+    
+    const models = new Set(window.biDataCache.map(e => e.modelo || ''));
+    if(document.getElementById('bi-dash-modelos')) document.getElementById('bi-dash-modelos').innerText = models.size.toLocaleString();
+    
+    const suspects = window.biDataCache.filter(e => {
+        const desc = (e.descricao || '').toLowerCase();
+        const mod = (e.modelo || '').toLowerCase();
+        return !e.descricao || desc.includes('excel') || desc.includes('importa') || mod.includes('excel') || mod.length < 3;
+    });
+    if(document.getElementById('bi-dash-suspeitos')) document.getElementById('bi-dash-suspeitos').innerText = suspects.length.toLocaleString();
+};
+
+// IMPORTAR XLSX BI
+window.processarBI = async (file) => {
+    if (!file) return;
+    const statusEl = document.getElementById('bi-status');
+    
+    try {
+        statusEl.innerHTML = '<span style="color: var(--blue);">Lendo arquivo... Aguarde.</span>';
+        
+        const reader = new FileReader();
+        reader.onload = async (e) => {
+            try {
+                const data = new Uint8Array(e.target.result);
+                const workbook = window.XLSX.read(data, { type: 'array' });
+                const firstSheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[firstSheetName];
+                
+                const rows = window.XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                
+                if (!rows || rows.length < 2) throw new Error("Planilha vazia ou formato inválido.");
+                
+                const toSave = [];
+                for (let i = 1; i < rows.length; i++) {
+                    const row = rows[i];
+                    // Col A (0): SELB, Col C (2): Modelo, Col D (3): Descricao
+                    const selb = row[0] ? String(row[0]).trim().toUpperCase() : null;
+                    const modelo = row[2] ? String(row[2]).trim().toUpperCase() : null;
+                    const descricao = row[3] ? String(row[3]).trim() : '';
+                    
+                    if (selb) {
+                        toSave.push({ selb, modelo, descricao });
+                    }
+                }
+                
+                if (toSave.length === 0) throw new Error("Nenhum equipamento encontrado na coluna A.");
+                
+                statusEl.innerHTML = `<span style="color: var(--blue);">Enviando ${toSave.length} registros...</span>`;
+                
+                const chunkSize = 500;
+                for (let i = 0; i < toSave.length; i += chunkSize) {
+                    const chunk = toSave.slice(i, i + chunkSize);
+                    const { error } = await supabase.from('equipamentos').upsert(chunk);
+                    if (error) throw error;
+                    statusEl.innerHTML = `<span style="color: var(--blue);">Sincronizando: ${Math.min(i + chunkSize, toSave.length)} / ${toSave.length}</span>`;
+                }
+                
+                statusEl.innerHTML = `<span style="color: var(--green);">✅ ${toSave.length} importados com sucesso!</span>`;
+                
+                await window.loadBIDataCache();
+                
+                setTimeout(() => {
+                    statusEl.innerHTML = '';
+                    document.getElementById('bi-file-input').value = '';
+                }, 3000);
+                
+            } catch (err) {
+                statusEl.innerHTML = `<span style="color: var(--red);">❌ Erro: ${err.message}</span>`;
+            }
+        };
+        reader.readAsArrayBuffer(file);
+    } catch (err) {
+        statusEl.innerHTML = `<span style="color: var(--red);">❌ Erro: ${err.message}</span>`;
+    }
+};
+
+// MODAIS EDIÇÃO INDIVIDUAL
+window.abrirEdicaoIndividual = (selb, modelo, descricao) => {
+    document.getElementById('modal-ind-selb').value = selb;
+    document.getElementById('modal-ind-modelo').value = modelo;
+    document.getElementById('modal-ind-desc').value = descricao;
+    document.getElementById('modal-edicao-individual').style.display = 'flex';
+};
+
+window.fecharModalIndividual = () => {
+    document.getElementById('modal-edicao-individual').style.display = 'none';
+};
+
+window.salvarEdicaoIndividual = async () => {
+    const selb = document.getElementById('modal-ind-selb').value;
+    const modelo = document.getElementById('modal-ind-modelo').value.trim().toUpperCase();
+    const descricao = document.getElementById('modal-ind-desc').value.trim();
+    
+    if (!selb || !modelo) return alert("O SELB e o Modelo são obrigatórios.");
+    
+    try {
+        const { error } = await supabase.from('equipamentos').update({ modelo, descricao }).eq('selb', selb);
+        if (error) throw error;
+        
+        await window.logBICorrecao(currentUser?.email, selb, `Modelo alterado para ${modelo}`);
+        
+        alert("Atualizado com sucesso!");
+        window.fecharModalIndividual();
+        
+        const idx = window.biDataCache.findIndex(e => e.selb === selb);
+        if (idx >= 0) {
+            window.biDataCache[idx].modelo = modelo;
+            window.biDataCache[idx].descricao = descricao;
+        }
+        window.renderBIList();
+        
+    } catch (e) { alert("Erro ao salvar: " + e.message); }
+};
+
+// MODAIS CORREÇÃO LOTE
+window.abrirCorrecaoLote = (modeloOriginal, qtd) => {
+    document.getElementById('modal-massa-modelo-antigo').innerText = modeloOriginal;
+    document.getElementById('modal-massa-qtd').innerText = qtd;
+    document.getElementById('modal-massa-modelo-novo').value = '';
+    document.getElementById('modal-edicao-massa').style.display = 'flex';
+};
+
+window.fecharModalMassa = () => {
+    document.getElementById('modal-edicao-massa').style.display = 'none';
+};
+
+window.salvarEdicaoMassa = async () => {
+    const orig = document.getElementById('modal-massa-modelo-antigo').innerText;
+    const novo = document.getElementById('modal-massa-modelo-novo').value.trim().toUpperCase();
+    const qtd = document.getElementById('modal-massa-qtd').innerText;
+    
+    if (!novo) return alert("Digite o novo modelo.");
+    if (!confirm(`Deseja alterar todos os equipamentos do modelo "${orig}" para "${novo}"?`)) return;
+    
+    try {
+        // Se for SEM MODELO, no banco de dados pode estar null ou em branco
+        // Para simplificar, o Supabase update suporta .is('modelo', null) ou eq
+        // Se for SEM MODELO na string do HTML, no cache ele tinha modelo null ou vazio.
+        let q = supabase.from('equipamentos').update({ modelo: novo });
+        
+        if (orig === 'SEM MODELO') {
+            q = q.or('modelo.is.null,modelo.eq.'); 
+        } else {
+            q = q.eq('modelo', orig);
+        }
+        
+        const { error } = await q;
+        if (error) throw error;
+        
+        await window.logBICorrecao(currentUser?.email, `(Vários)`, `Lote de '${orig}' p/ '${novo}' (${qtd} eqps)`);
+        
+        alert("Correção em lote aplicada com sucesso!");
+        window.fecharModalMassa();
+        
+        window.biDataCache.forEach(e => {
+            if (e.modelo === orig || (!e.modelo && orig === 'SEM MODELO')) {
+                e.modelo = novo;
+            }
+        });
+        window.renderBIList();
+        
+    } catch (e) { alert("Erro ao corrigir lote: " + e.message); }
+};
+
+// HISTÓRICO DE CORREÇÕES
+window.logBICorrecao = async (usuario, selb, obs) => {
+    let logs = JSON.parse(localStorage.getItem('bi_correcoes_log') || '[]');
+    logs.push({
+        ts: new Date().toISOString(),
+        usuario: usuario || 'N/A',
+        selb,
+        obs
+    });
+    if (logs.length > 300) logs = logs.slice(logs.length - 300);
+    localStorage.setItem('bi_correcoes_log', JSON.stringify(logs));
+};
+
+window.abrirHistoricoCorrecoes = () => {
+    const logs = JSON.parse(localStorage.getItem('bi_correcoes_log') || '[]').reverse();
+    const tbody = document.getElementById('tbody-historico-correcoes');
+    
+    if (logs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; padding:15px; color:gray;">Nenhum registro de correção encontrado.</td></tr>';
+    } else {
+        tbody.innerHTML = logs.map(l => {
+            let desc = l.obs || '';
+            let antigo = '-';
+            let novo = '-';
+            
+            if (desc.includes('Lote de')) {
+                const m = desc.match(/Lote de '(.*)' p\/ '(.*)'/);
+                if (m) {
+                    antigo = m[1];
+                    novo = m[2];
+                }
+            } else if (desc.includes('Modelo alterado para')) {
+                novo = desc.replace('Modelo alterado para ', '');
+            }
+            
+            return `
+            <tr>
+                <td style="font-size:12px;">${new Date(l.ts).toLocaleString()}</td>
+                <td style="font-size:11px;">${l.usuario}</td>
+                <td style="text-align:center; font-weight:bold;">${l.selb}</td>
+                <td style="color:var(--red); font-size:12px;">${antigo}</td>
+                <td style="color:var(--green); font-size:12px; font-weight:bold;">${novo}</td>
+            </tr>
+        `;
+        }).join('');
+    }
+    
+    document.getElementById('modal-historico-correcoes').style.display = 'flex';
+};
+
+window.fecharModalHistoricoCorrecoes = () => {
+    document.getElementById('modal-historico-correcoes').style.display = 'none';
+};
+
+// MULTIPLE SELECTION LOGIC
+window.toggleAllBI = () => {
+    const checkAll = document.getElementById('bi-check-all');
+    const isChecked = checkAll.checked;
+    
+    document.querySelectorAll('.bi-check-item').forEach(cb => {
+        cb.checked = isChecked;
+        if (isChecked) window.biSelectedItems.add(cb.value);
+        else window.biSelectedItems.delete(cb.value);
+    });
+    window.updateBISelectionUI();
+};
+
+window.toggleBIItem = (cb) => {
+    if (cb.checked) window.biSelectedItems.add(cb.value);
+    else window.biSelectedItems.delete(cb.value);
+    window.updateBISelectionUI();
+};
+
+window.updateBISelectionUI = () => {
+    const btn = document.getElementById('btn-edit-selecionados');
+    const btnDel = document.getElementById('btn-del-selecionados');
+    const span = document.getElementById('qtd-selecionados');
+    if (!btn || !span || !btnDel) return;
+    
+    if (window.biSelectedItems.size > 0) {
+        span.innerText = window.biSelectedItems.size;
+        btn.style.display = 'inline-flex';
+        btnDel.style.display = 'inline-flex';
+    } else {
+        btn.style.display = 'none';
+        btnDel.style.display = 'none';
+    }
+};
+
+window.abrirEdicaoSelecionados = () => {
+    if (window.biSelectedItems.size === 0) return;
+    document.getElementById('modal-selecionados-qtd').innerText = window.biSelectedItems.size;
+    document.getElementById('modal-selecionados-modelo').value = '';
+    document.getElementById('modal-edicao-selecionados').style.display = 'flex';
+};
+
+window.fecharModalSelecionados = () => {
+    document.getElementById('modal-edicao-selecionados').style.display = 'none';
+};
+
+window.salvarEdicaoSelecionados = async () => {
+    const novo = document.getElementById('modal-selecionados-modelo').value.trim().toUpperCase();
+    if (!novo) return alert("Digite o novo modelo.");
+    
+    const selbsToUpdate = Array.from(window.biSelectedItems);
+    if (!confirm(`Deseja alterar o modelo de ${selbsToUpdate.length} equipamento(s) para "${novo}"?`)) return;
+    
+    try {
+        const chunkSize = 200;
+        for (let i = 0; i < selbsToUpdate.length; i += chunkSize) {
+            const chunk = selbsToUpdate.slice(i, i + chunkSize);
+            const { error } = await supabase.from('equipamentos').update({ modelo: novo }).in('selb', chunk);
+            if (error) throw error;
+        }
+        
+        await window.logBICorrecao(currentUser?.email, `(Seleção)`, `Lote de ${selbsToUpdate.length} selbs alterados p/ '${novo}'`);
+        
+        alert("Correção aplicada com sucesso!");
+        window.fecharModalSelecionados();
+        
+        const selbSet = new Set(selbsToUpdate);
+        window.biDataCache.forEach(e => {
+            if (selbSet.has(e.selb)) {
+                e.modelo = novo;
+            }
+        });
+        
+        window.biSelectedItems.clear();
+        window.renderBIList();
+        
+    } catch (e) { alert("Erro ao corrigir selecionados: " + e.message); }
+};
+
+// DELETE LOGIC
+window.excluirIndividualBI = async (selb) => {
+    if (!confirm(`Tem certeza que deseja excluir o SELB ${selb}? Essa ação não pode ser desfeita.`)) return;
+    
+    try {
+        const { error } = await supabase.from('equipamentos').delete().eq('selb', selb);
+        if (error) throw error;
+        
+        await window.logBICorrecao(currentUser?.email, `(Exclusão)`, `SELB '${selb}' excluído do sistema`);
+        
+        window.biDataCache = window.biDataCache.filter(e => e.selb !== selb);
+        window.renderBIList();
+    } catch (e) { alert("Erro ao excluir: " + e.message); }
+};
+
+window.excluirLoteBI = async (modelo, count) => {
+    if (!confirm(`ATENÇÃO: Você está prestes a EXCLUIR ${count} equipamentos do modelo "${modelo}". Essa ação não pode ser desfeita. Deseja prosseguir?`)) return;
+    
+    try {
+        const { error } = await supabase.from('equipamentos').delete().eq('modelo', modelo);
+        if (error) throw error;
+        
+        await window.logBICorrecao(currentUser?.email, `(Exclusão)`, `Lote de ${count} eqps do modelo '${modelo}' excluído`);
+        
+        window.biDataCache = window.biDataCache.filter(e => e.modelo !== modelo);
+        window.renderBIList();
+        alert("Lote excluído com sucesso!");
+    } catch (e) { alert("Erro ao excluir lote: " + e.message); }
+};
+
+window.excluirSelecionadosBI = async () => {
+    const selbsToUpdate = Array.from(window.biSelectedItems);
+    if (!confirm(`ATENÇÃO: Você está prestes a EXCLUIR ${selbsToUpdate.length} equipamentos selecionados. Essa ação não pode ser desfeita. Deseja prosseguir?`)) return;
+    
+    try {
+        const chunkSize = 200;
+        for (let i = 0; i < selbsToUpdate.length; i += chunkSize) {
+            const chunk = selbsToUpdate.slice(i, i + chunkSize);
+            const { error } = await supabase.from('equipamentos').delete().in('selb', chunk);
+            if (error) throw error;
+        }
+        
+        await window.logBICorrecao(currentUser?.email, `(Exclusão)`, `Lote de ${selbsToUpdate.length} selbs selecionados excluído`);
+        
+        const selbSet = new Set(selbsToUpdate);
+        window.biDataCache = window.biDataCache.filter(e => !selbSet.has(e.selb));
+        
+        window.biSelectedItems.clear();
+        window.renderBIList();
+        alert("Equipamentos excluídos com sucesso!");
+    } catch (e) { alert("Erro ao excluir selecionados: " + e.message); }
+};
