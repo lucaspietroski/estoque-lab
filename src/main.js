@@ -5182,39 +5182,73 @@ window.processarBI = async (file) => {
                 
                 if (!rows || rows.length < 2) throw new Error("Planilha vazia ou formato inválido.");
                 
-                const toSave = [];
-                for (let i = 1; i < rows.length; i++) {
+                let headerRowIndex = -1;
+                let colSelb = -1;
+                let colModelo = -1;
+                let colDesc = -1;
+                
+                // Procurar a linha de cabeçalho nas primeiras 20 linhas
+                for (let i = 0; i < Math.min(rows.length, 20); i++) {
                     const row = rows[i];
-                    // Col A (0): SELB, Col C (2): Modelo, Col D (3): Descricao
-                    const selb = row[0] ? String(row[0]).trim().toUpperCase() : null;
-                    const modelo = row[2] ? String(row[2]).trim().toUpperCase() : null;
-                    const descricao = row[3] ? String(row[3]).trim() : '';
+                    if (!row) continue;
                     
-                    if (selb) {
-                        toSave.push({ selb, modelo, descricao });
+                    for (let j = 0; j < row.length; j++) {
+                        const cell = String(row[j] || '').toUpperCase().trim();
+                        if (cell === 'SELB' || cell === 'PATRIMONIO' || cell.includes('SELB')) {
+                            colSelb = j;
+                        } else if (cell === 'PRODUTO' || cell === 'MODELO' || cell.includes('PRODUTO')) {
+                            colModelo = j;
+                        } else if (cell === 'DESCRIÇÃO' || cell === 'DESCRICAO' || cell === 'DESCR' || cell.includes('DESCRI')) {
+                            colDesc = j;
+                        }
+                    }
+                    
+                    if (colSelb !== -1 && colModelo !== -1) {
+                        headerRowIndex = i;
+                        break; // Achou o cabeçalho!
                     }
                 }
                 
-                if (toSave.length === 0) throw new Error("Nenhum equipamento encontrado na coluna A.");
-                
-                statusEl.innerHTML = `<span style="color: var(--blue);">Enviando ${toSave.length} registros...</span>`;
-                
-                const chunkSize = 500;
-                for (let i = 0; i < toSave.length; i += chunkSize) {
-                    const chunk = toSave.slice(i, i + chunkSize);
-                    const { error } = await supabase.from('equipamentos').upsert(chunk);
-                    if (error) throw error;
-                    statusEl.innerHTML = `<span style="color: var(--blue);">Sincronizando: ${Math.min(i + chunkSize, toSave.length)} / ${toSave.length}</span>`;
+                if (headerRowIndex === -1) {
+                    // Fallback para hardcoded caso não ache cabeçalhos explícitos
+                    colSelb = 0;
+                    colModelo = 2;
+                    colDesc = 3;
+                    headerRowIndex = 0;
+                }
+
+                const selbMap = new Map();
+                for (let i = headerRowIndex + 1; i < rows.length; i++) {
+                    const row = rows[i];
+                    if (!row) continue;
+                    
+                    const selb = row[colSelb] ? String(row[colSelb]).trim().toUpperCase() : null;
+                    const modelo = colModelo !== -1 && row[colModelo] ? String(row[colModelo]).trim().toUpperCase() : null;
+                    const descricao = colDesc !== -1 && row[colDesc] ? String(row[colDesc]).trim() : '';
+                    
+                    if (selb && selb !== 'SELB' && selb !== 'PATRIMONIO') {
+                        selbMap.set(selb, { selb, modelo, descricao });
+                    }
                 }
                 
-                statusEl.innerHTML = `<span style="color: var(--green);">✅ ${toSave.length} importados com sucesso!</span>`;
+                const toSave = Array.from(selbMap.values());
                 
-                await window.loadBIDataCache();
+                if (toSave.length === 0) throw new Error("Não foi possível encontrar as colunas SELB e PRODUTO/MODELO válidas.");
                 
-                setTimeout(() => {
-                    statusEl.innerHTML = '';
-                    document.getElementById('bi-file-input').value = '';
-                }, 3000);
+                window.biDataToImport = toSave;
+                document.getElementById('preview-bi-qtd').innerText = toSave.length;
+                
+                const tbody = document.getElementById('tbody-preview-bi');
+                tbody.innerHTML = toSave.map(e => `
+                    <tr>
+                        <td style="font-weight: bold; color: var(--blue);">${e.selb || '-'}</td>
+                        <td>${e.modelo || '-'}</td>
+                        <td style="font-size: 12px;">${e.descricao || '-'}</td>
+                    </tr>
+                `).join('');
+                
+                document.getElementById('modal-preview-bi').style.display = 'flex';
+                statusEl.innerHTML = '';
                 
             } catch (err) {
                 statusEl.innerHTML = `<span style="color: var(--red);">❌ Erro: ${err.message}</span>`;
@@ -5224,6 +5258,44 @@ window.processarBI = async (file) => {
     } catch (err) {
         statusEl.innerHTML = `<span style="color: var(--red);">❌ Erro: ${err.message}</span>`;
     }
+};
+
+window.cancelarImportacaoBI = () => {
+    document.getElementById('modal-preview-bi').style.display = 'none';
+    document.getElementById('bi-file-input').value = '';
+    window.biDataToImport = null;
+};
+
+window.confirmarImportacaoBI = async () => {
+    if (!window.biDataToImport || window.biDataToImport.length === 0) return;
+    const toSave = window.biDataToImport;
+    const statusEl = document.getElementById('bi-status');
+    
+    document.getElementById('modal-preview-bi').style.display = 'none';
+    statusEl.innerHTML = `<span style="color: var(--blue);">Enviando ${toSave.length} registros...</span>`;
+    
+    try {
+        const chunkSize = 500;
+        for (let i = 0; i < toSave.length; i += chunkSize) {
+            const chunk = toSave.slice(i, i + chunkSize);
+            const { error } = await supabase.from('equipamentos').upsert(chunk);
+            if (error) throw error;
+            statusEl.innerHTML = `<span style="color: var(--blue);">Sincronizando: ${Math.min(i + chunkSize, toSave.length)} / ${toSave.length}</span>`;
+        }
+        
+        statusEl.innerHTML = `<span style="color: var(--green);">✅ ${toSave.length} importados com sucesso!</span>`;
+        await window.loadBIDataCache();
+        
+        setTimeout(() => {
+            statusEl.innerHTML = '';
+            document.getElementById('bi-file-input').value = '';
+        }, 3000);
+        
+    } catch (err) {
+        statusEl.innerHTML = `<span style="color: var(--red);">❌ Erro: ${err.message}</span>`;
+    }
+    
+    window.biDataToImport = null;
 };
 
 // MODAIS EDIÇÃO INDIVIDUAL
