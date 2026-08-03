@@ -492,12 +492,16 @@ async function renderChips() {
     // Busca todas as peças com estoque para calcular os totais lendo a descrição
     const tName = getEstoqueTable();
     const { data } = await supabase.from('parts')
-        .select(`descricao, ${tName}!inner(qty)`)
-        .gt(`${tName}.qty`, 0);
+        .select(`code, descricao, ${tName}!inner(qty)`)
+        .gt(`${tName}.qty`, 0)
+        .neq('code', 'SEMPEÇA')
+        .neq('code', 'SEMPECA');
 
     const totals = {};
     if (data) {
         data.forEach(p => {
+            const code = (p.code || '').trim().toUpperCase();
+            if (code === 'SEMPEÇA' || code === 'SEMPECA') return;
             const desc = (p.descricao || '').toUpperCase();
             // Identifica a marca dentro do texto da descrição
             const brand = MARCAS.find(m => desc.includes(m)) || 'OUTROS';
@@ -1627,7 +1631,7 @@ window.renderMovDashboard = async () => {
     const data = rawData.filter(h => {
         if (h.tipo === 'sm_obs') return false;
         if (h.code === 'SEMPEÇA' || h.code === 'SEMPECA') {
-            return h.tipo === 'saída' || h.tipo === 'saida' || h.tipo === 'REVISÃO';
+            return false;
         }
         return true;
     });
