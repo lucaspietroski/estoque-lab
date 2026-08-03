@@ -2814,7 +2814,7 @@ window.iniciarAuditoria = async () => {
         const seen = new Set();
         stockItems.forEach(item => {
             const code = item.code?.trim().toUpperCase();
-            if (code && !seen.has(code)) {
+            if (code && !seen.has(code) && code !== 'SEMPEÇA' && code !== 'SEMPECA') {
                 seen.add(code);
                 const qty = item.qty || 0;
                 bulkInsertRows.push({
