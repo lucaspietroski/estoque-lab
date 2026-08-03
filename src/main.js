@@ -4354,26 +4354,52 @@ window.renderSmartManager = async () => {
         const tbody = document.getElementById('sm-table-body');
         tbody.innerHTML = '';
 
-        const selbsList = Object.keys(selbGroups).map(selb => ({ selb, ...selbGroups[selb] }));
-        selbsList.sort((a, b) => {
-            const aPending = a.pendentes > 0;
-            const bPending = b.pendentes > 0;
-            if (aPending && !bPending) return -1;
-            if (!aPending && bPending) return 1;
-            
-            if (aPending && bPending) {
-                // Both pending: oldest first
-                return a.lastMov.localeCompare(b.lastMov);
-            } else {
-                // Both concluded: newest first (so recent completions stay visible)
-                return b.lastMov.localeCompare(a.lastMov);
-            }
-        });
-
+        let selbsList = Object.keys(selbGroups).map(selb => ({ selb, ...selbGroups[selb] }));
+        
+        // Contagem para os cards globais ANTES de filtrar
         selbsList.forEach(g => {
             if (g.pendentes > 0) selbsPendentesCount++;
             if (g.pendentes > 0 && g.aguardandoPecaCount === g.pendentes) selbsAguardandoCount++;
             if (g.pendentes === 0 && g.osSet.has('DESMEMBRADA')) selbsDesmembradosCount++;
+        });
+
+        // Definir filtro padrão
+        const filter = window.smCurrentFilter || 'PEÇAS PENDENTES';
+
+        selbsList = selbsList.filter(g => {
+            if (filter === 'PEÇAS PENDENTES' || filter === 'SELBS PENDENTES') return g.pendentes > 0;
+            if (filter === 'PEÇAS INTEGRADAS') return g.pendentes === 0;
+            if (filter === 'SELBS AG. PEÇA') return g.pendentes > 0 && g.aguardandoPecaCount === g.pendentes;
+            if (filter === 'SELBS DESMEMBRADOS') return g.pendentes === 0 && g.osSet.has('DESMEMBRADA');
+            if (filter === 'INTEGRAÇÕES HOJE') return g.lastSyncAt && g.lastSyncAt.startsWith(hojeStr);
+            if (filter === 'PENDÊNCIA MAIS ANTIGA') return g.pendentes > 0;
+            return true;
+        });
+
+        selbsList.sort((a, b) => {
+            const aPureAguardando = a.pendentes > 0 && a.aguardandoPecaCount === a.pendentes;
+            const bPureAguardando = b.pendentes > 0 && b.aguardandoPecaCount === b.pendentes;
+            
+            const aPending = a.pendentes > 0 && !aPureAguardando;
+            const bPending = b.pendentes > 0 && !bPureAguardando;
+
+            if (aPending && !bPending) return -1;
+            if (!aPending && bPending) return 1;
+
+            if (aPureAguardando && !bPureAguardando) return -1;
+            if (!aPureAguardando && bPureAguardando) return 1;
+
+            if (aPending && bPending) return a.lastMov.localeCompare(b.lastMov);
+            if (aPureAguardando && bPureAguardando) return a.lastMov.localeCompare(b.lastMov);
+
+            return b.lastMov.localeCompare(a.lastMov);
+        });
+
+        if (filter === 'PENDÊNCIA MAIS ANTIGA') {
+            selbsList = selbsList.slice(0, 5);
+        }
+
+        selbsList.forEach(g => {
 
             let statusIcon = '🟢';
             let situacao = 'Concluído';
@@ -4700,6 +4726,41 @@ window.marcarAguardandoPecaSmart = async () => {
         alert('Erro ao marcar como aguardando peça: ' + (e.message || JSON.stringify(e)));
     }
 };
+
+window.smCurrentFilter = 'PEÇAS PENDENTES';
+window.setSmFilter = (filterName) => {
+    window.smCurrentFilter = filterName;
+    const cards = [
+        { name: 'PEÇAS PENDENTES', id: 'card-pecas-pendentes' },
+        { name: 'PEÇAS INTEGRADAS', id: 'card-pecas-integradas' },
+        { name: 'SELBS PENDENTES', id: 'card-selbs-pendentes' },
+        { name: 'SELBS AG. PEÇA', id: 'card-selbs-aguardando' },
+        { name: 'SELBS DESMEMBRADOS', id: 'card-selbs-desmembrados' },
+        { name: 'INTEGRAÇÕES HOJE', id: 'card-integracoes-hoje' },
+        { name: 'PENDÊNCIA MAIS ANTIGA', id: 'card-pendencia-antiga' }
+    ];
+
+    cards.forEach(c => {
+        const el = document.getElementById(c.id);
+        if (el) {
+            // Both trigger for Pendentes
+            const isPendingGroup = (filterName === 'PEÇAS PENDENTES' || filterName === 'SELBS PENDENTES') 
+                                && (c.name === 'PEÇAS PENDENTES' || c.name === 'SELBS PENDENTES');
+                                
+            if (c.name === filterName || isPendingGroup) {
+                el.classList.add('active');
+            } else {
+                el.classList.remove('active');
+            }
+        }
+    });
+    window.renderSmartManager();
+};
+
+// Quando carregar, inicializar visualmente a aba ativa
+setTimeout(() => {
+    window.setSmFilter('PEÇAS PENDENTES');
+}, 500);
 
 // Funcao auxiliar de formatacao (se não houver no main)
 function formatDateBR(isoString) {

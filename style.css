@@ -163,11 +163,12 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); font
 .dash-cards { display: grid; grid-template-columns: repeat(auto-fit,minmax(175px,1fr)); gap: 0.9rem; margin-bottom: 1.5rem; }
 .dash-card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.2rem; cursor: pointer; transition: box-shadow .15s, border-color .15s; box-shadow: var(--shadow-sm); }
 .dash-card:hover { box-shadow: var(--shadow); border-color: var(--border2); }
+.dash-card.active { border: 2px solid var(--blue); background-color: #f0f7ff; box-shadow: var(--shadow); }
 .dash-card.c-total { border-top: 3px solid var(--blue); }
 .dash-card.c-stock { border-top: 3px solid var(--green); }
 .dash-card.c-low   { border-top: 3px solid var(--yellow); }
 .dash-card.c-zero  { border-top: 3px solid var(--red); }
-.dash-card-label { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted); margin-bottom: 0.45rem; }
+.dash-card-label { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted); margin-bottom: 0.45rem; white-space: nowrap; }
 .dash-card-value { font-size: 2.1rem; font-weight: 800; line-height: 1; letter-spacing: -0.03em; margin-bottom: 0.2rem; }
 .c-total .dash-card-value { color: var(--blue); }
 .c-stock .dash-card-value { color: var(--green); }
