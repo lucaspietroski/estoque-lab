@@ -2727,10 +2727,11 @@ window.iniciarAuditoria = async () => {
         const sector = sectorEl.value;
         const modoCego = document.getElementById('audit-blind-mode').checked;
 
-        // 1. Prevenir colisão de sessões ativas
+        // 1. Prevenir colisão de sessões ativas no mesmo setor
         const { data: existing } = await supabase.from('auditorias')
             .select('*')
             .eq('status', 'EM_ANDAMENTO')
+            .eq('setor', sector)
             .limit(1)
             .maybeSingle();
 
@@ -4338,6 +4339,11 @@ window.renderSmartManager = async () => {
                 totalPendentes += q;
                 selbGroups[selb].pendentes += q;
                 
+                if (item.os_manager === 'AGUARDANDO_PECA') {
+                    if (!selbGroups[selb].aguardandoPecaCount) selbGroups[selb].aguardandoPecaCount = 0;
+                    selbGroups[selb].aguardandoPecaCount += q;
+                }
+                
                 if (!pendenciaMaisAntigaTs || item.ts < pendenciaMaisAntigaTs) {
                     pendenciaMaisAntigaTs = item.ts;
                 }
@@ -4374,9 +4380,23 @@ window.renderSmartManager = async () => {
                 situacao = `${g.sincronizadas}/${g.sincronizadas + g.pendentes} sincronizadas`;
                 color = 'var(--orange)';
             } else if (g.pendentes > 0 && g.sincronizadas === 0) {
-                statusIcon = '🔴';
-                situacao = `${g.pendentes} pendentes`;
-                color = 'var(--red)';
+                if (g.aguardandoPecaCount === g.pendentes) {
+                    statusIcon = '🟣';
+                    situacao = `${g.pendentes} Aguardando Peça`;
+                    color = '#9333ea';
+                } else if (g.aguardandoPecaCount > 0) {
+                    statusIcon = '🔴';
+                    situacao = `${g.pendentes} pendentes (${g.aguardandoPecaCount} aguardando)`;
+                    color = 'var(--red)';
+                } else {
+                    statusIcon = '🔴';
+                    situacao = `${g.pendentes} pendentes`;
+                    color = 'var(--red)';
+                }
+            } else if (g.pendentes === 0 && g.osSet.has('DESMEMBRADA')) {
+                statusIcon = '🔵';
+                situacao = 'Desmembrada';
+                color = '#3b82f6';
             }
 
             const tr = document.createElement('tr');
@@ -4477,8 +4497,9 @@ window.openSmartModal = (selb, modeloNome) => {
     pBody.innerHTML = '';
     pendentes.forEach(i => {
         const tr = document.createElement('tr');
+        const isAguardando = i.os_manager === 'AGUARDANDO_PECA';
         tr.innerHTML = `
-            <td style="font-weight:bold;">${i.code}</td>
+            <td style="font-weight:bold;">${i.code} ${isAguardando ? '<span style="margin-left: 6px; font-size: 10px; background: #9333ea; color: white; padding: 2px 6px; border-radius: 4px;">Aguardando Peça</span>' : ''}</td>
             <td>${i.descricao || ''}</td>
             <td>${i.qty}</td>
             <td>${formatDateBR(i.ts)}</td>
@@ -4568,6 +4589,100 @@ window.vincularPendenciasSmart = async () => {
     } catch (e) {
         console.error(e);
         alert('Erro ao vincular OS: ' + (e.message || JSON.stringify(e)));
+    }
+};
+
+window.marcarComoDesmembradaSmart = async () => {
+    const selb = document.getElementById('sm-modal-os-input').dataset.selb;
+    
+    if (!confirm(`Tem certeza que deseja marcar as peças pendentes do SELB ${selb} como Desmembradas?\nEssa ação concluirá a integração destas peças sem vinculá-las a uma OS específica.`)) {
+        return;
+    }
+
+    const items = smartManagerData.filter(i => (i.selb || '').toUpperCase().trim() === selb);
+    const pendentes = items.filter(i => !i.manager_sync);
+
+    if (pendentes.length === 0) {
+        alert('Não existem pendências para marcar como desmembrada neste SELB.');
+        return;
+    }
+
+    const idsToUpdate = pendentes.map(p => p.id);
+    const table = window.currentSector === 'REMANU' ? 'historico_remanu' : getHistoricoTable();
+
+    try {
+        const tsNow = new Date().toISOString();
+        const { error } = await supabase.from(table).update({
+            os_manager: 'DESMEMBRADA',
+            manager_sync: true,
+            manager_sync_at: tsNow,
+            manager_sync_user: currentUser.email
+        }).in('id', idsToUpdate);
+
+        if (error) throw error;
+
+        alert('Pendências marcadas como Desmembradas com sucesso!');
+        document.getElementById('modal-smartmanager').style.display = 'none';
+        
+        // Refresh local array
+        pendentes.forEach(p => {
+            p.manager_sync = true;
+            p.os_manager = 'DESMEMBRADA';
+            p.manager_sync_at = tsNow;
+            p.manager_sync_user = currentUser.email;
+        });
+
+        window.renderSmartManager();
+        if (typeof window.renderHistorico === 'function') window.renderHistorico();
+    } catch (e) {
+        console.error(e);
+        alert('Erro ao desmembrar: ' + (e.message || JSON.stringify(e)));
+    }
+};
+
+window.marcarAguardandoPecaSmart = async () => {
+    const selb = document.getElementById('sm-modal-os-input').dataset.selb;
+    
+    if (!confirm(`Tem certeza que deseja marcar as peças pendentes do SELB ${selb} como Aguardando Peça?\nIsso manterá as peças como pendentes, mas indicará visualmente que estão aguardando compra/chegada.`)) {
+        return;
+    }
+
+    const items = smartManagerData.filter(i => (i.selb || '').toUpperCase().trim() === selb);
+    const pendentes = items.filter(i => !i.manager_sync);
+
+    if (pendentes.length === 0) {
+        alert('Não existem pendências para marcar como aguardando peça neste SELB.');
+        return;
+    }
+
+    const idsToUpdate = pendentes.map(p => p.id);
+    const table = window.currentSector === 'REMANU' ? 'historico_remanu' : getHistoricoTable();
+
+    try {
+        const tsNow = new Date().toISOString();
+        const { error } = await supabase.from(table).update({
+            os_manager: 'AGUARDANDO_PECA',
+            manager_sync_at: tsNow,
+            manager_sync_user: currentUser.email
+        }).in('id', idsToUpdate);
+
+        if (error) throw error;
+
+        alert('Pendências marcadas como Aguardando Peça!');
+        document.getElementById('modal-smartmanager').style.display = 'none';
+        
+        // Refresh local array
+        pendentes.forEach(p => {
+            p.os_manager = 'AGUARDANDO_PECA';
+            p.manager_sync_at = tsNow;
+            p.manager_sync_user = currentUser.email;
+        });
+
+        window.renderSmartManager();
+        if (typeof window.renderHistorico === 'function') window.renderHistorico();
+    } catch (e) {
+        console.error(e);
+        alert('Erro ao marcar como aguardando peça: ' + (e.message || JSON.stringify(e)));
     }
 };
 

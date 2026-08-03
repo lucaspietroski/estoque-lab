@@ -1205,8 +1205,10 @@
         </div>
       </div>
 
-      <div class="modal-btns" style="margin-top: 0;">
+      <div class="modal-btns" style="margin-top: 0; justify-content: flex-end; gap: 10px;">
         <button class="btn-cancel" onclick="document.getElementById('modal-smartmanager').style.display='none'">Cancelar</button>
+        <button class="btn-confirm" style="background: #9333ea; border-color: #9333ea;" onclick="window.marcarAguardandoPecaSmart()">Aguardando Peça</button>
+        <button class="btn-confirm" style="background: #3b82f6; border-color: #3b82f6;" onclick="window.marcarComoDesmembradaSmart()">Desmembrada</button>
         <button class="btn-confirm" onclick="window.vincularPendenciasSmart()">Vincular Pendências</button>
       </div>
 
