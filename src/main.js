@@ -4515,7 +4515,7 @@ window.openSmartModal = (selb, modeloNome) => {
     document.getElementById('sm-modal-os-used').innerText = osArray.length > 0 ? osArray.join(', ') : 'Nenhuma';
 
     if (lastSyncAt) {
-        document.getElementById('sm-modal-last-sync').innerHTML = `Última sincronização<br><strong style="color:white">${formatDateBR(lastSyncAt)} - ${lastSyncUser || 'Auto'}</strong>`;
+        document.getElementById('sm-modal-last-sync').innerHTML = `Última sincronização<br><strong style="color:var(--text-muted)">${formatDateBR(lastSyncAt)} - ${lastSyncUser || 'Auto'}</strong>`;
     } else {
         document.getElementById('sm-modal-last-sync').innerHTML = `Última sincronização<br>-`;
     }
