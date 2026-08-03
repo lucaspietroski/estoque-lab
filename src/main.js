@@ -4376,9 +4376,19 @@ window.renderSmartManager = async () => {
             let situacao = 'Concluído';
             let color = 'var(--text-light)';
             if (g.pendentes > 0 && g.sincronizadas > 0) {
-                statusIcon = '🟡';
-                situacao = `${g.sincronizadas}/${g.sincronizadas + g.pendentes} sincronizadas`;
-                color = 'var(--orange)';
+                if (g.aguardandoPecaCount === g.pendentes) {
+                    statusIcon = '🟣';
+                    situacao = `${g.sincronizadas}/${g.sincronizadas + g.pendentes} (Aguardando Peça)`;
+                    color = '#9333ea';
+                } else if (g.aguardandoPecaCount > 0) {
+                    statusIcon = '🟡';
+                    situacao = `${g.sincronizadas}/${g.sincronizadas + g.pendentes} sinc. (${g.aguardandoPecaCount} aguardando)`;
+                    color = 'var(--orange)';
+                } else {
+                    statusIcon = '🟡';
+                    situacao = `${g.sincronizadas}/${g.sincronizadas + g.pendentes} sincronizadas`;
+                    color = 'var(--orange)';
+                }
             } else if (g.pendentes > 0 && g.sincronizadas === 0) {
                 if (g.aguardandoPecaCount === g.pendentes) {
                     statusIcon = '🟣';
