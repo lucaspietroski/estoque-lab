@@ -4275,12 +4275,13 @@ window.renderSmartManager = async () => {
         let totalPendentes = 0;
         let totalIntegradas = 0;
         let selbsPendentesCount = 0;
+        let selbsAguardandoCount = 0;
+        let selbsDesmembradosCount = 0;
         let integracoesHoje = 0;
+        const hojeStr = new Date().toISOString().substring(0, 10);
         let pendenciaMaisAntigaTs = null;
 
         const selbGroups = {};
-
-        const hojeStr = new Date().toISOString().split('T')[0];
 
         const activeSelbs = new Set();
         smartManagerData.forEach(item => {
@@ -4304,6 +4305,7 @@ window.renderSmartManager = async () => {
                     items: [],
                     pendentes: 0,
                     sincronizadas: 0,
+                    aguardandoPecaCount: 0,
                     osSet: new Set(),
                     lastSyncAt: null,
                     lastSyncUser: null,
@@ -4340,7 +4342,6 @@ window.renderSmartManager = async () => {
                 selbGroups[selb].pendentes += q;
                 
                 if (item.os_manager === 'AGUARDANDO_PECA') {
-                    if (!selbGroups[selb].aguardandoPecaCount) selbGroups[selb].aguardandoPecaCount = 0;
                     selbGroups[selb].aguardandoPecaCount += q;
                 }
                 
@@ -4371,6 +4372,8 @@ window.renderSmartManager = async () => {
 
         selbsList.forEach(g => {
             if (g.pendentes > 0) selbsPendentesCount++;
+            if (g.pendentes > 0 && g.aguardandoPecaCount === g.pendentes) selbsAguardandoCount++;
+            if (g.pendentes === 0 && g.osSet.has('DESMEMBRADA')) selbsDesmembradosCount++;
 
             let statusIcon = '🟢';
             let situacao = 'Concluído';
@@ -4427,6 +4430,8 @@ window.renderSmartManager = async () => {
         document.getElementById('sm-pecas-pendentes').innerText = totalPendentes;
         document.getElementById('sm-pecas-integradas').innerText = totalIntegradas;
         document.getElementById('sm-selbs-pendentes').innerText = selbsPendentesCount;
+        document.getElementById('sm-selbs-aguardando').innerText = selbsAguardandoCount;
+        document.getElementById('sm-selbs-desmembrados').innerText = selbsDesmembradosCount;
         document.getElementById('sm-integracoes-hoje').innerText = integracoesHoje;
         
         let diasMaisAntiga = 0;
