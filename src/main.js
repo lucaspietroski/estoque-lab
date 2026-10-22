@@ -1377,15 +1377,16 @@ window.processarXML = async (file) => {
                 if (globalPedido) break;
             }
 
-            let colProduto = -1, colQtd = -1, colVlrUnit = -1, colPedido = -1;
+            let colProduto = -1, colQtd = -1, colVlrUnit = -1, colPedido = -1, colDescricao = -1;
             let dataStartIdx = -1;
 
             for (let ri = 0; ri < Math.min(rowsData.length, 100); ri++) {
                 const cells = rowsData[ri];
                 const texts = cells.map(c => c.toUpperCase());
-                if (texts.some(t => t.includes('PRODUTO') || t === 'COD. PRODUTO')) {
+                if (texts.some(t => t.includes('PRODUTO') || t === 'COD. PRODUTO' || t.includes('CÓDIGO'))) {
                     texts.forEach((t, i) => {
-                        if (t.includes('PRODUTO') && colProduto < 0) colProduto = i;
+                        if ((t.includes('PRODUTO') || t === 'COD. PRODUTO' || t.includes('CÓDIGO')) && colProduto < 0 && !t.includes('DESC')) colProduto = i;
+                        if ((t.includes('DESCRIÇÃO') || t.includes('DESCRICAO')) && colDescricao < 0) colDescricao = i;
                         if ((t.includes('QUANTIDADE') || t === 'QTD') && colQtd < 0) colQtd = i;
                         if (t.includes('UNIT') && colVlrUnit < 0) colVlrUnit = i;
                         if ((t.includes('PEDIDO') || t.includes('PED.COMPRA') || t.includes('PED. COMPRA') || t === 'PED' || t.includes('DOCTO')) && colPedido < 0) colPedido = i;
@@ -1419,9 +1420,11 @@ window.processarXML = async (file) => {
 
                 const rowPedido = colPedido >= 0 ? getCell(colPedido) : '';
                 const orderNum = rowPedido || globalPedido || '';
+                
+                const rawDesc = colDescricao >= 0 ? getCell(colDescricao).trim() : '';
 
                 if (!itemsMap[rawCode]) {
-                    itemsMap[rawCode] = { qty: 0, vlrUnit: vlrUnit, pedido: orderNum };
+                    itemsMap[rawCode] = { qty: 0, vlrUnit: vlrUnit, pedido: orderNum, descFile: rawDesc };
                 }
                 itemsMap[rawCode].qty += qty;
                 if (orderNum && !itemsMap[rawCode].pedido) {
@@ -1449,7 +1452,8 @@ window.processarXML = async (file) => {
             for (const code of keys) {
                 const item = itemsMap[code];
                 const { data: pCheck } = await supabase.from('parts').select('descricao').eq('code', code).maybeSingle();
-                const desc = pCheck?.descricao ? pCheck.descricao : `PEÇA IMPORTADA VIA ARQUIVO (${code})`;
+                const fallbackDesc = item.descFile ? item.descFile : `PEÇA IMPORTADA VIA ARQUIVO (${code})`;
+                const desc = pCheck?.descricao ? pCheck.descricao : fallbackDesc;
                 
                 item.descInfo = desc;
                 item.isNew = !pCheck;
@@ -2157,11 +2161,16 @@ window.renderModeloCusto = async () => {
         const query = document.getElementById('mod-busca')?.value.trim().toUpperCase();
 
         // Carregar Dados
-        const [hRes, rRes, eRes] = await Promise.all([
+        const promises = [
             supabase.from(getHistoricoTable()).select('*').in('tipo', ['saída', 'saida', 'retorno_garantia', 'sm_obs']),
             supabase.from('revisados').select('*'),
             supabase.from('equipamentos').select('selb, modelo')
-        ]);
+        ];
+        if (window.currentSector === 'REMANU') {
+            promises.push(supabase.from('modelos_remanu').select('*'));
+            promises.push(supabase.from('custos').select('code, last_cost'));
+        }
+        const [hRes, rRes, eRes, mRes, cRes] = await Promise.all(promises);
 
         const saídas = hRes.data || [];
         // A Remanufatura não utiliza a tabela de revisados do Laboratório
@@ -2173,6 +2182,28 @@ window.renderModeloCusto = async () => {
             const cleanSelb = e.selb.toUpperCase().trim();
             eqMap[cleanSelb] = e.modelo;
         });
+
+        // Monta mapa de custos e vínculos se for Remanufatura
+        const custosMap = {};
+        if (cRes?.data) {
+            cRes.data.forEach(c => {
+                if (c.code) custosMap[c.code] = c.last_cost != null ? Number(c.last_cost) : null;
+            });
+        }
+
+        const vinculosRemanuMap = {}; // modelo -> { codigo_nova, unitCost, codigo_rs }
+        if (mRes?.data) {
+            mRes.data.forEach(v => {
+                if (v.modelo) {
+                    const unitCost = v.codigo_nova && custosMap[v.codigo_nova] !== undefined ? custosMap[v.codigo_nova] : null;
+                    vinculosRemanuMap[v.modelo.trim()] = {
+                        codigo_nova: v.codigo_nova,
+                        codigo_rs: v.codigo_rs,
+                        unitCost: unitCost
+                    };
+                }
+            });
+        }
 
         const filtrarData = (ts) => {
             if (!ts) return false; // Se não tem data, não entra no relatório
@@ -2210,7 +2241,6 @@ window.renderModeloCusto = async () => {
             if (s.code === 'SEMPEÇA' || s.code === 'SEMPECA') {
                 if (window.currentSector === 'REMANU' && s.revision_id) {
                     byModel[modelo].semPeca.add(s.revision_id);
-                    // Acumula a referência de valor da máquina nova se houver
                     if (s.vlr_nova_ref && !byModel[modelo].vlrNovaRevs.has(s.revision_id)) {
                         byModel[modelo].vlrNovaRef += s.vlr_nova_ref;
                         byModel[modelo].vlrNovaRevs.add(s.revision_id);
@@ -2222,7 +2252,6 @@ window.renderModeloCusto = async () => {
             }
             if (window.currentSector === 'REMANU' && s.revision_id) {
                 byModel[modelo].comPeca.add(s.revision_id);
-                // Acumula vlr_nova_ref uma vez por revision_id (não por peça)
                 if (s.vlr_nova_ref && !byModel[modelo].vlrNovaRevs.has(s.revision_id)) {
                     byModel[modelo].vlrNovaRef += s.vlr_nova_ref;
                     byModel[modelo].vlrNovaRevs.add(s.revision_id);
@@ -2263,8 +2292,29 @@ window.renderModeloCusto = async () => {
         const rows = Object.entries(byModel).map(([modelo, d]) => {
             d.pecasUsadas = d.pecasUsadas || {};
             const totalAtend = d.comPeca.size + d.semPeca.size;
-            const economiaReal = (d.vlrNovaRef || 0) - d.custo;
-            const economiaPct = (d.vlrNovaRef || 0) > 0 ? (economiaReal / d.vlrNovaRef) * 100 : 0;
+
+            let vlrNovaRef = 0;
+            let unitNova = 0;
+            let codigoNova = '';
+
+            if (window.currentSector === 'REMANU') {
+                const vinc = vinculosRemanuMap[modelo.trim()];
+                if (vinc && vinc.unitCost !== null && vinc.unitCost !== undefined) {
+                    unitNova = vinc.unitCost;
+                    codigoNova = vinc.codigo_nova;
+                    vlrNovaRef = totalAtend * unitNova;
+                } else {
+                    // Fallback para valor histórico gravado no banco caso não haja vínculo cadastrado
+                    vlrNovaRef = d.vlrNovaRef || 0;
+                    unitNova = totalAtend > 0 ? (vlrNovaRef / totalAtend) : 0;
+                    codigoNova = vinc?.codigo_nova || '';
+                }
+            } else {
+                vlrNovaRef = d.vlrNovaRef || 0;
+            }
+
+            const economiaReal = vlrNovaRef - d.custo;
+            const economiaPct = vlrNovaRef > 0 ? (economiaReal / vlrNovaRef) * 100 : 0;
             return {
                 modelo,
                 atendimentos: totalAtend,
@@ -2273,7 +2323,9 @@ window.renderModeloCusto = async () => {
                 pecas: d.pecas,
                 custo: d.custo,
                 custoMedio: totalAtend > 0 ? d.custo / totalAtend : 0,
-                vlrNovaRef: d.vlrNovaRef || 0,
+                vlrNovaRef: vlrNovaRef,
+                unitNova: unitNova,
+                codigoNova: codigoNova,
                 economiaReal: economiaReal,
                 economiaPct: economiaPct
             };
@@ -2318,12 +2370,18 @@ window.renderModeloCusto = async () => {
                 <th style="text-align: right; padding: 12px;">Preço Nova (Ref)</th>
                 <th style="text-align: right; padding: 12px;">Economia Gerada</th>
             `;
-            document.getElementById('mod-tbody').innerHTML = rows.slice(0, 50).map(r => `
-                <tr style="cursor:default">
+            window.lastRemanuRows = rows.slice(0, 50);
+            document.getElementById('mod-tbody').innerHTML = rows.slice(0, 50).map((r, idx) => `
+                <tr style="cursor: pointer;" onclick="window.openDetalheModelo(window.lastRemanuRows[${idx}])" title="Clique para ver detalhes do modelo">
                     <td style="font-size: 13px; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><strong>${r.modelo}</strong></td>
                     <td class="text-center" style="font-family: var(--mono);">${r.atendimentos}</td>
                     <td style="text-align:right; font-family: var(--mono);">${fmt(r.custo)}</td>
-                    <td style="text-align:right; font-family: var(--mono);">${fmt(r.vlrNovaRef)}</td>
+                    <td style="text-align:right; font-family: var(--mono);">
+                        <div>${fmt(r.vlrNovaRef)}</div>
+                        <div style="font-size: 10px; color: var(--text-muted); font-weight: normal;">
+                            ${r.codigoNova ? `${r.codigoNova} (${fmt(r.unitNova)}/un)` : '<span style="color:var(--yellow);">Sem vínculo</span>'}
+                        </div>
+                    </td>
                     <td style="text-align:right; font-family: var(--mono); font-weight: bold; color: ${r.economiaReal > 0 ? 'var(--green)' : (r.economiaReal < 0 ? 'var(--red)' : 'var(--text)')}">
                         ${fmt(r.economiaReal)} (${r.economiaPct.toFixed(1)}%)
                     </td>
@@ -2530,12 +2588,23 @@ window.openDetalheModelo = (typeOrModel) => {
     // Atualiza Labels baseadas no setor (Remanufatura trata "Peças" e não "Máquinas")
     const lblTotal = document.getElementById('detalhe-total-maquinas').previousElementSibling;
     const lblMedia = document.getElementById('detalhe-media-pecas').previousElementSibling;
+    const remanuBox = document.getElementById('detalhe-remanu-extra-box');
     if (window.currentSector === 'REMANU') {
         lblTotal.textContent = 'Total de Peças/Kits Revistos';
         lblMedia.textContent = 'Média de Componentes Utilizados';
+        if (remanuBox) {
+            remanuBox.style.display = 'block';
+            document.getElementById('detalhe-remanu-peca-ref').textContent = model.codigoNova 
+                ? `${model.codigoNova} (${fmt(model.unitNova)}/un) → Total: ${fmt(model.vlrNovaRef)}`
+                : (model.vlrNovaRef > 0 ? `Ref. Histórica: ${fmt(model.vlrNovaRef)}` : 'Sem vínculo cadastrado');
+            const ecoEl = document.getElementById('detalhe-remanu-economia');
+            ecoEl.textContent = `${fmt(model.economiaReal)} (${(model.economiaPct || 0).toFixed(1)}%)`;
+            ecoEl.style.color = (model.economiaReal || 0) >= 0 ? '#059669' : '#dc2626';
+        }
     } else {
         lblTotal.textContent = 'Total de Máquinas';
         lblMedia.textContent = 'Média de Peças por Máquina';
+        if (remanuBox) remanuBox.style.display = 'none';
     }
     
     const totalEl = document.getElementById('detalhe-custo-total');
@@ -2643,17 +2712,72 @@ document.getElementById('modal-detalhe-defeito')?.addEventListener('click', (e) 
 init();
 
 // --- VÍNCULOS REMANUFATURA ---
+window.checkVinculoPecaInfo = async (code, infoElementId) => {
+    const el = document.getElementById(infoElementId);
+    if (!el) return null;
+    const clean = (code || '').trim().toUpperCase();
+    if (!clean) {
+        el.innerHTML = '';
+        return null;
+    }
+    el.innerHTML = '<span style="color:var(--text-muted); font-size: 11px;">⌛ Buscando peça...</span>';
+    try {
+        const [pRes, cRes] = await Promise.all([
+            supabase.from('parts').select('descricao').eq('code', clean).maybeSingle(),
+            supabase.from('custos').select('last_cost').eq('code', clean).maybeSingle()
+        ]);
+        const desc = pRes.data?.descricao || 'Sem descrição cadastrada';
+        const cost = cRes.data?.last_cost != null ? Number(cRes.data.last_cost) : null;
+        if (cost != null) {
+            el.innerHTML = `<span style="color: #166534; background: #dcfce7; padding: 2px 6px; border-radius: 4px; font-weight: 600; display: inline-block;">✅ ${desc} | R$ ${cost.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>`;
+        } else {
+            el.innerHTML = `<span style="color: #991b1b; background: #fee2e2; padding: 2px 6px; border-radius: 4px; font-weight: 500; display: inline-block;">⚠️ ${desc} | Sem custo cadastrado (R$ 0,00)</span>`;
+        }
+        return { desc, cost };
+    } catch (e) {
+        el.innerHTML = `<span style="color: #991b1b;">Erro ao consultar: ${e.message}</span>`;
+        return null;
+    }
+};
+
 window.openVinculosRemanu = async () => {
     document.getElementById('modal-vinculos-remanu').classList.add('open');
     const dl = document.getElementById('list-modelos-remanu');
     const input = document.getElementById('vinc-modelo');
     
     input.value = ''; // Limpa pesquisa anterior
+    document.getElementById('vinc-nova').value = '';
+    document.getElementById('vinc-rs').value = '';
+    const infoNova = document.getElementById('vinc-nova-info');
+    if (infoNova) infoNova.innerHTML = '';
+    const infoRS = document.getElementById('vinc-rs-info');
+    if (infoRS) infoRS.innerHTML = '';
+
     dl.innerHTML = '<option value="Aguarde, carregando modelos...">';
     const { data: equip } = await supabase.from('equipamentos').select('modelo').order('modelo');
     if (equip) {
         const unique = [...new Set(equip.map(e => e.modelo))];
         dl.innerHTML = unique.map(m => `<option value="${m}">`).join('');
+    }
+
+    // Configura listeners para preview de preço em tempo real
+    const inpNova = document.getElementById('vinc-nova');
+    const inpRS = document.getElementById('vinc-rs');
+    if (inpNova && !inpNova.dataset.listenerAttached) {
+        inpNova.dataset.listenerAttached = 'true';
+        let timerNova;
+        inpNova.addEventListener('input', (e) => {
+            clearTimeout(timerNova);
+            timerNova = setTimeout(() => window.checkVinculoPecaInfo(e.target.value, 'vinc-nova-info'), 300);
+        });
+    }
+    if (inpRS && !inpRS.dataset.listenerAttached) {
+        inpRS.dataset.listenerAttached = 'true';
+        let timerRS;
+        inpRS.addEventListener('input', (e) => {
+            clearTimeout(timerRS);
+            timerRS = setTimeout(() => window.checkVinculoPecaInfo(e.target.value, 'vinc-rs-info'), 300);
+        });
     }
     
     await carregarVinculosRemanu();
@@ -2661,7 +2785,7 @@ window.openVinculosRemanu = async () => {
 
 window.salvarVinculoRemanu = async () => {
     const btn = document.getElementById('btn-salvar-vinculo');
-    const modelo = document.getElementById('vinc-modelo').value;
+    const modelo = document.getElementById('vinc-modelo').value.trim();
     const codNova = document.getElementById('vinc-nova').value.trim().toUpperCase();
     const codRS = document.getElementById('vinc-rs').value.trim().toUpperCase();
 
@@ -2671,52 +2795,122 @@ window.salvarVinculoRemanu = async () => {
     }
 
     btn.disabled = true;
-    btn.textContent = 'Salvando...';
+    btn.textContent = 'Salvando e recalculando...';
 
-    const { error } = await supabase.from('modelos_remanu').upsert({
-        modelo: modelo,
-        codigo_nova: codNova,
-        codigo_rs: codRS
-    }, { onConflict: 'modelo' });
-    
-    btn.disabled = false;
-    btn.textContent = 'Salvar Vínculo';
+    try {
+        // 1. Busca custo atual da peça nova/referência
+        const { data: custoNova } = await supabase.from('custos').select('last_cost').eq('code', codNova).maybeSingle();
+        const unitCost = custoNova?.last_cost != null ? Number(custoNova.last_cost) : 0;
 
-    if (error) {
-        alert('Erro ao salvar: ' + error.message);
-    } else {
+        // 2. Salva o vínculo no banco
+        const { error } = await supabase.from('modelos_remanu').upsert({
+            modelo: modelo,
+            codigo_nova: codNova,
+            codigo_rs: codRS
+        }, { onConflict: 'modelo' });
+
+        if (error) throw error;
+
+        // 3. Atualiza o vlr_nova_ref no histórico de remanufatura para todas as revisões desse modelo
+        const { data: equips } = await supabase.from('equipamentos').select('selb').eq('modelo', modelo);
+        const selbs = (equips || []).map(e => e.selb).filter(Boolean);
+        
+        if (selbs.length > 0 && unitCost > 0) {
+            await supabase.from('historico_remanu')
+                .update({ vlr_nova_ref: unitCost })
+                .in('selb', selbs);
+        }
+
+        // 4. Limpa campos e recarrega
         document.getElementById('vinc-nova').value = '';
         document.getElementById('vinc-rs').value = '';
+        const infoNova = document.getElementById('vinc-nova-info');
+        if (infoNova) infoNova.innerHTML = '';
+        const infoRS = document.getElementById('vinc-rs-info');
+        if (infoRS) infoRS.innerHTML = '';
+
         await carregarVinculosRemanu();
+
+        // 5. Recalcula imediatamente a tela de Custo/Modelo
+        if (typeof window.renderModeloCusto === 'function') {
+            await window.renderModeloCusto();
+        }
+
+        alert(`✅ Vínculo salvo e custos recalculados com sucesso!\n\nModelo: ${modelo}\nPeça Ref. (Nova/Comparação): ${codNova} (R$ ${unitCost.toFixed(2)})\nPeça RS: ${codRS}\n\nO dashboard e relatórios foram atualizados automaticamente!`);
+    } catch (err) {
+        alert('Erro ao salvar: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Salvar Vínculo e Recalcular Custos';
     }
 };
 
 window.carregarVinculosRemanu = async () => {
     const tbody = document.getElementById('tbody-vinculos-remanu');
-    tbody.innerHTML = '<tr><td colspan="4" class="text-center">Aguarde...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4" class="text-center">Aguarde, carregando vínculos...</td></tr>';
     
-    const { data, error } = await supabase.from('modelos_remanu').select('*').order('modelo');
-    if (error || !data || data.length === 0) {
+    const [vRes, cRes] = await Promise.all([
+        supabase.from('modelos_remanu').select('*').order('modelo'),
+        supabase.from('custos').select('code, last_cost')
+    ]);
+
+    const data = vRes.data;
+    if (vRes.error || !data || data.length === 0) {
         tbody.innerHTML = '<tr><td colspan="4" class="text-center">Nenhum vínculo cadastrado.</td></tr>';
         return;
     }
-    
-    tbody.innerHTML = data.map(v => `
-        <tr>
-            <td style="font-size: 11px;">${v.modelo}</td>
-            <td class="text-center" style="font-weight: 500">${v.codigo_nova}</td>
-            <td class="text-center" style="color: var(--primary); font-weight: 500">${v.codigo_rs}</td>
-            <td class="text-center">
-                <button class="btn-cancel" onclick="deletarVinculoRemanu('${v.id}')" style="padding: 3px 8px; font-size: 11px;">Excluir</button>
-            </td>
-        </tr>
-    `).join('');
+
+    const custosMap = {};
+    (cRes.data || []).forEach(c => custosMap[c.code] = c.last_cost != null ? Number(c.last_cost) : null);
+    const fmtMoeda = v => v != null ? 'R$ ' + Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : '<span style="color:var(--red);">Sem preço</span>';
+
+    tbody.innerHTML = data.map(v => {
+        const costNova = custosMap[v.codigo_nova];
+        const costRS = custosMap[v.codigo_rs];
+        const payloadStr = encodeURIComponent(JSON.stringify(v));
+        return `
+            <tr>
+                <td style="font-size: 11px;">
+                    <strong>${v.modelo}</strong>
+                </td>
+                <td class="text-center">
+                    <span style="font-weight: 600;">${v.codigo_nova}</span>
+                    <div style="font-size: 10px; color: var(--green); font-weight: bold;">${fmtMoeda(costNova)}</div>
+                </td>
+                <td class="text-center">
+                    <span style="color: var(--primary); font-weight: 600;">${v.codigo_rs}</span>
+                    <div style="font-size: 10px; color: var(--text-muted); font-weight: 500;">${fmtMoeda(costRS)}</div>
+                </td>
+                <td class="text-center" style="white-space: nowrap;">
+                    <button class="btn-confirm" onclick="window.editarVinculoRemanu('${payloadStr}')" style="padding: 3px 8px; font-size: 11px; margin-right: 4px; background: var(--blue);">Editar</button>
+                    <button class="btn-cancel" onclick="window.deletarVinculoRemanu('${v.id}')" style="padding: 3px 8px; font-size: 11px;">Excluir</button>
+                </td>
+            </tr>
+        `;
+    }).join('');
+};
+
+window.editarVinculoRemanu = (jsonStr) => {
+    try {
+        const v = JSON.parse(decodeURIComponent(jsonStr));
+        document.getElementById('vinc-modelo').value = v.modelo || '';
+        document.getElementById('vinc-nova').value = v.codigo_nova || '';
+        document.getElementById('vinc-rs').value = v.codigo_rs || '';
+        window.checkVinculoPecaInfo(v.codigo_nova, 'vinc-nova-info');
+        window.checkVinculoPecaInfo(v.codigo_rs, 'vinc-rs-info');
+        document.getElementById('vinc-nova').focus();
+    } catch (e) {
+        console.error('Erro ao carregar dados para edição:', e);
+    }
 };
 
 window.deletarVinculoRemanu = async (id) => {
     if (!confirm('Deseja excluir este vínculo?')) return;
     await supabase.from('modelos_remanu').delete().eq('id', id);
     await carregarVinculosRemanu();
+    if (typeof window.renderModeloCusto === 'function') {
+        await window.renderModeloCusto();
+    }
 };
 
 // --- AUDITORIA DE INVENTÁRIO CÍCLICO E RASTREABILIDADE (ESTOQUE CHECK) ---
@@ -3481,32 +3675,48 @@ window.saveCadastroPeca = async () => {
 
         if (checkErr) throw checkErr;
         if (checkPart) {
-            status.innerHTML = '<span style="color:var(--red)">❌ Código de peça já cadastrado!</span>';
-            btnConfirm.disabled = false;
-            return;
+            if (!confirm('Este código já está cadastrado. Deseja ATUALIZAR a descrição, marca e custo comercial desta peça?')) {
+                btnConfirm.disabled = false;
+                return;
+            }
+            // 2. Atualizar na tabela parts
+            const { error: partErr } = await supabase.from('parts').update({
+                descricao: desc,
+                marca: marca
+            }).eq('code', code);
+            if (partErr) throw partErr;
+
+            // 3. Cadastrar na tabela custos
+            const { error: costErr } = await supabase.from('custos').upsert({
+                code: code,
+                last_cost: custo
+            });
+            if (costErr) throw costErr;
+
+            status.innerHTML = '<span style="color:var(--green)">✅ Cadastro da peça atualizado com sucesso!</span>';
+        } else {
+            // 2. Cadastrar na tabela parts
+            const { error: partErr } = await supabase.from('parts').insert({
+                code: code,
+                descricao: desc,
+                marca: marca
+            });
+            if (partErr) throw partErr;
+
+            // 3. Cadastrar na tabela custos
+            const { error: costErr } = await supabase.from('custos').upsert({
+                code: code,
+                last_cost: custo
+            });
+            if (costErr) throw costErr;
+
+            // 4. Inicializar saldos com 0 nas tabelas de estoque (LAB, REMANU e 3D)
+            await supabase.from('estoque').upsert({ code: code, qty: 0 });
+            await supabase.from('estoque_remanu').upsert({ code: code, qty: 0 });
+            await supabase.from('estoque_3d').upsert({ code: code, qty: 0 });
+
+            status.innerHTML = '<span style="color:var(--green)">✅ Peça cadastrada com sucesso em todos os setores!</span>';
         }
-
-        // 2. Cadastrar na tabela parts
-        const { error: partErr } = await supabase.from('parts').insert({
-            code: code,
-            descricao: desc,
-            marca: marca
-        });
-        if (partErr) throw partErr;
-
-        // 3. Cadastrar na tabela custos (inserindo o custo como VENDA / last_cost)
-        const { error: costErr } = await supabase.from('custos').upsert({
-            code: code,
-            last_cost: custo
-        });
-        if (costErr) throw costErr;
-
-        // 4. Inicializar saldos com 0 nas tabelas de estoque (LAB, REMANU e 3D)
-        await supabase.from('estoque').upsert({ code: code, qty: 0 });
-        await supabase.from('estoque_remanu').upsert({ code: code, qty: 0 });
-        await supabase.from('estoque_3d').upsert({ code: code, qty: 0 });
-
-        status.innerHTML = '<span style="color:var(--green)">✅ Peça cadastrada com sucesso em todos os setores!</span>';
         
         setTimeout(() => {
             window.closeCadastroPecaModal();

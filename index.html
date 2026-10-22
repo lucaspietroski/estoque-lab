@@ -1651,6 +1651,19 @@
         <div style="font-size: 20px; font-weight: 800; font-family: var(--mono);" id="detalhe-custo-total">R$ 0,00</div>
       </div>
       
+      <!-- Linha 5 (Exclusiva Remanufatura: Referência e Economia) -->
+      <div id="detalhe-remanu-extra-box" style="display:none; grid-column: span 2; background: #ecfdf5; padding: 16px 20px; border-top: 1px solid #a7f3d0;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+          <div>
+            <div style="font-size: 10px; font-weight: 700; color: #047857; text-transform: uppercase; letter-spacing: 0.5px;">Peça Ref. (Nova / Comparação)</div>
+            <div style="font-size: 14px; font-weight: 700; color: #065f46; margin-top: 2px;" id="detalhe-remanu-peca-ref">—</div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 10px; font-weight: 700; color: #047857; text-transform: uppercase; letter-spacing: 0.5px;">Economia Gerada Total</div>
+            <div style="font-size: 18px; font-weight: 800; color: #059669; font-family: var(--mono);" id="detalhe-remanu-economia">R$ 0,00</div>
+          </div>
+        </div>
+      </div>
     </div>
     
     <div style="padding: 12px; text-align: center; background: #f8fafc; font-size: 11px; color: var(--text-muted);">
@@ -1817,40 +1830,42 @@
 
 <!-- MODAL VÍNCULOS REMANUFATURA (NOVO VS RS) -->
 <div class="modal-overlay" id="modal-vinculos-remanu">
-  <div class="modal-box" style="max-width: 500px;">
-    <h3>🔗 Vincular Fusões (Nova vs RS)</h3>
+  <div class="modal-box" style="max-width: 650px;">
+    <h3>🔗 Vincular Fusões (Nova / Comparação vs RS)</h3>
     <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;">
-      Use esta tela para cadastrar os códigos de fusões correspondentes a cada modelo de equipamento.
+      Cadastre os códigos de fusões correspondentes a cada modelo. O sistema recalcula automaticamente a economia e margem baseado no código de referência cadastrado (Original, Compatível ou Recon terceirizada).
     </p>
 
     <div class="modal-label">MODELO DO EQUIPAMENTO</div>
-    <input type="text" id="vinc-modelo" list="list-modelos-remanu" class="modal-input" placeholder="Ex: RICOH IM 430F">
+    <input type="text" id="vinc-modelo" list="list-modelos-remanu" class="modal-input" placeholder="Ex: LINHA MULTIFUNCIONAL 430F / P502">
     <datalist id="list-modelos-remanu"></datalist>
 
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 12px;">
       <div>
-        <div class="modal-label">CÓDIGO PEÇA NOVA</div>
-        <input type="text" id="vinc-nova" class="modal-input" placeholder="Ex: D0A44164" style="text-transform: uppercase;">
+        <div class="modal-label">CÓDIGO REF. (NOVA / COMPATÍVEL / RECON)</div>
+        <input type="text" id="vinc-nova" class="modal-input" placeholder="Ex: D0A44017R" style="text-transform: uppercase;">
+        <div id="vinc-nova-info" style="font-size: 11px; margin-top: 4px; min-height: 18px;"></div>
       </div>
       <div>
-        <div class="modal-label">CÓDIGO PEÇA RS</div>
-        <input type="text" id="vinc-rs" class="modal-input" placeholder="Ex: D0A44164RS" style="text-transform: uppercase;">
+        <div class="modal-label">CÓDIGO PEÇA RS (LABORATÓRIO)</div>
+        <input type="text" id="vinc-rs" class="modal-input" placeholder="Ex: D0A44017RS" style="text-transform: uppercase;">
+        <div id="vinc-rs-info" style="font-size: 11px; margin-top: 4px; min-height: 18px;"></div>
       </div>
     </div>
 
     <div class="modal-btns" style="margin-top: 10px;">
-      <button class="btn-confirm" id="btn-salvar-vinculo" onclick="salvarVinculoRemanu()" style="width: 100%;">Salvar Vínculo</button>
+      <button class="btn-confirm" id="btn-salvar-vinculo" onclick="salvarVinculoRemanu()" style="width: 100%;">Salvar Vínculo e Recalcular Custos</button>
     </div>
 
-    <h3 style="font-size: 14px; margin-top: 30px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">Vínculos Cadastrados</h3>
-    <div style="max-height: 200px; overflow-y: auto; margin-top: 10px; border: 1px solid var(--border); border-radius: 8px;">
+    <h3 style="font-size: 14px; margin-top: 25px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">Vínculos Cadastrados</h3>
+    <div style="max-height: 250px; overflow-y: auto; margin-top: 10px; border: 1px solid var(--border); border-radius: 8px;">
       <table class="dash-table" style="font-size: 12px; margin-top: 0;">
         <thead>
           <tr>
             <th style="text-align: left;">Modelo</th>
-            <th style="text-align: center;">Nova</th>
-            <th style="text-align: center;">RS</th>
-            <th></th>
+            <th style="text-align: center;">Peça Ref. (Nova/Comparação)</th>
+            <th style="text-align: center;">Peça RS (Lab)</th>
+            <th style="text-align: center; width: 120px;">Ações</th>
           </tr>
         </thead>
         <tbody id="tbody-vinculos-remanu">
@@ -2040,7 +2055,7 @@
   </div>
 </div>
 
-<script type="module" src="src/main.js?v=1.5"></script>
+<script type="module" src="src/main.js?v=1.6"></script>
 <script type="module">
   import { runSecurityAudit } from './src/views/audit/index.js';
   window.runSecurityAudit = runSecurityAudit;
