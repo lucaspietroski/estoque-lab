@@ -164,12 +164,14 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); font
 .dash-card { background: var(--white); border: 1px solid var(--border); border-radius: var(--radius); padding: 1rem 1.2rem; cursor: pointer; transition: box-shadow .15s, border-color .15s; box-shadow: var(--shadow-sm); }
 .dash-card:hover { box-shadow: var(--shadow); border-color: var(--border2); }
 .dash-card.active { border: 2px solid var(--blue); background-color: #f0f7ff; box-shadow: var(--shadow); }
+.dash-card.c-high-value { border-top: 3px solid var(--blue); }
 .dash-card.c-total { border-top: 3px solid var(--blue); }
 .dash-card.c-stock { border-top: 3px solid var(--green); }
 .dash-card.c-low   { border-top: 3px solid var(--yellow); }
 .dash-card.c-zero  { border-top: 3px solid var(--red); }
 .dash-card-label { font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted); margin-bottom: 0.45rem; white-space: nowrap; }
 .dash-card-value { font-size: 2.1rem; font-weight: 800; line-height: 1; letter-spacing: -0.03em; margin-bottom: 0.2rem; }
+.c-high-value .dash-card-value { color: var(--blue); }
 .c-total .dash-card-value { color: var(--blue); }
 .c-stock .dash-card-value { color: var(--green); }
 .c-low   .dash-card-value { color: var(--yellow); }
@@ -224,6 +226,7 @@ tr:hover td { background: var(--surface2); }
 .td-code { font-family: var(--mono); font-size: 0.76rem; color: var(--blue); white-space: nowrap; font-weight: 500; }
 .td-desc { font-size: 0.83rem; color: var(--text); }
 .td-stock { font-family: var(--mono); font-size: 0.86rem; font-weight: 700; text-align: center; width: 80px; }
+.td-cost { font-family: var(--mono); font-size: 0.84rem; font-weight: 600; text-align: right; white-space: nowrap; }
 .stock-0   { color: var(--red); }
 .stock-low { color: var(--yellow); }
 .stock-ok  { color: var(--green); }

@@ -25,6 +25,11 @@ window.changeSector = (sector) => {
     const searchInp = document.getElementById('search-main');
     if (searchInp) searchInp.value = '';
     
+    cachedDashItems = null;
+    dashFilterLow = false;
+    dashFilterHigh = false;
+    if (typeof updateDashFilterUI === 'function') updateDashFilterUI();
+
     // Recarrega aba atual
     if (currentTab === 'dashboard') updateDashboard();
     else if (currentTab === 'estoque') { renderChips(); renderEstoque(); }
@@ -381,30 +386,95 @@ async function loadInitialData() {
 }
 
 let dashFilterLow = false;
+let dashFilterHigh = false;
+let cachedDashItems = null;
+
+function updateDashFilterUI() {
+    const cardLow = document.getElementById('card-low-stock');
+    const cardHigh = document.getElementById('card-high-value');
+    const titleEl = document.querySelector('.dash-section-title');
+
+    if (cardLow) {
+        if (dashFilterLow) {
+            cardLow.style.boxShadow = '0 0 0 3px var(--red)';
+            cardLow.style.transform = 'scale(1.02)';
+        } else {
+            cardLow.style.boxShadow = '';
+            cardLow.style.transform = '';
+        }
+    }
+
+    if (cardHigh) {
+        if (dashFilterHigh) {
+            cardHigh.style.boxShadow = '0 0 0 3px var(--blue)';
+            cardHigh.style.transform = 'scale(1.02)';
+        } else {
+            cardHigh.style.boxShadow = '';
+            cardHigh.style.transform = '';
+        }
+    }
+
+    if (titleEl) {
+        if (dashFilterHigh) {
+            titleEl.textContent = '💎 Peças de Alto Valor (> R$ 500,00)';
+        } else if (dashFilterLow) {
+            titleEl.textContent = '⚠️ Itens com Estoque Crítico (< 5)';
+        } else {
+            titleEl.textContent = 'Itens com Saldo em Estoque';
+        }
+    }
+}
 
 // --- DASHBOARD ---
 async function updateDashboard() {
     try {
         console.log('📊 Atualizando Dashboard...');
-        const { count: totalParts } = await supabase.from('parts').select('*', { count: 'exact', head: true }).neq('code', 'SEMPEÇA').neq('code', 'SEMPECA');
-        
-        const { data: stockData } = await supabase.from(getEstoqueTable()).select('qty, code').gt('qty', 0).neq('code', 'SEMPEÇA').neq('code', 'SEMPECA');
-        const inStockCount = stockData?.length || 0;
-        const volTotal = stockData?.reduce((acc, curr) => acc + curr.qty, 0) || 0;
+        const tName = getEstoqueTable();
 
-        const { count: lowCount } = await supabase.from(getEstoqueTable()).select('*', { count: 'exact', head: true }).lt('qty', 5).gt('qty', 0).neq('code', 'SEMPEÇA').neq('code', 'SEMPECA');
+        const { data: stockData, error } = await supabase.from(tName)
+            .select('qty, code, parts!inner(code, descricao, custos(last_cost))')
+            .gt('qty', 0)
+            .neq('code', 'SEMPEÇA')
+            .neq('code', 'SEMPECA')
+            .limit(5000);
 
-        document.getElementById('dash-total').textContent = (totalParts || 0).toLocaleString('pt-BR');
-        document.getElementById('dash-instock').textContent = inStockCount.toLocaleString('pt-BR');
-        document.getElementById('dash-vol-total').textContent = volTotal.toLocaleString('pt-BR');
-        document.getElementById('dash-low-count').textContent = (lowCount || 0).toLocaleString('pt-BR');
+        if (error) throw error;
+
+        const processed = (stockData || []).map(item => {
+            const cost = Number(item.parts?.custos?.last_cost ?? item.parts?.custos?.[0]?.last_cost ?? 0);
+            return {
+                ...item,
+                cost: isNaN(cost) ? 0 : cost
+            };
+        });
+
+        cachedDashItems = processed;
+
+        const inStockCount = processed.length;
+        const volTotal = processed.reduce((acc, curr) => acc + (curr.qty || 0), 0);
+        const lowCount = processed.filter(i => (i.qty || 0) < 5).length;
+        const highCount = processed.filter(i => i.cost > 500).length;
+
+        if (document.getElementById('dash-high-count')) {
+            document.getElementById('dash-high-count').textContent = highCount.toLocaleString('pt-BR');
+        }
+        if (document.getElementById('dash-instock')) {
+            document.getElementById('dash-instock').textContent = inStockCount.toLocaleString('pt-BR');
+        }
+        if (document.getElementById('dash-vol-total')) {
+            document.getElementById('dash-vol-total').textContent = volTotal.toLocaleString('pt-BR');
+        }
+        if (document.getElementById('dash-low-count')) {
+            document.getElementById('dash-low-count').textContent = lowCount.toLocaleString('pt-BR');
+        }
 
         if (document.getElementById('stat-in-stock')) document.getElementById('stat-in-stock').textContent = volTotal;
         if (document.getElementById('stat-zero')) {
-             const { count: zeroCount } = await supabase.from(getEstoqueTable()).select('*', { count: 'exact', head: true }).eq('qty', 0).neq('code', 'SEMPEÇA').neq('code', 'SEMPECA');
+             const { count: zeroCount } = await supabase.from(tName).select('*', { count: 'exact', head: true }).eq('qty', 0).neq('code', 'SEMPEÇA').neq('code', 'SEMPECA');
              document.getElementById('stat-zero').textContent = zeroCount || 0;
         }
 
+        updateDashFilterUI();
         renderChips();
         renderDashTable();
     } catch (e) { console.error('❌ Erro dashboard:', e.message); }
@@ -412,16 +482,19 @@ async function updateDashboard() {
 
 window.toggleLowStockFilter = () => {
     dashFilterLow = !dashFilterLow;
-    const card = document.getElementById('card-low-stock');
     if (dashFilterLow) {
-        card.style.boxShadow = '0 0 0 3px var(--red)';
-        card.style.transform = 'scale(1.02)';
-        document.querySelector('.dash-section-title').textContent = '⚠️ Itens com Estoque Crítico (< 5)';
-    } else {
-        card.style.boxShadow = '';
-        card.style.transform = '';
-        document.querySelector('.dash-section-title').textContent = 'Itens com Saldo em Estoque';
+        dashFilterHigh = false;
     }
+    updateDashFilterUI();
+    renderDashTable();
+};
+
+window.toggleHighValueFilter = () => {
+    dashFilterHigh = !dashFilterHigh;
+    if (dashFilterHigh) {
+        dashFilterLow = false;
+    }
+    updateDashFilterUI();
     renderDashTable();
 };
 
@@ -430,38 +503,70 @@ async function renderDashTable() {
         const tbody = document.getElementById('dash-tbody');
         if (!tbody) return;
 
-        let query = supabase.from(getEstoqueTable())
-            .select('qty, code, parts!inner(code, descricao)')
-            .neq('code', 'SEMPEÇA')
-            .neq('code', 'SEMPECA')
-            .order('qty', { ascending: false });
+        let items = cachedDashItems;
 
-        if (dashFilterLow) {
-            query = query.lt('qty', 5).gt('qty', 0);
-        } else {
-            query = query.gt('qty', 0);
+        if (!items) {
+            const { data, error } = await supabase.from(getEstoqueTable())
+                .select('qty, code, parts!inner(code, descricao, custos(last_cost))')
+                .gt('qty', 0)
+                .neq('code', 'SEMPEÇA')
+                .neq('code', 'SEMPECA')
+                .limit(5000);
+            if (error) throw error;
+            items = (data || []).map(item => {
+                const cost = Number(item.parts?.custos?.last_cost ?? item.parts?.custos?.[0]?.last_cost ?? 0);
+                return {
+                    ...item,
+                    cost: isNaN(cost) ? 0 : cost
+                };
+            });
+            cachedDashItems = items;
         }
 
-        const { data, error } = await query;
-        if (error) throw error;
+        let filtered = [...items];
 
-        if (!data || data.length === 0) {
-            document.getElementById('dash-empty').style.display = 'block';
+        if (dashFilterLow) {
+            filtered = filtered.filter(i => (i.qty || 0) < 5);
+        } else if (dashFilterHigh) {
+            filtered = filtered.filter(i => i.cost > 500);
+        }
+
+        const emptyEl = document.getElementById('dash-empty');
+
+        if (!filtered || filtered.length === 0) {
+            if (emptyEl) {
+                emptyEl.style.display = 'block';
+                if (dashFilterHigh) emptyEl.textContent = 'Nenhuma peça com valor acima de R$ 500,00 no estoque.';
+                else if (dashFilterLow) emptyEl.textContent = 'Nenhum item com estoque crítico (< 5) no estoque.';
+                else emptyEl.textContent = 'Nenhum item com saldo em estoque.';
+            }
             tbody.innerHTML = '';
             return;
         }
 
-        document.getElementById('dash-empty').style.display = 'none';
-        
+        if (emptyEl) emptyEl.style.display = 'none';
+
+        // Ordenação:
+        // Se filtro de alto valor: ordenar do maior valor para o menor valor
+        // Caso contrário: ordenar pela quantidade em estoque (decrescente)
+        if (dashFilterHigh) {
+            filtered.sort((a, b) => b.cost - a.cost || b.qty - a.qty);
+        } else {
+            filtered.sort((a, b) => b.qty - a.qty || b.cost - a.cost);
+        }
+
         let totalQty = 0;
-        let html = data.map(item => {
+        let html = filtered.map(item => {
             totalQty += item.qty;
+            const costFormatted = item.cost > 0
+                ? item.cost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                : 'R$ 0,00';
             return `
                 <tr>
-                    <td class="td-desc">${item.parts?.descricao}</td>
-                    <td class="td-code">${item.parts?.code}</td>
+                    <td class="td-desc">${item.parts?.descricao || item.code}</td>
+                    <td class="td-code">${item.parts?.code || item.code}</td>
                     <td class="td-stock">${item.qty}</td>
-                    <td><span class="status-ok">✔ OK</span></td>
+                    <td class="td-cost">${costFormatted}</td>
                 </tr>
             `;
         }).join('');
@@ -470,7 +575,7 @@ async function renderDashTable() {
         html += `
             <tr style="background: rgba(59, 130, 246, 0.05); font-weight: bold;">
                 <td colspan="2" style="text-align: right; padding: 15px; color: #64748b;">TOTAL DE PEÇAS EM ESTOQUE:</td>
-                <td style="font-size: 1.1rem; color: #2563eb; padding: 15px;">${totalQty}</td>
+                <td style="font-size: 1.1rem; color: #2563eb; padding: 15px; text-align: center;">${totalQty}</td>
                 <td></td>
             </tr>
         `;

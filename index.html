@@ -98,10 +98,10 @@
   <div id="view-dashboard" class="view active">
     <div class="dash-scroll">
       <div class="dash-cards">
-        <div class="dash-card c-total">
-          <div class="dash-card-label">TOTAL DE CADASTROS</div>
-          <div class="dash-card-value" id="dash-total">0</div>
-          <div class="dash-card-sub">modelos no sistema</div>
+        <div class="dash-card c-high-value" id="card-high-value" style="cursor:pointer; transition: transform 0.2s;" onclick="toggleHighValueFilter()">
+          <div class="dash-card-label">PEÇAS DE ALTO VALOR</div>
+          <div class="dash-card-value" id="dash-high-count" style="color:var(--blue)">0</div>
+          <div class="dash-card-sub">acima de R$ 500,00</div>
         </div>
         <div class="dash-card c-stock">
           <div class="dash-card-label">MODELOS EM ESTOQUE</div>
@@ -127,7 +127,7 @@
               <th>Peça</th>
               <th>Código</th>
               <th style="text-align:center">Quantidade</th>
-              <th>Situação</th>
+              <th style="text-align:right">Valor Unitário</th>
             </tr>
           </thead>
           <tbody id="dash-tbody"></tbody>
@@ -2055,7 +2055,7 @@
   </div>
 </div>
 
-<script type="module" src="src/main.js?v=1.6"></script>
+<script type="module" src="src/main.js?v=1.8"></script>
 <script type="module">
   import { runSecurityAudit } from './src/views/audit/index.js';
   window.runSecurityAudit = runSecurityAudit;
