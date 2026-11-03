@@ -124,10 +124,11 @@
         <table class="dash-table">
           <thead>
             <tr>
-              <th>Peça</th>
-              <th>Código</th>
-              <th style="text-align:center">Quantidade</th>
-              <th style="text-align:right">Valor Unitário</th>
+              <th id="th-dash-peca" class="sortable" onclick="sortDashTable('peca')" title="Ordenar por Peça (A-Z / Z-A)">Peça <span class="sort-icon" id="sort-icon-peca">↕</span></th>
+              <th id="th-dash-code" class="sortable" onclick="sortDashTable('code')" title="Ordenar por Código (A-Z / Z-A)">Código <span class="sort-icon" id="sort-icon-code">↕</span></th>
+              <th id="th-dash-qty" class="sortable" style="text-align:center" onclick="sortDashTable('qty')" title="Ordenar por Quantidade">Quantidade <span class="sort-icon" id="sort-icon-qty">↕</span></th>
+              <th id="th-dash-cost" class="sortable" style="text-align:right" onclick="sortDashTable('cost')" title="Ordenar por Valor Unitário">Valor Unitário <span class="sort-icon" id="sort-icon-cost">↕</span></th>
+              <th id="th-dash-total" class="sortable" style="text-align:right" onclick="sortDashTable('total')" title="Ordenar por Valor Total">Valor Total <span class="sort-icon" id="sort-icon-total">↕</span></th>
             </tr>
           </thead>
           <tbody id="dash-tbody"></tbody>
@@ -2055,7 +2056,7 @@
   </div>
 </div>
 
-<script type="module" src="src/main.js?v=1.8"></script>
+<script type="module" src="src/main.js?v=1.9"></script>
 <script type="module">
   import { runSecurityAudit } from './src/views/audit/index.js';
   window.runSecurityAudit = runSecurityAudit;

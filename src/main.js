@@ -28,6 +28,8 @@ window.changeSector = (sector) => {
     cachedDashItems = null;
     dashFilterLow = false;
     dashFilterHigh = false;
+    dashSortCol = 'qty';
+    dashSortDir = 'desc';
     if (typeof updateDashFilterUI === 'function') updateDashFilterUI();
 
     // Recarrega aba atual
@@ -387,6 +389,8 @@ async function loadInitialData() {
 
 let dashFilterLow = false;
 let dashFilterHigh = false;
+let dashSortCol = 'qty'; // 'peca' | 'code' | 'qty' | 'cost' | 'total'
+let dashSortDir = 'desc'; // 'asc' | 'desc'
 let cachedDashItems = null;
 
 function updateDashFilterUI() {
@@ -425,6 +429,34 @@ function updateDashFilterUI() {
     }
 }
 
+function updateDashSortHeaders() {
+    const cols = ['peca', 'code', 'qty', 'cost', 'total'];
+    cols.forEach(col => {
+        const th = document.getElementById(`th-dash-${col}`);
+        const icon = document.getElementById(`sort-icon-${col}`);
+        if (!th || !icon) return;
+
+        if (dashSortCol === col) {
+            th.classList.add('active-sort');
+            icon.textContent = dashSortDir === 'asc' ? '▲' : '▼';
+        } else {
+            th.classList.remove('active-sort');
+            icon.textContent = '↕';
+        }
+    });
+}
+
+window.sortDashTable = (col) => {
+    if (dashSortCol === col) {
+        dashSortDir = dashSortDir === 'asc' ? 'desc' : 'asc';
+    } else {
+        dashSortCol = col;
+        // Padrão no primeiro clique: do menor para o maior (números) ou A a Z (texto)
+        dashSortDir = 'asc';
+    }
+    renderDashTable();
+};
+
 // --- DASHBOARD ---
 async function updateDashboard() {
     try {
@@ -442,9 +474,12 @@ async function updateDashboard() {
 
         const processed = (stockData || []).map(item => {
             const cost = Number(item.parts?.custos?.last_cost ?? item.parts?.custos?.[0]?.last_cost ?? 0);
+            const numCost = isNaN(cost) ? 0 : cost;
+            const qty = item.qty || 0;
             return {
                 ...item,
-                cost: isNaN(cost) ? 0 : cost
+                cost: numCost,
+                total: qty * numCost
             };
         });
 
@@ -484,6 +519,11 @@ window.toggleLowStockFilter = () => {
     dashFilterLow = !dashFilterLow;
     if (dashFilterLow) {
         dashFilterHigh = false;
+        dashSortCol = 'qty';
+        dashSortDir = 'asc';
+    } else {
+        dashSortCol = 'qty';
+        dashSortDir = 'desc';
     }
     updateDashFilterUI();
     renderDashTable();
@@ -493,6 +533,11 @@ window.toggleHighValueFilter = () => {
     dashFilterHigh = !dashFilterHigh;
     if (dashFilterHigh) {
         dashFilterLow = false;
+        dashSortCol = 'cost';
+        dashSortDir = 'desc';
+    } else {
+        dashSortCol = 'qty';
+        dashSortDir = 'desc';
     }
     updateDashFilterUI();
     renderDashTable();
@@ -502,6 +547,8 @@ async function renderDashTable() {
     try {
         const tbody = document.getElementById('dash-tbody');
         if (!tbody) return;
+
+        updateDashSortHeaders();
 
         let items = cachedDashItems;
 
@@ -515,9 +562,12 @@ async function renderDashTable() {
             if (error) throw error;
             items = (data || []).map(item => {
                 const cost = Number(item.parts?.custos?.last_cost ?? item.parts?.custos?.[0]?.last_cost ?? 0);
+                const numCost = isNaN(cost) ? 0 : cost;
+                const qty = item.qty || 0;
                 return {
                     ...item,
-                    cost: isNaN(cost) ? 0 : cost
+                    cost: numCost,
+                    total: qty * numCost
                 };
             });
             cachedDashItems = items;
@@ -546,20 +596,45 @@ async function renderDashTable() {
 
         if (emptyEl) emptyEl.style.display = 'none';
 
-        // Ordenação:
-        // Se filtro de alto valor: ordenar do maior valor para o menor valor
-        // Caso contrário: ordenar pela quantidade em estoque (decrescente)
-        if (dashFilterHigh) {
-            filtered.sort((a, b) => b.cost - a.cost || b.qty - a.qty);
-        } else {
-            filtered.sort((a, b) => b.qty - a.qty || b.cost - a.cost);
-        }
+        // Ordenação interativa conforme coluna selecionada:
+        filtered.sort((a, b) => {
+            let res = 0;
+            if (dashSortCol === 'peca') {
+                const descA = (a.parts?.descricao || a.code || '').toLowerCase();
+                const descB = (b.parts?.descricao || b.code || '').toLowerCase();
+                res = descA.localeCompare(descB, 'pt-BR');
+            } else if (dashSortCol === 'code') {
+                const codeA = (a.parts?.code || a.code || '').toLowerCase();
+                const codeB = (b.parts?.code || b.code || '').toLowerCase();
+                res = codeA.localeCompare(codeB, 'pt-BR', { numeric: true });
+            } else if (dashSortCol === 'qty') {
+                res = (a.qty || 0) - (b.qty || 0);
+            } else if (dashSortCol === 'cost') {
+                res = (a.cost || 0) - (b.cost || 0);
+            } else if (dashSortCol === 'total') {
+                const totA = (a.qty || 0) * (a.cost || 0);
+                const totB = (b.qty || 0) * (b.cost || 0);
+                res = totA - totB;
+            }
+
+            if (res === 0) {
+                res = (b.qty || 0) - (a.qty || 0);
+            }
+
+            return dashSortDir === 'asc' ? res : -res;
+        });
 
         let totalQty = 0;
+        let totalValSum = 0;
         let html = filtered.map(item => {
             totalQty += item.qty;
+            const itemTotal = (item.qty || 0) * (item.cost || 0);
+            totalValSum += itemTotal;
             const costFormatted = item.cost > 0
                 ? item.cost.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
+                : 'R$ 0,00';
+            const totalFormatted = itemTotal > 0
+                ? itemTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
                 : 'R$ 0,00';
             return `
                 <tr>
@@ -567,16 +642,20 @@ async function renderDashTable() {
                     <td class="td-code">${item.parts?.code || item.code}</td>
                     <td class="td-stock">${item.qty}</td>
                     <td class="td-cost">${costFormatted}</td>
+                    <td class="td-cost">${totalFormatted}</td>
                 </tr>
             `;
         }).join('');
 
-        // Adiciona rodapé de total
+        const totalValSumFormatted = totalValSum.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+
+        // Adiciona rodapé de total com quantidade física e valor total em estoque
         html += `
             <tr style="background: rgba(59, 130, 246, 0.05); font-weight: bold;">
-                <td colspan="2" style="text-align: right; padding: 15px; color: #64748b;">TOTAL DE PEÇAS EM ESTOQUE:</td>
+                <td colspan="2" style="text-align: right; padding: 15px; color: #64748b;">TOTAL EM ESTOQUE:</td>
                 <td style="font-size: 1.1rem; color: #2563eb; padding: 15px; text-align: center;">${totalQty}</td>
                 <td></td>
+                <td style="font-size: 1.1rem; color: #2563eb; padding: 15px; text-align: right;">${totalValSumFormatted}</td>
             </tr>
         `;
 

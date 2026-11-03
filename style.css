@@ -180,6 +180,11 @@ body { background: var(--bg); color: var(--text); font-family: var(--sans); font
 .dash-section-title { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted); margin-bottom: 0.75rem; }
 .dash-table { width: 100%; border-collapse: collapse; background: var(--white); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm); }
 .dash-table th { background: var(--surface2); border-bottom: 1px solid var(--border); font-size: 0.65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--text-muted); padding: .5rem .9rem; text-align: left; }
+.dash-table th.sortable { cursor: pointer; user-select: none; transition: background 0.15s, color 0.15s; white-space: nowrap; }
+.dash-table th.sortable:hover { background: #e9ecef; color: var(--blue); }
+.dash-table th.sortable .sort-icon { display: inline-block; margin-left: 4px; font-size: 0.7rem; opacity: 0.35; vertical-align: middle; }
+.dash-table th.sortable.active-sort { color: var(--blue); background: #ebf5fb; }
+.dash-table th.sortable.active-sort .sort-icon { opacity: 1; color: var(--blue); font-weight: bold; }
 .dash-table td { padding: .45rem .9rem; border-bottom: 1px solid var(--border); font-size: 0.82rem; }
 .dash-table tr:last-child td { border-bottom: none; }
 .dash-table tr:hover td { background: var(--surface2); }
