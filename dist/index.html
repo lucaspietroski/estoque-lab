@@ -16,9 +16,10 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fira+Mono:wght@400;500;700&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
-  <script type="module" crossorigin src="/assets/index-CN91xouC.js"></script>
-  <link rel="stylesheet" crossorigin href="/assets/index-Tj5o7Hm3.css">
+  <script type="module" crossorigin src="/assets/index-z9QfsRVK.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-vUEINgYg.css">
 </head>
 <body>
 
@@ -89,6 +90,8 @@
     <button class="tab-btn" data-tab="modelo-custo">💰 Custo/Modelo</button>
     <button class="tab-btn" data-tab="retorno">🔄 Retorno (Reversa)</button>
     <button class="tab-btn" data-tab="auditoria" id="tab-btn-auditoria" style="display:none">🔍 Auditoria</button>
+    <button class="tab-btn" data-tab="resumo">📈 Resumo da Operação</button>
+    <button class="tab-btn" data-tab="smartmanager" style="color: #6366f1; font-weight: 700;">🔗 Pendências SmartManager</button>
     <button class="tab-btn" data-tab="sec-audit" id="tab-btn-sec-audit" style="display:none; color: var(--orange); font-weight: 800;">🔒 Audit Corporativa</button>
   </div>
 
@@ -96,10 +99,10 @@
   <div id="view-dashboard" class="view active">
     <div class="dash-scroll">
       <div class="dash-cards">
-        <div class="dash-card c-total">
-          <div class="dash-card-label">TOTAL DE CADASTROS</div>
-          <div class="dash-card-value" id="dash-total">0</div>
-          <div class="dash-card-sub">modelos no sistema</div>
+        <div class="dash-card c-high-value" id="card-high-value" style="cursor:pointer; transition: transform 0.2s;" onclick="toggleHighValueFilter()">
+          <div class="dash-card-label">PEÇAS DE ALTO VALOR</div>
+          <div class="dash-card-value" id="dash-high-count" style="color:var(--blue)">0</div>
+          <div class="dash-card-sub">acima de R$ 500,00</div>
         </div>
         <div class="dash-card c-stock">
           <div class="dash-card-label">MODELOS EM ESTOQUE</div>
@@ -122,10 +125,11 @@
         <table class="dash-table">
           <thead>
             <tr>
-              <th>Peça</th>
-              <th>Código</th>
-              <th style="text-align:center">Quantidade</th>
-              <th>Situação</th>
+              <th id="th-dash-peca" class="sortable" onclick="sortDashTable('peca')" title="Ordenar por Peça (A-Z / Z-A)">Peça <span class="sort-icon" id="sort-icon-peca">↕</span></th>
+              <th id="th-dash-code" class="sortable" onclick="sortDashTable('code')" title="Ordenar por Código (A-Z / Z-A)">Código <span class="sort-icon" id="sort-icon-code">↕</span></th>
+              <th id="th-dash-qty" class="sortable" style="text-align:center" onclick="sortDashTable('qty')" title="Ordenar por Quantidade">Quantidade <span class="sort-icon" id="sort-icon-qty">↕</span></th>
+              <th id="th-dash-cost" class="sortable" style="text-align:right" onclick="sortDashTable('cost')" title="Ordenar por Valor Unitário">Valor Unitário <span class="sort-icon" id="sort-icon-cost">↕</span></th>
+              <th id="th-dash-total" class="sortable" style="text-align:right" onclick="sortDashTable('total')" title="Ordenar por Valor Total">Valor Total <span class="sort-icon" id="sort-icon-total">↕</span></th>
             </tr>
           </thead>
           <tbody id="dash-tbody"></tbody>
@@ -194,6 +198,8 @@
             <th style="text-align:right">Vlr. Total</th>
             <th>Usuário</th>
             <th>SELB / Obs</th>
+            <th>OS SmartManager</th>
+            <th></th>
           </tr>
         </thead>
         <tbody id="hist-tbody"></tbody>
@@ -308,9 +314,10 @@
 
       <div class="card" style="margin-top: 20px; background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border);">
         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-          <h4 style="margin: 0;">📋 Registros de SELBs</h4>
+          <h4 style="margin: 0;">📋 Registros de SELBs <span id="total-selbs-revisados" style="font-size: 13px; color: var(--text-muted); font-weight: normal; margin-left: 10px;"></span></h4>
           <div style="display: flex; gap: 10px; align-items: center;">
             <input type="date" id="filtro-data-revisados" style="padding: 5px; border-radius: 4px; border: 1px solid var(--border);" onchange="window.renderRevisados()">
+            <button class="btn-admin" style="background: #475569; padding: 5px 10px; font-size: 12px; height: auto;" onclick="document.getElementById('rev-sel-all').click()">☑️ Sel. Todos</button>
             <button class="btn-admin" style="background: var(--red); padding: 5px 10px; font-size: 12px; height: auto;" onclick="window.excluirRevisadosSelecionados()">🗑️ Excluir Selecionados</button>
           </div>
         </div>
@@ -344,7 +351,8 @@
           <span style="font-size: 12px; color: var(--text-muted);">até</span>
           <input type="date" id="mod-d2" style="padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border); font-size: 13px;">
         </div>
-        <button class="btn-cancel" onclick="clearModFilters()" style="padding: 8px 15px; border-radius: 8px; font-size: 16px;">✕</button>
+        <button class="btn-cancel" onclick="clearModFilters()" style="padding: 8px 15px; border-radius: 8px; font-size: 16px;" title="Limpar filtros">✕</button>
+        <button type="button" class="btn-toggle-stock" id="btn-mod-apenas-revisados" onclick="toggleModApenasRevisados()" style="padding: 9px 14px; border-radius: 8px; font-size: 13px;" title="Filtrar apenas equipamentos que já saíram revisados no período (ignora máquinas ainda em bancada)">✅ Apenas Revisados</button>
         <button class="btn-cancel" id="btn-remanu-vinculos" onclick="openVinculosRemanu()" style="display:none; padding: 10px 15px; border-radius: 8px; font-size: 13px; font-weight: bold;">🔗 Vincular Fusões</button>
         <button class="btn-confirm" onclick="renderModeloCusto()" style="padding: 10px 25px; border-radius: 8px;">Gerar Relatório</button>
       </div>
@@ -368,7 +376,7 @@
             <div class="mod-kpi-content">
               <div class="mod-kpi-label">TOTAL INVESTIDO</div>
               <div class="mod-kpi-value" id="mod-kpi-total" style="color: #f97316;">R$ 0,00</div>
-              <div class="mod-kpi-sub">custo de peças em saídas</div>
+              <div class="mod-kpi-sub" id="mod-kpi-total-sub">custo de peças em saídas</div>
             </div>
           </div>
 
@@ -518,8 +526,9 @@
             <div class="modal-label">Tipo</div>
             <select id="ret-tipo" class="modal-input" style="margin:0; width:150px;">
               <option value="">Todos</option>
-              <option value="retorno_sobra">Sobra</option>
-              <option value="retorno_garantia">Garantia</option>
+              <option value="retorno_sobra">Sobra (Intacta)</option>
+              <option value="retorno_garantia">Garantia (SELB)</option>
+              <option value="retorno_garantia_estoque">Garantia (Estoque)</option>
             </select>
           </div>
         </div>
@@ -551,42 +560,340 @@
 
   <!-- VIEW EQUIPAMENTOS (ADMIN) -->
   <div id="view-bi-equipamentos" class="view">
-    <div class="mov-container">
-      <div class="mov-header">
-        <h2>📋 Base de Equipamentos (BI)</h2>
+    <div class="mov-container" style="max-width: 1400px; margin: 0 auto;">
+      <div class="mov-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 15px;">
+        <div>
+            <h2>📋 Auditoria e Qualidade da Base (BI)</h2>
+            <p style="color: var(--text-muted); font-size: 0.9rem; margin-top: 5px;">Gerencie e audite todos os equipamentos importados</p>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <button id="bi-mode-equipamentos" class="btn btn-primary" onclick="setBIMode('equipamentos')" style="display:flex; align-items:center; gap:8px;">
+                <span>📋</span> Lista Individual
+            </button>
+            <button id="bi-mode-auditoria" class="btn btn-secondary" onclick="setBIMode('auditoria')" style="display:flex; align-items:center; gap:8px;">
+                <span>☑</span> Agrupar por Modelo
+            </button>
+        </div>
       </div>
 
-      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 20px;">
-        <div class="card" style="background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border);">
-          <h4 style="margin: 0 0 10px 0;">📂 Importar Base BI</h4>
-          <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 20px;">Col. A: SELB | Col. C: Modelo | Col. D: Descrição</p>
-          <div id="bi-drop-area" style="border: 2px dashed var(--border); padding: 30px; text-align: center; border-radius: 8px; cursor: pointer;" onclick="document.getElementById('bi-file-input').click()">
-            <span style="font-size: 40px;">📁</span>
-            <p style="font-size: 13px; margin-top: 10px; font-weight: 600;">Clique para selecionar .xlsx do BI</p>
-            <input type="file" id="bi-file-input" accept=".xlsx, .xls" style="display:none" onchange="processarBI(this.files[0])">
-          </div>
-          <div id="bi-status" style="margin-top: 15px; font-size: 12px; font-weight: bold; text-align: center;"></div>
+      <!-- DASHBOARD CARDS -->
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 20px;">
+        <div class="card" style="background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border); display: flex; align-items: center; gap: 15px;">
+            <div style="font-size: 30px; background: var(--bg-hover); padding: 15px; border-radius: 10px;">📦</div>
+            <div>
+                <h4 style="margin: 0; color: var(--text-muted); font-size: 0.9rem;">Total de Equipamentos</h4>
+                <div id="bi-dash-total" style="font-size: 1.5rem; font-weight: bold; margin-top: 5px; color: var(--text);">0</div>
+            </div>
+        </div>
+        <div class="card" style="background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border); display: flex; align-items: center; gap: 15px;">
+            <div style="font-size: 30px; background: var(--bg-hover); padding: 15px; border-radius: 10px;">🖥️</div>
+            <div>
+                <h4 style="margin: 0; color: var(--text-muted); font-size: 0.9rem;">Modelos Distintos</h4>
+                <div id="bi-dash-modelos" style="font-size: 1.5rem; font-weight: bold; margin-top: 5px; color: var(--blue);">0</div>
+            </div>
+        </div>
+        <div class="card" style="background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--red-light); display: flex; align-items: center; gap: 15px;">
+            <div style="font-size: 30px; background: #ffebeb; padding: 15px; border-radius: 10px;">⚠️</div>
+            <div>
+                <h4 style="margin: 0; color: var(--red); font-size: 0.9rem;">Modelos Suspeitos</h4>
+                <div id="bi-dash-suspeitos" style="font-size: 1.5rem; font-weight: bold; margin-top: 5px; color: var(--red);">0</div>
+            </div>
+        </div>
+      </div>
+
+      <!-- MAIN CONTENT GRID -->
+      <div style="display: grid; grid-template-columns: 300px 1fr; gap: 20px;">
+        
+        <!-- SIDEBAR IMPORT & FILTERS -->
+        <div style="display: flex; flex-direction: column; gap: 20px;">
+            <div class="card" style="background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border);">
+                <h4 style="margin: 0 0 10px 0;">📂 Importar Base BI</h4>
+                <p style="font-size: 12px; color: var(--text-muted); margin-bottom: 20px;">Col. A: SELB | Col. C: Modelo | Col. D: Descrição</p>
+                <div id="bi-drop-area" style="border: 2px dashed var(--border); padding: 20px; text-align: center; border-radius: 8px; cursor: pointer;" onclick="document.getElementById('bi-file-input').click()">
+                    <span style="font-size: 30px;">📁</span>
+                    <p style="font-size: 13px; margin-top: 10px; font-weight: 600;">Selecione .xlsx do BI</p>
+                    <input type="file" id="bi-file-input" accept=".xlsx, .xls" style="display:none" onchange="processarBI(this.files[0])">
+                </div>
+                <div id="bi-status" style="margin-top: 15px; font-size: 12px; font-weight: bold; text-align: center;"></div>
+            </div>
+
+            <div class="card" style="background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border);">
+                <h4 style="margin: 0 0 15px 0;">🎯 Filtros Rápidos</h4>
+                <div style="display: flex; flex-direction: column; gap: 10px;">
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 0.9rem; cursor: pointer;">
+                        <input type="radio" name="bi_filter" value="all" checked onchange="renderBIList()"> 
+                        Todos os registros
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 0.9rem; cursor: pointer; color: var(--red);">
+                        <input type="radio" name="bi_filter" value="suspects" onchange="renderBIList()"> 
+                        ⚠️ Somente Modelos Suspeitos
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 0.9rem; cursor: pointer;">
+                        <input type="radio" name="bi_filter" value="excel" onchange="renderBIList()"> 
+                        📊 Somente Importação Excel
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 8px; font-size: 0.9rem; cursor: pointer;">
+                        <input type="radio" name="bi_filter" value="empty_desc" onchange="renderBIList()"> 
+                        📝 Somente Descrição Vazia
+                    </label>
+                </div>
+            </div>
+            
+            <button class="btn btn-secondary" onclick="abrirHistoricoCorrecoes()" style="width: 100%; display: flex; justify-content: center; align-items: center; gap: 8px;">
+                <span>🕒</span> Histórico de Correções
+            </button>
         </div>
 
-        <div class="card" style="background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border);">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
-            <h4 style="margin: 0;">Equipamentos Cadastrados <span id="equip-total-count" style="color:var(--text-muted); font-size: 0.85rem; font-weight: normal;">(0)</span></h4>
-            <input type="text" id="equip-search-input" placeholder="🔍 Buscar SELB ou Modelo..." style="padding: 8px; border-radius: 6px; border: 1px solid var(--border); width: 200px;" oninput="renderBIList()">
+        <!-- TABLE AREA -->
+        <div class="card" style="background: white; padding: 20px; border-radius: 12px; border: 1px solid var(--border); display: flex; flex-direction: column;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; flex-wrap: wrap; gap: 10px;">
+            <h4 style="margin: 0; display: flex; align-items: center; gap: 10px;">
+                Registros Encontrados <span id="equip-total-count" style="color:var(--text-muted); font-size: 0.85rem; font-weight: normal;">(0)</span>
+                <button id="btn-edit-selecionados" class="btn btn-primary" style="display: none; padding: 4px 10px; font-size: 12px;" onclick="window.abrirEdicaoSelecionados()">✏️ Editar (<span id="qtd-selecionados">0</span>)</button>
+                <button id="btn-del-selecionados" class="btn" style="display: none; padding: 4px 10px; font-size: 12px; background: var(--red); color: white; border-color: var(--red);" onclick="window.excluirSelecionadosBI()">🗑️ Excluir</button>
+            </h4>
+            <input type="text" id="equip-search-input" placeholder="🔍 Buscar SELB ou Modelo..." style="padding: 8px 12px; border-radius: 6px; border: 1px solid var(--border); width: 300px; font-size: 0.9rem;" oninput="debounceBIModeRender()">
           </div>
-          <div class="table-wrap" style="max-height: 400px; overflow-y: auto;">
-            <table class="dash-table">
+          
+          <div class="table-wrap" style="flex: 1; min-height: 400px; max-height: 600px; overflow-y: auto;">
+            <!-- TABELA MODO INDIVIDUAL -->
+            <table class="dash-table" id="bi-table-individual">
               <thead>
                 <tr>
+                  <th style="width: 40px; text-align: center;"><input type="checkbox" id="bi-check-all" onchange="window.toggleAllBI()"></th>
                   <th>SELB</th>
                   <th>Modelo</th>
                   <th>Descrição</th>
+                  <th style="width: 100px; text-align: center;">Ações</th>
                 </tr>
               </thead>
               <tbody id="equip-tbody"></tbody>
             </table>
+            <!-- TABELA MODO AGRUPADO -->
+            <table class="dash-table" id="bi-table-agrupado" style="display: none;">
+              <thead>
+                <tr>
+                  <th>Modelo</th>
+                  <th style="text-align: center;">Qtd. Equipamentos</th>
+                  <th style="text-align: center;">Situação</th>
+                  <th style="width: 150px; text-align: center;">Ações</th>
+                </tr>
+              </thead>
+              <tbody id="equip-tbody-agrupado"></tbody>
+            </table>
           </div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <!-- MODAL PREVIEW IMPORTAÇÃO BI -->
+  <div id="modal-preview-bi" class="modal-overlay" style="display: none;">
+    <div class="modal-box" style="width: 800px; max-width: 95vw;">
+        <h3 style="margin-top: 0; color: var(--blue);">📄 Pré-visualização da Importação</h3>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px;">Foram encontrados <span id="preview-bi-qtd" style="font-weight:bold; color:var(--text);"></span> equipamentos únicos na planilha. Verifique se as colunas foram lidas corretamente antes de importar.</p>
+        
+        <div class="table-wrap" style="max-height: 400px; overflow-y: auto; margin-top: 20px;">
+            <table class="dash-table">
+                <thead>
+                    <tr>
+                        <th>SELB</th>
+                        <th>Modelo</th>
+                        <th>Descrição</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-preview-bi">
+                    <tr><td colspan="3" style="text-align:center;">Carregando...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="modal-btns" style="margin-top: 20px;">
+            <button class="btn-cancel" onclick="window.cancelarImportacaoBI()">Cancelar</button>
+            <button class="btn-confirm" onclick="window.confirmarImportacaoBI()">Confirmar Importação</button>
+        </div>
+    </div>
+  </div>
+
+  <!-- MODAL EDIÇÃO INDIVIDUAL -->
+  <div id="modal-edicao-individual" class="modal-overlay" style="display: none;">
+    <div class="modal-box" style="width: 400px;">
+        <h3 style="margin-top: 0; color: var(--blue);">✏️ Editar Equipamento</h3>
+        
+        <div class="modal-label">SELB:</div>
+        <input type="text" id="modal-ind-selb" class="modal-input" disabled>
+
+        <div class="modal-label">Modelo:</div>
+        <input type="text" id="modal-ind-modelo" class="modal-input">
+        
+        <div class="modal-label">Descrição:</div>
+        <input type="text" id="modal-ind-desc" class="modal-input">
+
+        <div class="modal-btns">
+            <button class="btn-cancel" onclick="fecharModalIndividual()">Cancelar</button>
+            <button class="btn-confirm" onclick="salvarEdicaoIndividual()">Salvar</button>
+        </div>
+    </div>
+  </div>
+
+  <!-- MODAL EDIÇÃO EM MASSA -->
+  <div id="modal-edicao-massa" class="modal-overlay" style="display: none;">
+    <div class="modal-box" style="width: 500px;">
+        <h3 style="margin-top: 0; color: var(--blue);">✏️ Correção em Lote</h3>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px;">Você está prestes a alterar centenas de equipamentos simultaneamente.</p>
+        
+        <div style="background: var(--bg-hover); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+            <div class="modal-label">Modelo Atual (Antigo):</div>
+            <div id="modal-massa-modelo-antigo" style="font-weight: bold; font-size: 1.1rem; color: var(--red); margin-bottom: 10px;">---</div>
+            
+            <div class="modal-label">Equipamentos Afetados:</div>
+            <div id="modal-massa-qtd" style="font-weight: bold; font-size: 1.1rem;">0</div>
+        </div>
+
+        <div class="modal-label">Novo Modelo Corrigido:</div>
+        <input type="text" id="modal-massa-modelo-novo" class="modal-input" placeholder="Digite o nome correto do modelo" style="font-size: 1rem; padding: 10px;">
+
+        <div class="modal-btns">
+            <button class="btn-cancel" onclick="fecharModalMassa()">Cancelar</button>
+            <button class="btn-confirm" onclick="salvarEdicaoMassa()">Salvar Correção</button>
+        </div>
+    </div>
+  </div>
+
+  <!-- MODAL EDIÇÃO SELECIONADOS -->
+  <div id="modal-edicao-selecionados" class="modal-overlay" style="display: none;">
+    <div class="modal-box" style="width: 500px;">
+        <h3 style="margin-top: 0; color: var(--blue);">✏️ Editar Selecionados</h3>
+        <p style="color: var(--text-muted); font-size: 0.9rem; margin-bottom: 20px;">Você está prestes a alterar o modelo de equipamentos selecionados manualmente.</p>
+        
+        <div style="background: var(--bg-hover); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+            <div class="modal-label">Equipamentos Selecionados:</div>
+            <div id="modal-selecionados-qtd" style="font-weight: bold; font-size: 1.1rem; color: var(--blue);">0</div>
+        </div>
+
+        <div class="modal-label">Novo Modelo para Todos:</div>
+        <input type="text" id="modal-selecionados-modelo" class="modal-input" placeholder="Digite o nome correto do modelo" style="font-size: 1rem; padding: 10px;">
+
+        <div class="modal-btns">
+            <button class="btn-cancel" onclick="window.fecharModalSelecionados()">Cancelar</button>
+            <button class="btn-confirm" onclick="window.salvarEdicaoSelecionados()">Salvar Correção</button>
+        </div>
+    </div>
+  </div>
+
+  <!-- MODAL HISTÓRICO DE CORREÇÕES -->
+  <div id="modal-historico-correcoes" class="modal-overlay" style="display: none;">
+    <div class="modal-box" style="width: 800px; max-width: 95vw;">
+        <h3 style="margin-top: 0; color: var(--blue);">🕒 Histórico de Correções (Auditoria)</h3>
+        
+        <div class="table-wrap" style="max-height: 400px; overflow-y: auto; margin-top: 20px;">
+            <table class="dash-table">
+                <thead>
+                    <tr>
+                        <th>Data</th>
+                        <th>Usuário</th>
+                        <th style="text-align: center;">Afetados</th>
+                        <th>De (Antigo)</th>
+                        <th>Para (Novo)</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-historico-correcoes">
+                    <tr><td colspan="5" style="text-align:center;">Carregando histórico...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div class="modal-btns" style="margin-top: 20px;">
+            <button class="btn-cancel" onclick="fecharModalHistoricoCorrecoes()">Fechar</button>
+        </div>
+    </div>
+  </div>
+
+  <!-- VIEW RESUMO DA OPERACAO -->
+  <div id="view-resumo" class="view">
+    <div class="dash-scroll">
+      
+      <!-- Top Filters -->
+      <div class="card" style="margin-bottom: 20px;">
+        <div style="display: flex; gap: 15px; align-items: center; justify-content: space-between;">
+          <h2 style="font-size: 20px; color: var(--text); margin: 0;">Resumo da Operação</h2>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <button class="btn-admin" style="height:auto; padding: 5px 10px;" onclick="window.resumoSetFilter('today')">Hoje</button>
+            <button class="btn-admin" style="height:auto; padding: 5px 10px;" onclick="window.resumoSetFilter('yesterday')">Ontem</button>
+            <button class="btn-admin" style="height:auto; padding: 5px 10px;" onclick="window.resumoSetFilter('week')">Semana</button>
+            <button class="btn-admin" style="height:auto; padding: 5px 10px;" onclick="window.resumoSetFilter('month')">Mês</button>
+            <span style="color: var(--text-muted); margin: 0 10px;">|</span>
+            <input type="date" id="resumo-d1" style="padding: 5px; border-radius: 4px; border: 1px solid var(--border);" onchange="window.renderResumoOperacao()">
+            <span style="color: var(--text-muted);">até</span>
+            <input type="date" id="resumo-d2" style="padding: 5px; border-radius: 4px; border: 1px solid var(--border);" onchange="window.renderResumoOperacao()">
+          </div>
+        </div>
+      </div>
+
+      <!-- CARDS (KPIs) -->
+      <div class="dash-cards" style="grid-template-columns: repeat(5, 1fr);">
+        <div class="dash-card">
+          <div class="dash-card-label">EQUIPAMENTOS REVISADOS</div>
+          <div class="dash-card-value" id="resumo-total-rev">0</div>
+          <div style="margin-top: 10px; font-size: 12px; color: var(--text-muted);">
+            <div style="color: var(--blue)"><span id="resumo-com-peca">0</span> com peça</div>
+            <div style="color: var(--orange)"><span id="resumo-sem-peca">0</span> sem peça</div>
+          </div>
+        </div>
+        <div class="dash-card">
+          <div class="dash-card-label">CUSTO TOTAL</div>
+          <div class="dash-card-value" id="resumo-custo-total">R$ 0,00</div>
+        </div>
+        <div class="dash-card">
+          <div class="dash-card-label">CUSTO MÉDIO POR EQUIP.</div>
+          <div class="dash-card-value" id="resumo-custo-medio">R$ 0,00</div>
+        </div>
+        <div class="dash-card">
+          <div class="dash-card-label">MODELOS DIFERENTES REVISADOS</div>
+            <div class="dash-card-value" id="resumo-modelos-unicos">0</div>
+          <div style="margin-top: 10px; font-size: 12px; color: var(--text-muted);">modelos</div>
+        </div>
+        <div class="dash-card">
+          <div class="dash-card-label">PEÇA MAIS CONSUMIDA</div>
+          <div class="dash-card-value" id="resumo-top-peca-nome" style="font-size: 18px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">-</div>
+          <div style="margin-top: 10px; font-size: 12px; color: var(--text-muted);">
+            <span id="resumo-top-peca-qtd">0</span> utilizações
+          </div>
+        </div>
+      </div>
+
+      <!-- GRAFICOS -->
+      <div class="dash-charts" style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px;">
+        <div class="card" style="background: white; border-radius: 12px; border: 1px solid var(--border); padding: 15px;">
+          <h4 style="margin: 0 0 15px 0;">Top 10 Custo</h4>
+          <div id="list-resumo-custo" style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;"></div>
+        </div>
+        <div class="card" style="background: white; border-radius: 12px; border: 1px solid var(--border); padding: 15px;">
+          <h4 style="margin: 0 0 15px 0;">Top 10 Quantidade</h4>
+          <div id="list-resumo-qtd" style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;"></div>
+        </div>
+      </div>
+
+      <!-- TABELA RICA -->
+      <div class="card" style="margin-top: 20px;">
+        <h4 style="margin: 0 0 15px 0;">Detalhamento por Modelo</h4>
+        <div class="table-wrap">
+          <table class="dash-table">
+            <thead>
+              <tr>
+                <th>Modelo</th>
+                <th style="text-align:center">Revisados</th>
+                <th style="text-align:center; color: var(--blue)">Com Peça</th>
+                <th style="text-align:center; color: var(--orange)">Sem Peça</th>
+                <th style="text-align:center">Qtd Peças</th>
+                <th style="text-align:right">Custo Total</th>
+                <th style="text-align:right">Custo Médio</th>
+              </tr>
+            </thead>
+            <tbody id="resumo-tbody">
+            </tbody>
+          </table>
+        </div>
+      </div>
+
     </div>
   </div>
 
@@ -791,6 +1098,130 @@
   </div>
 
   <!-- VIEW SEC AUDIT (AUDITORIA CORPORATIVA ETAPA 1) -->
+  <!-- ============================================== -->
+  <!-- ABA SMARTMANAGER PENDÊNCIAS                    -->
+  <!-- ============================================== -->
+  <div id="view-smartmanager" class="view">
+    <div style="display: flex; flex-direction: column; height: 100%;">
+      <div style="display: flex; gap: 10px; align-items: center; margin-bottom: 20px; flex-shrink: 0;">
+        <h2 style="margin:0; font-size: 20px; color: #6366f1;">🔗 Pendências SmartManager</h2>
+        <span style="font-size: 12px; color: #a1a1aa;">*Janela operacional: últimos 30 dias</span>
+      </div>
+
+    <div class="dash-cards" style="grid-template-columns: repeat(7, 1fr); flex-shrink: 0;">
+      <div class="dash-card" onclick="window.setSmFilter('PEÇAS PENDENTES')" id="card-pecas-pendentes">
+        <div class="dash-card-label">PEÇAS PENDENTES</div>
+        <div class="dash-card-value" id="sm-pecas-pendentes">0</div>
+      </div>
+      <div class="dash-card" onclick="window.setSmFilter('PEÇAS INTEGRADAS')" id="card-pecas-integradas">
+        <div class="dash-card-label">PEÇAS INTEGRADAS</div>
+        <div class="dash-card-value" id="sm-pecas-integradas">0</div>
+      </div>
+      <div class="dash-card" onclick="window.setSmFilter('SELBS PENDENTES')" id="card-selbs-pendentes">
+        <div class="dash-card-label">SELBS PENDENTES</div>
+        <div class="dash-card-value" id="sm-selbs-pendentes">0</div>
+      </div>
+      <div class="dash-card" onclick="window.setSmFilter('SELBS AG. PEÇA')" id="card-selbs-aguardando">
+        <div class="dash-card-label" style="color: #9333ea;">SELBS AG. PEÇA</div>
+        <div class="dash-card-value" id="sm-selbs-aguardando">0</div>
+      </div>
+      <div class="dash-card" onclick="window.setSmFilter('SELBS DESMEMBRADOS')" id="card-selbs-desmembrados">
+        <div class="dash-card-label" style="color: #3b82f6;">SELBS DESMEMBRADOS</div>
+        <div class="dash-card-value" id="sm-selbs-desmembrados">0</div>
+      </div>
+      <div class="dash-card" onclick="window.setSmFilter('INTEGRAÇÕES HOJE')" id="card-integracoes-hoje">
+        <div class="dash-card-label">INTEGRAÇÕES HOJE</div>
+        <div class="dash-card-value" id="sm-integracoes-hoje">0</div>
+      </div>
+      <div class="dash-card" onclick="window.setSmFilter('PENDÊNCIA MAIS ANTIGA')" id="card-pendencia-antiga">
+        <div class="dash-card-label">PENDÊNCIA MAIS ANTIGA</div>
+        <div class="dash-card-value" id="sm-pendencia-antiga">0 <span style="font-size:14px; color:#a1a1aa;">dias</span></div>
+      </div>
+    </div>
+
+    <div class="table-wrap" style="margin-top:20px; flex: 1; overflow-y: auto;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Status</th>
+            <th>SELB</th>
+            <th>Modelo</th>
+            <th>Última Movimentação</th>
+            <th>Situação</th>
+            <th>Obs</th>
+          </tr>
+        </thead>
+        <tbody id="sm-table-body">
+          <!-- Rows geradas no JS -->
+        </tbody>
+      </table>
+    </div>
+    </div>
+  </div>
+
+  <!-- MODAL SMARTMANAGER -->
+  <div class="modal-overlay" id="modal-smartmanager" style="display:none;">
+    <div class="modal-box saida-batch" style="max-width: 800px;">
+      
+      <div style="background: var(--bg-dark); padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between;">
+          <h2 id="sm-modal-selb" style="margin: 0; color: #6366f1;">SELB XXXXX</h2>
+          <span id="sm-modal-last-sync" style="font-size: 12px; color: #a1a1aa; text-align: right;">Última sincronização<br>-</span>
+        </div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; margin-top: 10px; font-size: 14px; color: var(--text-light);">
+          <div>
+            <strong>Modelo:</strong> <span id="sm-modal-modelo">-</span><br>
+            <strong>Última movimentação:</strong> <span id="sm-modal-last-mov">-</span>
+          </div>
+          <div>
+            <strong>Peças:</strong> <span id="sm-modal-stats">-</span><br>
+            <strong>OS já utilizadas neste SELB:</strong> <span id="sm-modal-os-used">-</span>
+          </div>
+        </div>
+      </div>
+
+      <h3 style="margin-top: 0;">🟢 Peças já Sincronizadas</h3>
+      <div class="table-container" style="max-height: 200px; overflow-y: auto; margin-bottom: 20px;">
+        <table class="data-table">
+          <thead><tr><th>Código</th><th>Descrição</th><th>Qtd</th><th>Data Sinc</th><th>OS SmartManager</th></tr></thead>
+          <tbody id="sm-modal-synced-body"></tbody>
+        </table>
+      </div>
+
+      <h3 style="margin-top: 0; color: var(--orange);">🔴 Peças Pendentes</h3>
+      <div class="table-container" style="max-height: 200px; overflow-y: auto; margin-bottom: 20px;">
+        <table class="data-table">
+          <thead><tr><th>Código</th><th>Descrição</th><th>Qtd</th><th>Data da Baixa</th></tr></thead>
+          <tbody id="sm-modal-pending-body"></tbody>
+        </table>
+      </div>
+
+      <div style="background: #1f2937; padding: 15px; border-radius: 8px; margin-bottom: 15px;">
+        <div style="display: flex; gap: 15px; align-items: flex-end; margin-bottom: 15px;">
+          <div style="flex: 1;">
+            <div class="modal-label" style="color:white;">OS SmartManager (8 números)</div>
+            <input type="text" id="sm-modal-os-input" class="modal-input" maxlength="8" placeholder="Ex: 14322471" oninput="this.value = this.value.replace(/[^0-9]/g, '')" style="margin:0;">
+          </div>
+        </div>
+        <div style="display: flex; gap: 10px; align-items: flex-end;">
+          <div style="flex: 1;">
+            <div class="modal-label" style="color:#a1a1aa; font-size: 11px;">Observação Interna (Salvo neste navegador)</div>
+            <input type="text" id="sm-modal-obs-input" class="modal-input" placeholder="Ex: Faltou peça X, validar amanhã..." style="margin:0; background: #374151; color: white; border: 1px solid #4b5563;">
+          </div>
+          <button class="btn-admin" style="background: #4f46e5; height: 38px; padding: 0 15px;" onclick="window.saveSmObs()">Salvar Obs</button>
+        </div>
+      </div>
+
+      <div class="modal-btns" style="margin-top: 0; justify-content: flex-end; gap: 10px;">
+        <button class="btn-cancel" onclick="document.getElementById('modal-smartmanager').style.display='none'">Cancelar</button>
+        <button class="btn-confirm" style="background: #9333ea; border-color: #9333ea;" onclick="window.marcarAguardandoPecaSmart()">Aguardando Peça</button>
+        <button class="btn-confirm" style="background: #3b82f6; border-color: #3b82f6;" onclick="window.marcarComoDesmembradaSmart()">Desmembrada</button>
+        <button class="btn-confirm" onclick="window.vincularPendenciasSmart()">Vincular Pendências</button>
+      </div>
+
+    </div>
+  </div>
+
   <div id="view-sec-audit" class="view">
     <div style="display: flex; flex-direction: column; height: 100%; background: white;">
         
@@ -927,6 +1358,7 @@
       <select id="retorno-tipo-select" class="modal-input" style="margin: 0;" onchange="window.toggleRetornoFields()">
         <option value="retorno_sobra">Sobra (Peça intacta do estoque)</option>
         <option value="retorno_garantia">Garantia (Peça com defeito baixada num SELB)</option>
+        <option value="retorno_garantia_estoque">Garantia (Peça com defeito no estoque / Não utilizada)</option>
       </select>
     </div>
 
@@ -1031,8 +1463,10 @@
         <button class="btn-admin" style="width: 100%; justify-content: center;" onclick="window.switchTab('bi-equipamentos'); closeAdminMenu();">📁 Importar Base BI (WMS)</button>
         <button class="btn-admin" style="width: 100%; justify-content: center;" onclick="window.switchTab('revisados'); closeAdminMenu();">🛠️ Registrar SELBs Revisados</button>
         <button class="btn-admin" style="width: 100%; justify-content: center; background: #0ea5e9; color: white;" onclick="openManualSELBModal()">🔗 Vincular SELB Manualmente</button>
+        <button class="btn-admin" style="width: 100%; justify-content: center; background: #f59e0b; color: white;" onclick="window.openAuditModelos()">🔎 Auditoria de Modelos</button>
         <button class="btn-admin" style="width: 100%; justify-content: center; background: #10b981;" onclick="gerarBackupCompleto()">📦 Gerar Backup Completo (JSON)</button>
         <button class="btn-admin" style="width: 100%; justify-content: center; background: #22c55e; color: white;" onclick="openCadastroPecaModal()">➕ Cadastrar Nova Peça</button>
+        <button class="btn-admin" id="btn-admin-permissoes" style="width: 100%; justify-content: center; background: #8b5cf6; color: white; display: none;" onclick="window.openPermissoesModal()">🛡️ Gerenciar Permissões</button>
         <button class="btn-cancel" onclick="closeAdminMenu()" style="margin-top: 20px; width: 100%;">Fechar Menu</button>
       </div>
     </div>
@@ -1054,9 +1488,9 @@
       </div>
 
       <div id="xml-drop-area" style="border: 2px dashed var(--border); padding: 20px; text-align: center; border-radius: 8px; margin-bottom: 20px;">
-        <input type="file" id="xml-file-input" accept=".xml" onchange="processarXML(this.files[0])" style="display: none;">
+        <input type="file" id="xml-file-input" accept=".xml, .xls, .xlsx, .ods" onchange="processarXML(this.files[0])" style="display: none;">
         <label for="xml-file-input" style="cursor: pointer; color: var(--blue); font-weight: 500;">
-          📁 Clique aqui para selecionar o arquivo XML
+          📁 Clique aqui para selecionar o arquivo (XML, LibreOffice, Excel)
         </label>
       </div>
 
@@ -1094,6 +1528,41 @@
   </div>
 </div>
 
+
+<!-- MODAL AUDITORIA DE MODELOS DESCONHECIDOS -->
+<div class="modal-overlay" id="modal-audit-modelos">
+  <div class="modal-box" style="max-width: 600px;">
+    <h3 style="color: var(--orange); margin-bottom: 5px;">🔎 Auditoria de Modelos Desconhecidos</h3>
+    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;">
+        Lista de todos os SELBs que tiveram movimentação no estoque mas não possuem modelo identificado. Preencha os modelos e clique em Salvar para atualizar o banco.
+    </p>
+
+    <datalist id="modelos-existentes-list"></datalist>
+
+    <div style="max-height: 400px; overflow-y: auto; margin-bottom: 20px; border: 1px solid var(--border); border-radius: 8px;">
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead style="position: sticky; top: 0; background: var(--surface2); z-index: 1;">
+                <tr>
+                    <th style="padding: 10px; text-align: left; border-bottom: 1px solid var(--border); width: 30%;">SELB</th>
+                    <th style="padding: 10px; text-align: left; border-bottom: 1px solid var(--border);">Modelo Correto</th>
+                </tr>
+            </thead>
+            <tbody id="tbody-audit-modelos">
+                <tr><td colspan="2" style="text-align: center; padding: 20px;">Carregando dados...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+      <div id="audit-modelos-status" style="font-size: 13px; font-weight: bold;"></div>
+      <div style="display: flex; gap: 10px;">
+        <button class="btn-cancel" onclick="window.closeAuditModelos()">Cancelar</button>
+        <button class="btn-confirm" onclick="window.saveAuditModelos()" id="btn-save-audit-modelos" style="background: var(--orange);">Salvar Modelos Preenchidos</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- MODAL AJUSTE DE HISTÓRICO -->
 <div class="modal-overlay" id="modal-ajuste-historico">
   <div class="modal-box" style="max-width: 450px;">
@@ -1120,10 +1589,11 @@
         <input type="text" class="modal-input" id="ajuste-obs" placeholder="Ex: Operador registrou SELB errado">
     </div>
 
-    <div style="display: flex; gap: 10px;">
-      <button class="btn-cancel" onclick="closeAjusteHistorico()" style="flex: 1;">Cancelar</button>
-      <button class="btn-confirm" onclick="anularRegistroHistorico()" style="flex: 1; background: var(--red);">Anular Registro</button>
-      <button class="btn-confirm" onclick="saveAjusteHistorico()" style="flex: 2; background: var(--orange);">Confirmar Ajuste</button>
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+      <button class="btn-cancel" onclick="closeAjusteHistorico()">Cancelar</button>
+      <button class="btn-confirm" onclick="anularRegistroHistorico()" style="background: var(--red);">Anular Registro</button>
+      <button class="btn-confirm" onclick="desmembrarRegistroHistorico()" style="background: var(--blue);">Desmembrada</button>
+      <button class="btn-confirm" onclick="saveAjusteHistorico()" style="background: var(--orange);">Confirmar Ajuste</button>
     </div>
     <div id="ajuste-status" style="margin-top: 15px; font-size: 13px; text-align: center;"></div>
   </div>
@@ -1180,6 +1650,19 @@
         <div style="font-size: 20px; font-weight: 800; font-family: var(--mono);" id="detalhe-custo-total">R$ 0,00</div>
       </div>
       
+      <!-- Linha 5 (Exclusiva Remanufatura: Referência e Economia) -->
+      <div id="detalhe-remanu-extra-box" style="display:none; grid-column: span 2; background: #ecfdf5; padding: 16px 20px; border-top: 1px solid #a7f3d0;">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 10px;">
+          <div>
+            <div style="font-size: 10px; font-weight: 700; color: #047857; text-transform: uppercase; letter-spacing: 0.5px;">Peça Ref. (Nova / Comparação)</div>
+            <div style="font-size: 14px; font-weight: 700; color: #065f46; margin-top: 2px;" id="detalhe-remanu-peca-ref">—</div>
+          </div>
+          <div style="text-align: right;">
+            <div style="font-size: 10px; font-weight: 700; color: #047857; text-transform: uppercase; letter-spacing: 0.5px;">Economia Gerada Total</div>
+            <div style="font-size: 18px; font-weight: 800; color: #059669; font-family: var(--mono);" id="detalhe-remanu-economia">R$ 0,00</div>
+          </div>
+        </div>
+      </div>
     </div>
     
     <div style="padding: 12px; text-align: center; background: #f8fafc; font-size: 11px; color: var(--text-muted);">
@@ -1188,6 +1671,82 @@
   </div>
 </div>
 
+
+<!-- MODAL DETALHE MODELO RESUMO -->
+<div class="modal-overlay" id="modal-resumo-modelo" style="align-items: flex-start; padding-top: 5vh; overflow-y: auto;">
+  <div class="modal-box" style="width: 1100px; max-width: 95vw; border-radius: 16px; overflow: hidden; padding: 0; border: none; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04); display: flex; flex-direction: column; margin-bottom: 5vh;">
+    
+    <div id="modal-resumo-header" style="padding: 24px; color: white; position: relative; background: #1D3557; flex-shrink: 0;">
+      <button onclick="document.getElementById('modal-resumo-modelo').style.display='none'" style="position: absolute; right: 20px; top: 20px; background: rgba(255,255,255,0.2); border: none; width: 32px; height: 32px; border-radius: 50%; color: white; font-size: 18px; cursor: pointer; display: flex; align-items: center; justify-content: center; transition: background 0.2s;">✕</button>
+      <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; opacity: 0.9;">DETALHE DO MODELO</div>
+      <h3 style="font-size: 18px; font-weight: 800; color: white; margin: 8px 0 0 0; line-height: 1.3;" id="modal-resumo-title">—</h3>
+    </div>
+    
+    <div style="display: flex; flex-direction: row; align-items: stretch; background: var(--border);">
+      
+      <!-- LEFT SIDE: STATS -->
+      <div style="flex: 1; display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border);">
+        <div style="background: white; padding: 20px;">
+          <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;">Revisões com Peça</div>
+          <div style="font-size: 24px; font-weight: 800;" id="modal-resumo-com-peca">0</div>
+        </div>
+        <div style="background: white; padding: 20px;">
+          <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;">Revisada sem Peça</div>
+          <div style="font-size: 24px; font-weight: 800;" id="modal-resumo-sem-peca">0</div>
+        </div>
+        <div style="background: white; padding: 20px;">
+          <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;">Total de Máquinas</div>
+          <div style="font-size: 24px; font-weight: 800;" id="modal-resumo-total-maquinas">0</div>
+        </div>
+        <div style="background: white; padding: 20px;">
+          <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;">Peças Utilizadas</div>
+          <div style="font-size: 24px; font-weight: 800;" id="modal-resumo-pecas-total">0</div>
+        </div>
+        <div style="background: white; padding: 20px;">
+          <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;">Custo Médio (Geral)</div>
+          <div style="font-size: 20px; font-weight: 800;" id="modal-resumo-custo-geral">R$ 0,00</div>
+        </div>
+        <div style="background: white; padding: 20px;">
+          <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;">Custo Médio (Com Peça)</div>
+          <div style="font-size: 20px; font-weight: 800;" id="modal-resumo-custo-com-peca">R$ 0,00</div>
+        </div>
+        <div style="background: white; padding: 20px;">
+          <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;">Média Peças/Máquina</div>
+          <div style="font-size: 24px; font-weight: 800;" id="modal-resumo-media-pecas">0,00</div>
+        </div>
+        <div style="background: white; padding: 20px;">
+          <div style="font-size: 10px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px;">Custo Total Revisão</div>
+          <div style="font-size: 22px; font-weight: 800; color: #E63946;" id="modal-resumo-custo-total">R$ 0,00</div>
+        </div>
+      </div>
+
+      <!-- RIGHT SIDE: PARTS -->
+      <div style="flex: 1.2; background: white; display: flex; flex-direction: column;">
+        <div style="padding: 16px 20px; background: #f8fafc; border-bottom: 1px solid var(--border); font-size: 12px; font-weight: bold; color: var(--text-muted); text-transform: uppercase;">
+          Detalhamento de Peças Utilizadas
+        </div>
+        <div style="padding: 0;">
+          <table style="width: 100%; border-collapse: collapse;">
+              <thead>
+                <tr style="background: #f8fafc; border-bottom: 1px solid var(--border); text-align: left; font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">
+                  <th style="padding: 8px 20px; font-weight: 700;">Descrição da Peça</th>
+                  <th style="padding: 8px 20px; font-weight: 700; text-align: right;">Valor Unit.</th>
+                  <th style="padding: 8px 20px; font-weight: 700; text-align: right;">Qtd</th>
+                </tr>
+              </thead>
+              <tbody id="modal-resumo-lista-pecas">
+              </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+    
+    <div style="padding: 12px; text-align: center; background: #f8fafc; font-size: 11px; color: var(--text-muted); border-top: 1px solid var(--border); flex-shrink: 0;">
+      Clique fora para fechar
+    </div>
+  </div>
+</div>
 <!-- MODAL DETALHE DEFEITOS -->
 <div class="modal-overlay" id="modal-detalhe-defeito">
   <div class="modal-box" style="max-width: 500px; border-radius: 16px; overflow: hidden; padding: 0; border: none; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.1), 0 10px 10px -5px rgba(0,0,0,0.04);">
@@ -1270,40 +1829,42 @@
 
 <!-- MODAL VÍNCULOS REMANUFATURA (NOVO VS RS) -->
 <div class="modal-overlay" id="modal-vinculos-remanu">
-  <div class="modal-box" style="max-width: 500px;">
-    <h3>🔗 Vincular Fusões (Nova vs RS)</h3>
+  <div class="modal-box" style="max-width: 650px;">
+    <h3>🔗 Vincular Fusões (Nova / Comparação vs RS)</h3>
     <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;">
-      Use esta tela para cadastrar os códigos de fusões correspondentes a cada modelo de equipamento.
+      Cadastre os códigos de fusões correspondentes a cada modelo. O sistema recalcula automaticamente a economia e margem baseado no código de referência cadastrado (Original, Compatível ou Recon terceirizada).
     </p>
 
     <div class="modal-label">MODELO DO EQUIPAMENTO</div>
-    <input type="text" id="vinc-modelo" list="list-modelos-remanu" class="modal-input" placeholder="Ex: RICOH IM 430F">
+    <input type="text" id="vinc-modelo" list="list-modelos-remanu" class="modal-input" placeholder="Ex: LINHA MULTIFUNCIONAL 430F / P502">
     <datalist id="list-modelos-remanu"></datalist>
 
-    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 12px;">
       <div>
-        <div class="modal-label">CÓDIGO PEÇA NOVA</div>
-        <input type="text" id="vinc-nova" class="modal-input" placeholder="Ex: D0A44164" style="text-transform: uppercase;">
+        <div class="modal-label">CÓDIGO REF. (NOVA / COMPATÍVEL / RECON)</div>
+        <input type="text" id="vinc-nova" class="modal-input" placeholder="Ex: D0A44017R" style="text-transform: uppercase;">
+        <div id="vinc-nova-info" style="font-size: 11px; margin-top: 4px; min-height: 18px;"></div>
       </div>
       <div>
-        <div class="modal-label">CÓDIGO PEÇA RS</div>
-        <input type="text" id="vinc-rs" class="modal-input" placeholder="Ex: D0A44164RS" style="text-transform: uppercase;">
+        <div class="modal-label">CÓDIGO PEÇA RS (LABORATÓRIO)</div>
+        <input type="text" id="vinc-rs" class="modal-input" placeholder="Ex: D0A44017RS" style="text-transform: uppercase;">
+        <div id="vinc-rs-info" style="font-size: 11px; margin-top: 4px; min-height: 18px;"></div>
       </div>
     </div>
 
     <div class="modal-btns" style="margin-top: 10px;">
-      <button class="btn-confirm" id="btn-salvar-vinculo" onclick="salvarVinculoRemanu()" style="width: 100%;">Salvar Vínculo</button>
+      <button class="btn-confirm" id="btn-salvar-vinculo" onclick="salvarVinculoRemanu()" style="width: 100%;">Salvar Vínculo e Recalcular Custos</button>
     </div>
 
-    <h3 style="font-size: 14px; margin-top: 30px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">Vínculos Cadastrados</h3>
-    <div style="max-height: 200px; overflow-y: auto; margin-top: 10px; border: 1px solid var(--border); border-radius: 8px;">
+    <h3 style="font-size: 14px; margin-top: 25px; border-bottom: 1px solid var(--border); padding-bottom: 8px;">Vínculos Cadastrados</h3>
+    <div style="max-height: 250px; overflow-y: auto; margin-top: 10px; border: 1px solid var(--border); border-radius: 8px;">
       <table class="dash-table" style="font-size: 12px; margin-top: 0;">
         <thead>
           <tr>
             <th style="text-align: left;">Modelo</th>
-            <th style="text-align: center;">Nova</th>
-            <th style="text-align: center;">RS</th>
-            <th></th>
+            <th style="text-align: center;">Peça Ref. (Nova/Comparação)</th>
+            <th style="text-align: center;">Peça RS (Lab)</th>
+            <th style="text-align: center; width: 120px;">Ações</th>
           </tr>
         </thead>
         <tbody id="tbody-vinculos-remanu">
@@ -1442,6 +2003,53 @@
       <div id="xml-preview-status" style="font-weight: 600; font-size: 13px; margin-right: auto;"></div>
       <button class="btn-cancel" onclick="fecharModalXML()">Cancelar</button>
       <button class="btn-confirm" id="xml-confirm-btn" style="background: var(--blue);" onclick="confirmarImportacaoXML()">Confirmar Importação (<span id="xml-preview-count">0</span>)</button>
+    </div>
+  </div>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL GERENCIAR PERMISSÕES -->
+<div class="modal-overlay" id="modal-permissions">
+  <div class="modal-box" style="max-width: 600px; width: 95%;">
+    <h3>🛡️ Gerenciar Permissões de Usuários</h3>
+    <p style="font-size: 13px; color: var(--text-muted); margin-bottom: 20px;">
+        Controle quais telas cada usuário pode acessar no sistema. Administradores têm acesso total.
+    </p>
+
+    <div style="display: flex; gap: 10px; margin-bottom: 15px;">
+        <input type="email" id="perm-new-email" class="modal-input" placeholder="Adicionar e-mail (ex: novo@selbetti.com.br)">
+        <button class="btn-confirm" onclick="window.addPermUser()">Adicionar</button>
+    </div>
+
+    <div class="table-wrap" style="max-height: 400px; overflow-y: auto; margin-bottom: 20px; border: 1px solid var(--border); border-radius: 8px;">
+        <table class="dash-table">
+            <thead style="position: sticky; top: 0; background: var(--surface2); z-index: 1;">
+                <tr>
+                    <th style="padding: 10px; text-align: left; border-bottom: 1px solid var(--border);">Usuário (E-mail)</th>
+                    <th style="padding: 10px; text-align: center; border-bottom: 1px solid var(--border);">Admin</th>
+                    <th style="padding: 10px; text-align: center; border-bottom: 1px solid var(--border);">Ação</th>
+                </tr>
+            </thead>
+            <tbody id="tbody-permissions">
+                <tr><td colspan="3" style="text-align: center; padding: 20px;">Carregando usuários...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Sub-modal de edição de abas -->
+    <div id="perm-edit-section" style="display: none; background: var(--surface2); padding: 15px; border-radius: 8px; border: 1px solid var(--border); margin-bottom: 20px;">
+        <h4 style="margin-top: 0; margin-bottom: 10px; color: var(--blue);" id="perm-edit-title">Editando: </h4>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;" id="perm-checkboxes">
+            <!-- Checkboxes injetados via JS -->
+        </div>
+        <div style="display: flex; justify-content: flex-end; margin-top: 15px;">
+            <button class="btn-confirm" style="background: var(--blue);" onclick="window.savePermAbas()">Salvar Telas</button>
+        </div>
+    </div>
+
+    <div style="display: flex; justify-content: flex-end; align-items: center;">
+      <button class="btn-cancel" onclick="window.closePermissoesModal()">Fechar</button>
     </div>
   </div>
 </div>

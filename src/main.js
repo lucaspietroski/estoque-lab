@@ -20,6 +20,8 @@ window.changeSector = (sector) => {
     
     const btnVinculos = document.getElementById('btn-remanu-vinculos');
     if (btnVinculos) btnVinculos.style.display = sector === 'REMANU' ? 'inline-block' : 'none';
+    const btnApenasRevisados = document.getElementById('btn-mod-apenas-revisados');
+    if (btnApenasRevisados) btnApenasRevisados.style.display = sector === 'REMANU' ? 'none' : 'inline-flex';
 
     // Limpa pesquisa
     const searchInp = document.getElementById('search-main');
@@ -2330,11 +2332,22 @@ window.processarRevisados = async () => {
 
 // --- RELATÓRIO CUSTO POR MODELO ---
 let chartModelo = null;
+window.modOnlyRevisados = false;
+
+window.toggleModApenasRevisados = () => {
+    window.modOnlyRevisados = !window.modOnlyRevisados;
+    const btn = document.getElementById('btn-mod-apenas-revisados');
+    if (btn) btn.classList.toggle('on', window.modOnlyRevisados);
+    renderModeloCusto();
+};
 
 window.clearModFilters = () => {
     document.getElementById('mod-busca').value = '';
     document.getElementById('mod-d1').value = '';
     document.getElementById('mod-d2').value = '';
+    window.modOnlyRevisados = false;
+    const btnRev = document.getElementById('btn-mod-apenas-revisados');
+    if (btnRev) btnRev.classList.remove('on');
     renderModeloCusto();
 };
 
@@ -2401,7 +2414,42 @@ window.renderModeloCusto = async () => {
         window.statsDefeitoData = { pecas: 0, custo: 0, counts: {} };
 
         // Saídas (Com Peça e Tratamento Especial de Sem Peça)
-        saídas.filter(s => filtrarData(s.ts)).forEach(s => {
+        // Saídas (Com Peça e Tratamento Especial de Sem Peça)
+        const isLabOnlyRevisados = window.currentSector !== 'REMANU' && window.modOnlyRevisados;
+        const revisadosNoPeriodo = revisados.filter(r => filtrarData(r.ts));
+        const validSelbsLab = new Set();
+        if (isLabOnlyRevisados) {
+            revisadosNoPeriodo.forEach(r => {
+                const selb = (r.selb || '').toUpperCase().trim();
+                if (selb && selb.length === 4 && selb !== '0000') {
+                    validSelbsLab.add(selb);
+                }
+            });
+        }
+
+        let minIso = "2000-01-01T00:00:00.000Z";
+        let maxIso = "2100-01-01T00:00:00.000Z";
+        if (isLabOnlyRevisados) {
+            if (d1) {
+                const d1Date = new Date(d1 + 'T00:00:00');
+                d1Date.setHours(0, 0, 0, 0);
+                d1Date.setDate(d1Date.getDate() - 30);
+                minIso = d1Date.toISOString();
+            }
+            if (d2) {
+                const d2Date = new Date(d2 + 'T00:00:00');
+                d2Date.setHours(23, 59, 59, 999);
+                d2Date.setDate(d2Date.getDate() + 1);
+                maxIso = d2Date.toISOString();
+            }
+        }
+
+        saídas.filter(s => {
+            if (!isLabOnlyRevisados) return filtrarData(s.ts);
+            const selb = (s.selb || '').toUpperCase().trim();
+            if (selb === 'DEFE') return filtrarData(s.ts);
+            return validSelbsLab.has(selb) && s.ts >= minIso && s.ts <= maxIso;
+        }).forEach(s => {
             const selb = (s.selb || '').toUpperCase().trim();
             if (!selb || selb.length !== 4 || selb === '0000') return;
 
@@ -2586,6 +2634,10 @@ window.renderModeloCusto = async () => {
             document.getElementById('mod-kpi-modelos').textContent = rows.length;
             document.getElementById('mod-kpi-modelos-label').textContent = `MODELOS ATENDIDOS (${totalAtend} MÁQUINAS)`;
             document.getElementById('mod-kpi-total').textContent = fmt(totalCusto);
+            const subTotalEl = document.getElementById('mod-kpi-total-sub');
+            if (subTotalEl) {
+                subTotalEl.textContent = isLabOnlyRevisados ? 'apenas equipamentos revisados' : 'custo de peças em saídas';
+            }
             document.getElementById('mod-kpi-top').textContent = top ? top.modelo : '—';
             document.getElementById('mod-kpi-top-val').textContent = top ? fmt(top.custo) : 'R$ 0,00';
             document.getElementById('mod-kpi-bottom').textContent = bottom ? bottom.modelo : '—';
@@ -2599,8 +2651,9 @@ window.renderModeloCusto = async () => {
                 <th class="text-center" style="padding: 12px;">Peças Usadas</th>
                 <th style="text-align: right; padding: 12px;">Custo Total</th>
             `;
-            document.getElementById('mod-tbody').innerHTML = rows.slice(0, 50).map(r => `
-                <tr>
+            window.lastLabRows = rows.slice(0, 50);
+            document.getElementById('mod-tbody').innerHTML = rows.slice(0, 50).map((r, idx) => `
+                <tr style="cursor: pointer;" onclick="window.openDetalheModelo(window.lastLabRows[${idx}])" title="Clique para ver detalhes do modelo">
                     <td style="font-size: 13px; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${r.modelo}</td>
                     <td style="text-align:center; font-family: var(--mono);">${r.atendimentos}</td>
                     <td style="text-align:center; font-family: var(--mono);">${r.pecas}</td>
@@ -4482,143 +4535,37 @@ window.renderResumoOperacao = async () => {
         let topCustoMedio = [...rows].sort((a,b) => b.custoMedio - a.custoMedio).slice(0, 10);
         let topQtd = [...rows].sort((a,b) => b.atendimentos - a.atendimentos).slice(0, 10);
 
-        if (chartResumoCusto) chartResumoCusto.destroy();
-        if (chartResumoCustoMedio) chartResumoCustoMedio.destroy();
-        if (chartResumoQtd) chartResumoQtd.destroy();
-
-        if (window.Chart) {
-            // Registrar plugin globalmente caso não esteja (o CDN 2.0.0 auto-registra, mas só por segurança)
-            if (typeof ChartDataLabels !== 'undefined') {
-                Chart.register(ChartDataLabels);
-            }
-
-            chartResumoCusto = new Chart(document.getElementById('chart-resumo-custo'), {
-                type: 'bar',
-                data: {
-                    labels: topCusto.map(r => wrapLabel(r.modelo)),
-                    datasets: [{
-                        label: 'Custo Total (R$)',
-                        data: topCusto.map(r => r.custo),
-                        backgroundColor: '#E63946',
-                        borderRadius: 4
-                    }]
-                },
-                options: {
-                    indexAxis: 'y',
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    layout: { padding: { left: 5, right: 80 } },
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    return context.raw.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-                                }
-                            }
-                        },
-                        datalabels: {
-                            anchor: 'end',
-                            align: 'right',
-                            font: { weight: 'bold', size: 11, family: 'Inter' },
-                            color: '#333',
-                            formatter: function(value) {
-                                return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-                            }
-                        }
-                    },
-onClick: (e, activeElements) => {
-                        if (activeElements.length > 0) {
-                            const index = activeElements[0].index;
-                            const modelData = topCusto[index];
-                            if (modelData) window.openResumoModelo(modelData.modelo);
-                        }
-                    },
-                    scales: {
-                        x: {
-                            ticks: {
-                                callback: function(value) { return 'R$ ' + value; }
-                            }
-                        },
-                        y: {
-                            ticks: {
-                                font: { family: 'Inter', size: 12, weight: 'bold' },
-                                autoSkip: false,
-                                color: '#000'
-                            }
-                        }
-                    }
-                }
-            });
-
-            chartResumoCustoMedio = new Chart(document.getElementById('chart-resumo-custo-medio'), {
-                type: 'bar',
-                data: {
-                    labels: topCustoMedio.map(r => wrapLabel(r.modelo)),
-                    datasets: [{
-                        label: 'Custo Médio (R$)',
-                        data: topCustoMedio.map(r => r.custoMedio),
-                        backgroundColor: '#F4A261',
-                        borderRadius: 4
-                    }]
-                },
-                options: {
-                    indexAxis: 'y',
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    layout: { padding: { right: 80 } },
-                    plugins: {
-                        legend: { display: false },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    return context.raw.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-                                }
-                            }
-                        },
-                        datalabels: {
-                            anchor: 'end',
-                            align: 'right',
-                            font: { weight: 'bold', size: 11, family: 'Inter' },
-                            color: '#333',
-                            formatter: function(value) {
-                                return value.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-                            }
-                        }
-                    },
-                    scales: {
-                        x: {
-                            ticks: {
-                                callback: function(value) { return 'R$ ' + value; }
-                            }
-                        },
-                        y: {
-                            ticks: {
-                                font: { family: 'Inter', size: 12, weight: 'bold' },
-                                autoSkip: false,
-                                color: '#000'
-                            }
-                        }
-                    }
-                }
-            });
-
-            const renderListQtd = () => {
-                const el = document.getElementById('list-resumo-qtd');
-                if (!el) return;
-                el.innerHTML = topQtd.map(item => `
-                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 8px;">
-                        <div style="font-weight: bold; color: #000; font-size: 13px; max-width: 80%; line-height: 1.3;">
-                            ${item.modelo}
-                        </div>
-                        <div style="font-weight: bold; font-size: 15px; color: #333; text-align: right;">
-                            ${item.atendimentos}
-                        </div>
+        const fmtBRL = v => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        const headerHtml = `
+            <div style="display: grid; grid-template-columns: minmax(0, 1fr) 48px 105px 90px; gap: 10px; align-items: center; padding-bottom: 6px; border-bottom: 2px solid #e2e8f0; font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.4px;">
+                <div>Modelo</div>
+                <div style="text-align: center;">Qtd</div>
+                <div style="text-align: right;">Total</div>
+                <div style="text-align: right;">C. Médio</div>
+            </div>
+        `;
+        const renderTopList = (containerId, listData) => {
+            const el = document.getElementById(containerId);
+            if (!el) return;
+            el.innerHTML = headerHtml + listData.map(item => `
+                <div style="display: grid; grid-template-columns: minmax(0, 1fr) 48px 105px 90px; gap: 10px; align-items: center; border-bottom: 1px solid #eee; padding-bottom: 8px; cursor: pointer;" onclick="window.openResumoModelo(${JSON.stringify(item.modelo).replace(/"/g, '&quot;')})" title="Clique para ver detalhes do modelo">
+                    <div style="font-weight: bold; color: #000; font-size: 13px; line-height: 1.3; overflow: hidden; text-overflow: ellipsis;">
+                        ${item.modelo}
                     </div>
-                `).join('');
-            };
-            renderListQtd();
-        }
+                    <div style="font-weight: 800; font-size: 14px; color: #1e293b; text-align: center; font-family: var(--mono);">
+                        ${item.atendimentos}
+                    </div>
+                    <div style="font-weight: 700; font-size: 13px; color: #e63946; text-align: right; font-family: var(--mono); white-space: nowrap;">
+                        ${fmtBRL(item.custo)}
+                    </div>
+                    <div style="font-weight: 600; font-size: 13px; color: #d97706; text-align: right; font-family: var(--mono); white-space: nowrap;">
+                        ${fmtBRL(item.custoMedio)}
+                    </div>
+                </div>
+            `).join('');
+        };
+        renderTopList('list-resumo-custo', topCusto);
+        renderTopList('list-resumo-qtd', topQtd);
 
     } catch (e) {
         console.error("Erro renderResumoOperacao", e);
