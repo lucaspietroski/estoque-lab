@@ -1634,20 +1634,80 @@ window.processarXML = async (file) => {
             
             document.getElementById('xml-preview-modal').classList.add('open');
 
+            window.updateXmlImportDesc = (code, val) => {
+                if (window.pendingXmlImport && window.pendingXmlImport.itemsMap[code]) {
+                    window.pendingXmlImport.itemsMap[code].descInfo = val.toUpperCase();
+                }
+            };
+
+            const isGenericImportDesc = (d) => !d || /^PE[CÇ]A IMPORTADA VIA (ARQUIVO|XML)/i.test(String(d).trim());
+
             let html = '';
             for (const code of keys) {
                 const item = itemsMap[code];
-                const { data: pCheck } = await supabase.from('parts').select('descricao').eq('code', code).maybeSingle();
-                const fallbackDesc = item.descFile ? item.descFile : `PEÇA IMPORTADA VIA ARQUIVO (${code})`;
-                const desc = pCheck?.descricao ? pCheck.descricao : fallbackDesc;
-                
+                const { data: pCheck } = await supabase.from('parts').select('descricao, marca, modelo_pattern').eq('code', code).maybeSingle();
+                const hasValidDbDesc = pCheck && !isGenericImportDesc(pCheck.descricao);
+
+                let desc = '';
+                let baseCodeMatched = '';
+                item.marca = pCheck?.marca || 'OUTROS';
+                item.modelo_pattern = pCheck?.modelo_pattern || null;
+
+                if (hasValidDbDesc) {
+                    desc = pCheck.descricao;
+                    item.isNew = false;
+                    item.needsDescUpdate = false;
+                } else {
+                    item.isNew = !pCheck;
+                    item.needsDescUpdate = !!pCheck && isGenericImportDesc(pCheck.descricao);
+
+                    // Se terminar com P, tenta buscar o código base sem o "P" no banco
+                    if (code.endsWith('P') && code.length > 2) {
+                        const baseCode = code.slice(0, -1);
+                        const { data: baseCheck } = await supabase.from('parts').select('descricao, marca, modelo_pattern').eq('code', baseCode).maybeSingle();
+                        if (baseCheck && !isGenericImportDesc(baseCheck.descricao)) {
+                            const cleanBaseDesc = baseCheck.descricao.trim();
+                            desc = cleanBaseDesc.endsWith(' P') ? cleanBaseDesc : `${cleanBaseDesc} P`;
+                            baseCodeMatched = baseCode;
+                            if (baseCheck.marca) item.marca = baseCheck.marca;
+                            if (baseCheck.modelo_pattern) item.modelo_pattern = baseCheck.modelo_pattern;
+                        }
+                    }
+
+                    if (!desc && item.descFile) {
+                        desc = item.descFile.toUpperCase();
+                    }
+                }
+
                 item.descInfo = desc;
-                item.isNew = !pCheck;
+                item.editableDesc = !hasValidDbDesc;
+
+                let descCellHtml = '';
+                if (!item.editableDesc) {
+                    descCellHtml = `<td>${desc}</td>`;
+                } else {
+                    const safeVal = (desc || '').replace(/"/g, '&quot;');
+                    const badgeHtml = baseCodeMatched
+                        ? `<div style="font-size:10px; font-weight:700; color:var(--green-dark); margin-bottom:4px;">🔄 Puxado da peça base <strong>${baseCodeMatched}</strong> (+P) — editável</div>`
+                        : `<div style="font-size:10px; font-weight:700; color:#d97706; margin-bottom:4px;">⚠️ Peça nova sem descrição na nota — digite abaixo:</div>`;
+                    descCellHtml = `
+                      <td>
+                        ${badgeHtml}
+                        <input
+                          type="text"
+                          value="${safeVal}"
+                          placeholder="Digite a descrição da peça (${code})..."
+                          oninput="window.updateXmlImportDesc('${code}', this.value)"
+                          style="width:100%; padding:6px 10px; border-radius:6px; border:1.5px solid ${baseCodeMatched ? 'var(--green)' : '#f59e0b'}; background:${baseCodeMatched ? '#f0fdf4' : '#fffbeb'}; font-size:12px; font-weight:600; color:var(--text); text-transform:uppercase;"
+                        />
+                      </td>
+                    `;
+                }
 
                 html += `
                   <tr>
                     <td style="font-family:var(--mono); font-weight:600;">${code}</td>
-                    <td>${desc}</td>
+                    ${descCellHtml}
                     <td style="text-align:center; font-weight:bold;">${item.qty}</td>
                     <td style="text-align:right">R$ ${item.vlrUnit.toFixed(2).replace('.', ',')}</td>
                     <td style="text-align:center; color:var(--text-muted);">${item.pedido || '-'}</td>
@@ -1733,15 +1793,26 @@ window.confirmarImportacaoXML = async () => {
         let processados = 0;
 
         for (const code of keys) {
-            const { qty, vlrUnit, pedido, descInfo, isNew } = itemsMap[code];
+            const { qty, vlrUnit, pedido, isNew, needsDescUpdate, marca, modelo_pattern } = itemsMap[code];
+            const finalDesc = (itemsMap[code].descInfo || '').trim().toUpperCase() || `PEÇA IMPORTADA VIA ARQUIVO (${code})`;
+            itemsMap[code].descInfo = finalDesc;
 
             if (isNew) {
-                const { error: pErr } = await supabase.from('parts').insert({
+                const insertPayload = {
                     code: code,
-                    descricao: descInfo,
-                    marca: 'OUTROS'
-                });
+                    descricao: finalDesc,
+                    marca: marca || 'OUTROS'
+                };
+                if (modelo_pattern) insertPayload.modelo_pattern = modelo_pattern;
+                const { error: pErr } = await supabase.from('parts').insert(insertPayload);
                 if (pErr) console.warn(`Aviso ao cadastrar peça ${code}:`, pErr.message);
+            } else if (needsDescUpdate && !/^PE[CÇ]A IMPORTADA VIA/i.test(finalDesc)) {
+                const updatePayload = { descricao: finalDesc };
+                if (marca && marca !== 'OUTROS') updatePayload.marca = marca;
+                if (modelo_pattern) updatePayload.modelo_pattern = modelo_pattern;
+                await supabase.from('parts').update(updatePayload).eq('code', code);
+                await supabase.from('historico').update({ descricao: finalDesc }).eq('code', code).ilike('descricao', 'PE%A IMPORTADA VIA%');
+                await supabase.from('historico_remanu').update({ descricao: finalDesc }).eq('code', code).ilike('descricao', 'PE%A IMPORTADA VIA%');
             }
 
             const { data: cur } = await supabase.from(tableEstoque).select('qty').eq('code', code).single();
@@ -1761,7 +1832,7 @@ window.confirmarImportacaoXML = async () => {
             if (currentUser) {
                 const selbHist = pedido ? `XML | Pedido: ${pedido}` : 'Entrada Lote XML';
                 const { error: errHist } = await supabase.from(tableHist).insert({
-                    tipo: 'entrada', code, descricao: descInfo, qty,
+                    tipo: 'entrada', code, descricao: finalDesc, qty,
                     selb: selbHist,
                     user_email: currentUser.email, ts: new Date().toISOString(),
                     vlr_unit: vlrUnit, vlr_total: vlrUnit * qty
